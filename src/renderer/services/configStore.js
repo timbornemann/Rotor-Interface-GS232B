@@ -1,16 +1,6 @@
-export type AzimuthMode = 360 | 450;
-
-export interface AppConfig {
-  portPath?: string;
-  baudRate: number;
-  pollingIntervalMs: number;
-  simulation: boolean;
-  azimuthMode: AzimuthMode;
-}
-
 const STORAGE_KEY = 'rotor-control-config-v1';
 
-const defaultConfig: AppConfig = {
+const defaultConfig = {
   baudRate: 9600,
   pollingIntervalMs: 1000,
   simulation: true,
@@ -18,13 +8,13 @@ const defaultConfig: AppConfig = {
 };
 
 export class ConfigStore {
-  load(): AppConfig {
+  load() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) {
         return { ...defaultConfig };
       }
-      const parsed = JSON.parse(raw) as Partial<AppConfig>;
+      const parsed = JSON.parse(raw);
       return { ...defaultConfig, ...parsed };
     } catch (error) {
       console.warn('Konnte Konfiguration nicht laden', error);
@@ -32,8 +22,8 @@ export class ConfigStore {
     }
   }
 
-  save(partial: Partial<AppConfig>): AppConfig {
-    const merged = { ...this.load(), ...partial } as AppConfig;
+  save(partial) {
+    const merged = { ...this.load(), ...partial };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     return merged;
   }

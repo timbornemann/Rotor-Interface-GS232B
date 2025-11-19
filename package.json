@@ -1,16 +1,10 @@
 {
   "name": "rotor-interface-gs232b",
   "version": "1.0.0",
-  "description": "Electron-Anwendung zur Steuerung eines Yaesu GS-232B kompatiblen Rotors inklusive Visualisierung und History.",
-  "main": "dist/main/main.js",
+  "description": "Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors mit Web Serial oder Simulation.",
+  "private": true,
   "scripts": {
-    "clean": "rimraf dist release",
-    "copy:static": "copyfiles -u 1 src/renderer/**/*.{html,css,svg,ico,json} dist/renderer",
-    "build": "npm run clean && tsc -b && npm run copy:static",
-    "start": "npm run build && electron .",
-    "dev": "tsc -b --watch",
-    "dist": "npm run build && electron-builder",
-    "lint": "tsc -b --pretty"
+    "serve": "npx http-server src/renderer -p 4173 -c-1"
   },
   "repository": {
     "type": "git",
@@ -23,32 +17,8 @@
     "url": "https://github.com/timbornemann/Rotor-Interface-GS232B/issues"
   },
   "homepage": "https://github.com/timbornemann/Rotor-Interface-GS232B#readme",
-  "build": {
-    "appId": "de.tim.rotorcontrol",
-    "productName": "RotorControl",
-    "directories": {
-      "output": "release"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "src/renderer/assets/app-icon.ico"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowElevation": true,
-      "allowToChangeInstallationDirectory": true
-    }
-  },
-  "dependencies": {
-    "serialport": "^13.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "copyfiles": "^2.4.1",
-    "electron": "^39.2.2",
-    "electron-builder": "^26.0.12",
-    "rimraf": "^6.1.2",
-    "typescript": "^5.9.3"
+    "http-server": "^14.1.1"
   }
 }

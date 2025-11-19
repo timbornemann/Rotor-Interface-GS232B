@@ -1,27 +1,24 @@
 export class MapView {
-  private ctx: CanvasRenderingContext2D;
-  private size: number;
-  private radius: number;
-
-  constructor(private canvas: HTMLCanvasElement) {
+  constructor(canvas) {
     const context = canvas.getContext('2d');
     if (!context) {
       throw new Error('Canvas context nicht verfuegbar');
     }
+    this.canvas = canvas;
     this.ctx = context;
     this.size = canvas.width;
     this.radius = this.size / 2 - 20;
     this.drawBase();
   }
 
-  update(azimuth?: number, elevation?: number): void {
+  update(azimuth, elevation) {
     const az = typeof azimuth === 'number' ? azimuth : 0;
     const el = typeof elevation === 'number' ? elevation : 0;
     this.drawBase();
     this.drawDirection(az, el);
   }
 
-  private drawBase(): void {
+  drawBase() {
     const { ctx } = this;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.save();
@@ -46,7 +43,7 @@ export class MapView {
     ctx.restore();
   }
 
-  private drawDirection(azimuth: number, elevation: number): void {
+  drawDirection(azimuth, elevation) {
     const { ctx } = this;
     ctx.save();
     ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
