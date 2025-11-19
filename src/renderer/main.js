@@ -22,10 +22,11 @@ const historyBody = document.getElementById('historyBody');
 const compass = new Compass(document.getElementById('compassRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
 const historyLog = new HistoryLog(historyBody);
-const mapLatInput = document.getElementById('mapLatInput');
-const mapLonInput = document.getElementById('mapLonInput');
+const mapCoordinatesInput = document.getElementById('mapCoordinatesInput');
 const loadMapBtn = document.getElementById('loadMapBtn');
 const satelliteMapToggle = document.getElementById('satelliteMapToggle');
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomOutBtn = document.getElementById('zoomOutBtn');
 const controls = new Controls(document.querySelector('.controls-card'), {
   onCommand: async (command) => {
     if (!connected) {
@@ -77,11 +78,9 @@ async function init() {
   disconnectBtn.disabled = true;
 
   // Karten-Einstellungen laden
-  if (config.mapLatitude !== null && config.mapLatitude !== undefined) {
-    mapLatInput.value = config.mapLatitude.toString();
-  }
-  if (config.mapLongitude !== null && config.mapLongitude !== undefined) {
-    mapLonInput.value = config.mapLongitude.toString();
+  if (config.mapLatitude !== null && config.mapLatitude !== undefined && 
+      config.mapLongitude !== null && config.mapLongitude !== undefined) {
+    mapCoordinatesInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
   }
   satelliteMapToggle.checked = config.satelliteMapEnabled || false;
   
@@ -110,18 +109,18 @@ async function init() {
   // Karten-Event-Handler
   loadMapBtn.addEventListener('click', () => void handleLoadMap());
   satelliteMapToggle.addEventListener('change', () => void handleSatelliteMapToggle());
+  zoomInBtn.addEventListener('click', () => mapView.setZoom(mapView.zoomLevel + 1));
+  zoomOutBtn.addEventListener('click', () => mapView.setZoom(mapView.zoomLevel - 1));
   
-  // Enter-Taste in Koordinatenfeldern
-  mapLatInput.addEventListener('keypress', (e) => {
+  // Enter-Taste im Koordinatenfeld
+  mapCoordinatesInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       void handleLoadMap();
     }
   });
-  mapLonInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      void handleLoadMap();
-    }
-  });
+  
+  // Initialisiere Zoom-Anzeige
+  mapView.updateZoomDisplay();
 }
 
 async function handleRequestPort() {
@@ -250,8 +249,18 @@ function updateModeLabel() {
 }
 
 async function handleLoadMap() {
-  const lat = parseFloat(mapLatInput.value);
-  const lon = parseFloat(mapLonInput.value);
+  const inputValue = mapCoordinatesInput.value.trim();
+  
+  // Parse das Format "lat, lon" oder "lat,lon"
+  const parts = inputValue.split(',').map(part => part.trim());
+  
+  if (parts.length !== 2) {
+    reportError('Ungültiges Format. Bitte im Format "Latitude, Longitude" eingeben, z.B. "51.85911538185561, 11.422282899767954"');
+    return;
+  }
+  
+  const lat = parseFloat(parts[0]);
+  const lon = parseFloat(parts[1]);
   
   if (isNaN(lat) || lat < -90 || lat > 90) {
     reportError('Ungültiger Breitengrad. Bitte einen Wert zwischen -90 und 90 eingeben.');
