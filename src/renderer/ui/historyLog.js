@@ -1,15 +1,15 @@
-import { RotorStatus } from '../../common/types';
-
-interface HistoryEntry extends RotorStatus {}
-
 export class HistoryLog {
-  private entries: HistoryEntry[] = [];
-  private maxEntries = 300;
+  constructor(body) {
+    this.body = body;
+    this.entries = [];
+    this.maxEntries = 300;
+  }
 
-  constructor(private body: HTMLElement) {}
-
-  addEntry(status: RotorStatus): void {
-    const entry: HistoryEntry = { ...status };
+  addEntry(status) {
+    if (!status) {
+      return;
+    }
+    const entry = { ...status };
     this.entries.unshift(entry);
     if (this.entries.length > this.maxEntries) {
       this.entries.pop();
@@ -17,12 +17,12 @@ export class HistoryLog {
     this.render();
   }
 
-  clear(): void {
+  clear() {
     this.entries = [];
     this.render();
   }
 
-  exportCsv(): void {
+  exportCsv() {
     if (!this.entries.length) {
       return;
     }
@@ -46,7 +46,7 @@ export class HistoryLog {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
-  private render(): void {
+  render() {
     this.body.innerHTML = '';
     this.entries.forEach((entry) => {
       const row = document.createElement('tr');

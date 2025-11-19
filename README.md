@@ -1,74 +1,70 @@
 # Rotor-Interface-GS232B
 
-Electron-Anwendung zur Steuerung eines Yaesu GS-232B kompatiblen Rotors (z. B. ueber das WinRotorPlus-USB-Interface). Die App verbindet sich ueber eine serielle Schnittstelle, visualisiert Azimut/Elevation in Echtzeit und erlaubt das Senden saemtlicher relevanter GS-232B-Kommandos. Ein Simulation Mode ermoeglicht die Arbeit ohne angeschlossene Hardware.
+Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors. Die Anwendung besteht nur aus HTML, CSS und JavaScript und kann direkt im Browser geöffnet werden – kein Electron, keine Installer, kein Build-Workflow.
 
-## Features
+## Highlights
 
-- Serielle Kommunikation via `serialport` (wahlweise Simulation ohne Hardware)
-- Steuerung aller Kernbefehle (R/L/A, U/D/E, S, Mxxx, Wxxx yyy, P36/P45 ...)
-- Live-Visualisierung mit Kompass und Radaransicht
-- Positions-History inkl. CSV-Export
-- Konfiguration (Port, Baudrate, Modus 360deg/450deg, Polling-Intervall) wird lokal gespeichert
-- Packaging zu einer Windows-EXE via `electron-builder`
+- **Direkt im Browser starten:** `src/renderer/index.html` in Chrome/Edge (oder jedem Chromium-Browser) öffnen.
+- **Web Serial Unterstützung:** Zugriff auf echte USB-/COM-Ports über die Web-Serial-API (erfordert HTTPS oder `http://localhost`).
+- **Simulation inklusive:** Ohne Hardware nutzbar; der simulierte Port verhält sich wie ein echter Rotor.
+- **Live-Visualisierung:** Kompass- und Radaransicht aktualisieren sich mit jedem Status-Update.
+- **Komplette Steuerung:** Buttons für R/L/A, U/D/E, S sowie Goto-Azimut/Elevation und Modus 360°/450°.
+- **History & CSV-Export:** Alle Polling-Werte werden protokolliert und lassen sich als CSV herunterladen.
+- **Persistente Einstellungen:** Port, Baudrate, Modus und Polling-Intervall werden im `localStorage` abgelegt.
 
 ## Projektstruktur
 
 ```
 src/
-  main/               # Electron-Mainprozess, Serial Manager, Rotor Controller
-  preload/            # IPC-Bridge Renderer <-> Main
-  renderer/           # UI (HTML, CSS, TS) + Unterordner services/ui
-  common/             # Geteilte Typdefinitionen
+  renderer/
+    assets/         # Icons
+    index.html      # Startseite (direkt im Browser öffnen)
+    styles.css      # Globales Styling
+    main.js         # Einstiegspunkt
+    services/       # Config-Store & Rotor-Service (Web Serial + Simulation)
+    ui/             # UI-Komponenten (Kompass, Karte, Controls, History)
 ```
 
-## Setup
+## Nutzung
 
-1. Node.js (>= 18) installieren.
-2. Abhaengigkeiten installieren:
+### 1. Ohne Webserver
 
-   ```bash
-   npm install
-   ```
+1. Repository klonen oder herunterladen.
+2. Datei `src/renderer/index.html` im Browser öffnen (per Doppelklick oder via `file://`).
+3. Simulation aktivieren oder – falls Web Serial verfügbar – `Port hinzufügen` klicken, Port auswählen, verbinden.
 
-3. Build ausfuehren und Anwendung starten:
+> Hinweis: Die Web-Serial-API steht nur in sicheren Kontexten (HTTPS oder `http://localhost`) zur Verfügung. Beim Öffnen per `file://` ist ausschließlich der Simulationsmodus möglich.
 
-   ```bash
-   npm run build
-   npm start
-   ```
+### 2. Mit leichtgewichtigem Dev-Server (optional)
 
-    `npm start` fuehrt einen frischen Build aus und startet anschliessend Electron.
+```bash
+npm install
+npm run serve   # startet http-server auf http://localhost:4173
+```
 
-4. Fuer kontinuierliche Entwicklung kann der TypeScript-Watcher genutzt werden:
+Der Dev-Server liefert automatisch einen sicheren Kontext für Web Serial.
+`npm install` bringt lediglich den kleinen `http-server` ins Projekt; die App selbst benötigt kein Build.
 
-   ```bash
-   npm run dev
-   # in einem zweiten Terminal:
-   npm start
-   ```
+## Arbeiten mit Web Serial
 
-## Wichtige Skripte
-
-| Script          | Beschreibung                                            |
-| --------------- | ------------------------------------------------------- |
-| `npm run dev`   | TypeScript Build im Watch-Modus                         |
-| `npm run build` | Aufraeumen, TypeScript-Compile und Kopieren statischer Dateien |
-| `npm start`     | Build + Start der Electron-App                          |
-| `npm run dist`  | Build + Paketierung zur Windows-EXE via `electron-builder` |
-
-Die fertigen Installer liegen anschliessend im Ordner `release/`.
+1. Browser: Aktuelles Chrome/Edge oder ein anderer Chromium-Browser.
+2. Kontext: HTTPS-Domain oder `http://localhost`. Für lokale Tests empfiehlt sich der oben genannte Dev-Server.
+3. Portzugriff:
+   - Auf `Port hinzufügen` klicken.
+   - Gewünschten COM-/USB-Port auswählen und Zugriff erlauben.
+   - Port in der Dropdown-Liste wählen, Baudrate/Polling setzen und verbinden.
 
 ## Simulation Mode
 
-- Aktivierung ueber die Checkbox "Simulation" oder durch Auswahl des simulierten Ports.
-- Alle Kommandos und Visualisierungen funktionieren ohne echte Hardware.
-- Ideal fuer UI-Tests und CI/CD Builds.
+- Checkbox „Simulation“ aktivieren oder den simulierten Port auswählen.
+- Alle Steuerelemente funktionieren wie am echten Rotor.
+- Ideal für UI-Demos, Tests und wenn kein Gerät angeschlossen ist.
 
 ## CSV-Export & History
 
-- Jede Statusaktualisierung wird protokolliert.
-- Export erzeugt eine `*.csv` mit `timestamp_iso;azimuth_deg;elevation_deg;raw`.
+- Jedes Polling-Resultat (AZ/EL) landet in der History-Tabelle.
+- Über „Export CSV“ entsteht eine Datei im Format `timestamp_iso;azimuth_deg;elevation_deg;raw`.
 
 ## Lizenz
 
-GPL-3.0-or-later - siehe `LICENSE`.
+GPL-3.0-or-later – siehe `LICENSE`.
