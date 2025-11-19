@@ -2,7 +2,9 @@ class HistoryLog {
   constructor(body) {
     this.body = body;
     this.entries = [];
-    this.maxEntries = 300;
+    this.maxEntries = 100;
+    // Finde den Scroll-Container (history-table-wrapper)
+    this.scrollContainer = this.body.closest('.history-table-wrapper');
   }
 
   addEntry(status) {
@@ -11,10 +13,20 @@ class HistoryLog {
     }
     const entry = { ...status };
     this.entries.unshift(entry);
+    // Lösche alte Einträge, wenn das Maximum überschritten wird
     if (this.entries.length > this.maxEntries) {
-      this.entries.pop();
+      this.entries = this.entries.slice(0, this.maxEntries);
     }
     this.render();
+    // Scrolle zum neuesten Eintrag (oben, da neue Einträge oben eingefügt werden)
+    this.scrollToTop();
+  }
+
+  scrollToTop() {
+    if (this.scrollContainer) {
+      // Scrolle sofort zum Anfang (neueste Einträge sind oben)
+      this.scrollContainer.scrollTop = 0;
+    }
   }
 
   clear() {
