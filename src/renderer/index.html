@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RotorControl GS-232B</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="connection-group">
+        <label>
+          Port
+          <select id="portSelect"></select>
+        </label>
+        <label>
+          Baudrate
+          <input id="baudInput" type="number" min="1200" max="115200" step="100" value="9600" />
+        </label>
+        <label>
+          Polling (ms)
+          <input id="pollingInput" type="number" min="250" max="5000" step="250" value="1000" />
+        </label>
+        <label class="checkbox">
+          <input id="simulationToggle" type="checkbox" />
+          Simulation
+        </label>
+        <button id="connectBtn" class="primary">Verbinden</button>
+        <button id="disconnectBtn" disabled>Trennen</button>
+      </div>
+      <div class="status-line">
+        <span id="connectionStatus" class="status-chip disconnected">Getrennt</span>
+        <span id="modeStatus">Modus: 360deg</span>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="card compass-card">
+        <div class="card-header">
+          <h2>Kompass</h2>
+          <div class="az-values">
+              <div>
+                <span>Azimut</span>
+                <strong id="azValue">--deg</strong>
+              </div>
+              <div>
+                <span>Elevation</span>
+                <strong id="elValue">--deg</strong>
+              </div>
+          </div>
+        </div>
+        <div id="compassRoot" class="compass">
+          <svg viewBox="0 0 200 200" class="compass-svg">
+            <circle cx="100" cy="100" r="90" class="compass-outline" />
+            <text x="100" y="20" text-anchor="middle">N</text>
+            <text x="180" y="105" text-anchor="middle">E</text>
+            <text x="100" y="190" text-anchor="middle">S</text>
+            <text x="20" y="105" text-anchor="middle">W</text>
+            <g id="compassNeedle" class="needle">
+              <polygon points="100,30 110,100 90,100" />
+              <polygon points="100,170 110,100 90,100" class="needle tail" />
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <section class="card map-card">
+        <div class="card-header">
+          <h2>Radaransicht</h2>
+        </div>
+        <canvas id="mapCanvas" width="400" height="400"></canvas>
+      </section>
+
+      <section class="card controls-card">
+        <div class="card-header">
+          <h2>Rotorsteuerung</h2>
+          <div class="mode-switch">
+            <label>
+              Modus
+              <select id="modeSelect">
+                <option value="360">360 deg</option>
+                <option value="450">450 deg</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="control-grid" id="controlGrid">
+          <button data-command="L">Azimut Links</button>
+          <button data-command="A">Azimut Stopp</button>
+          <button data-command="R">Azimut Rechts</button>
+          <button data-command="D">Elevation Runter</button>
+          <button data-command="E">Elevation Stopp</button>
+          <button data-command="U">Elevation Hoch</button>
+          <button data-command="S" class="danger">Alles Stopp</button>
+        </div>
+
+        <div class="goto-form">
+          <label>
+            Ziel-Azimut (deg)
+            <input id="gotoAzInput" type="number" min="0" max="450" step="1" value="0" />
+          </label>
+          <label>
+            Ziel-Elevation (deg)
+            <input id="gotoElInput" type="number" min="0" max="90" step="1" value="0" />
+          </label>
+          <div class="goto-buttons">
+            <button id="gotoAzBtn" class="primary">Goto Azimut</button>
+            <button id="gotoAzElBtn">Goto Az/El</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card history-card">
+        <div class="card-header">
+          <h2>Positions-History</h2>
+          <div class="history-actions">
+            <button id="clearHistoryBtn">History loeschen</button>
+            <button id="exportCsvBtn" class="secondary">Export CSV</button>
+          </div>
+        </div>
+        <div class="history-table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Zeit</th>
+                <th>Azimut</th>
+                <th>Elevation</th>
+                <th>Rohdaten</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
