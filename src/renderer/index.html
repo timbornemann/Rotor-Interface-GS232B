@@ -68,6 +68,15 @@
             </g>
           </svg>
         </div>
+        <div id="elevationRoot" class="elevation">
+          <svg viewBox="0 0 200 200" class="elevation-svg">
+            <g id="elevationScale"></g>
+            <g id="elevationIndicator" class="elevation-indicator">
+              <line x1="100" y1="180" x2="100" y2="100" stroke="#2fd4ff" stroke-width="3" />
+              <polygon points="100,100 95,110 105,110" fill="#ffb347" />
+            </g>
+          </svg>
+        </div>
       </section>
 
       <section class="card map-card">
@@ -95,72 +104,56 @@
           </div>
         </div>
         <div class="canvas-wrapper">
-          <canvas id="mapCanvas" width="400" height="400"></canvas>
+          <canvas id="mapCanvas"></canvas>
         </div>
       </section>
 
-      <section class="card controls-card">
-        <div class="card-header">
-          <h2>Rotorsteuerung</h2>
-          <div class="mode-switch">
+      <div class="right-column">
+        <section class="card controls-card">
+          <div class="card-header">
+            <h2>Rotorsteuerung</h2>
+            <div class="mode-switch">
+              <label>
+                Modus
+                <select id="modeSelect">
+                  <option value="360">360 deg</option>
+                  <option value="450">450 deg</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="control-grid" id="controlGrid">
+            <button data-command="L">Azimut Links</button>
+            <button data-command="A">Azimut Stopp</button>
+            <button data-command="R">Azimut Rechts</button>
+            <button data-command="D">Elevation Runter</button>
+            <button data-command="E">Elevation Stopp</button>
+            <button data-command="U">Elevation Hoch</button>
+            <button data-command="S" class="danger">Alles Stopp</button>
+          </div>
+
+          <div class="goto-form">
             <label>
-              Modus
-              <select id="modeSelect">
-                <option value="360">360 deg</option>
-                <option value="450">450 deg</option>
-              </select>
+              Ziel-Azimut (deg)
+              <input id="gotoAzInput" type="number" min="0" max="450" step="1" value="0" />
             </label>
+            <label>
+              Ziel-Elevation (deg)
+              <input id="gotoElInput" type="number" min="0" max="90" step="1" value="0" />
+            </label>
+            <div class="goto-buttons">
+              <button id="gotoAzBtn" class="primary">Goto Azimut</button>
+              <button id="gotoAzElBtn">Goto Az/El</button>
+            </div>
           </div>
-        </div>
-
-        <div class="control-grid" id="controlGrid">
-          <button data-command="L">Azimut Links</button>
-          <button data-command="A">Azimut Stopp</button>
-          <button data-command="R">Azimut Rechts</button>
-          <button data-command="D">Elevation Runter</button>
-          <button data-command="E">Elevation Stopp</button>
-          <button data-command="U">Elevation Hoch</button>
-          <button data-command="S" class="danger">Alles Stopp</button>
-        </div>
-
-        <div class="goto-form">
-          <label>
-            Ziel-Azimut (deg)
-            <input id="gotoAzInput" type="number" min="0" max="450" step="1" value="0" />
-          </label>
-          <label>
-            Ziel-Elevation (deg)
-            <input id="gotoElInput" type="number" min="0" max="90" step="1" value="0" />
-          </label>
-          <div class="goto-buttons">
-            <button id="gotoAzBtn" class="primary">Goto Azimut</button>
-            <button id="gotoAzElBtn">Goto Az/El</button>
+          
+          <div class="last-status">
+            <div class="last-status-label">Letzter Status:</div>
+            <div class="last-status-value" id="lastStatusValue">--</div>
           </div>
-        </div>
-      </section>
-
-      <section class="card history-card">
-        <div class="card-header">
-          <h2>Positions-History</h2>
-          <div class="history-actions">
-            <button id="clearHistoryBtn">History loeschen</button>
-            <button id="exportCsvBtn" class="secondary">Export CSV</button>
-          </div>
-        </div>
-        <div class="history-table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Zeit</th>
-                <th>Azimut</th>
-                <th>Elevation</th>
-                <th>Rohdaten</th>
-              </tr>
-            </thead>
-            <tbody id="historyBody"></tbody>
-          </table>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
 
     <!-- Services zuerst -->
@@ -168,6 +161,7 @@
     <script src="./services/rotorService.js"></script>
     <!-- UI-Komponenten -->
     <script src="./ui/compass.js"></script>
+    <script src="./ui/elevation.js"></script>
     <script src="./ui/mapView.js"></script>
     <script src="./ui/historyLog.js"></script>
     <script src="./ui/controls.js"></script>

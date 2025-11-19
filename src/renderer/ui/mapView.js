@@ -6,26 +6,86 @@ class MapView {
     }
     this.canvas = canvas;
     this.ctx = context;
-    this.width = canvas.width;
-    this.height = canvas.height;
-    this.centerX = this.width / 2;
-    this.centerY = this.height / 2;
-    this.radius = Math.min(this.width, this.height) / 2 - 30;
+    this.container = canvas.parentElement;
     this.latitude = null;
     this.longitude = null;
     this.satelliteMapEnabled = false;
     this.mapImage = null;
     this.mapLoading = false;
-    this.zoomLevel = 16;
-    this.minZoom = 1;
-    this.maxZoom = 20;
+    this.zoomLevel = 15;
+    this.minZoom = 10;
+    this.maxZoom = 18;
     this.tileCache = new Map();
     this.lastAzimuth = 0;
     this.lastElevation = 0;
     
-    // Event-Handler für Zoom
+    // Initialisiere Canvas-Größe
+    this.resizeCanvas();
+    
+    // Event-Handler für Zoom und Resize
     this.setupZoomHandlers();
+    this.setupResizeHandler();
     this.drawBase();
+  }
+
+  resizeCanvas() {
+    if (!this.container) {
+      return;
+    }
+    
+    const rect = this.container.getBoundingClientRect();
+    const width = Math.floor(rect.width);
+    const height = Math.floor(rect.height);
+    
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+    
+    // Setze Canvas-Größe (devicePixelRatio für Retina-Displays)
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = width;
+    const displayHeight = height;
+    
+    // Nur ändern, wenn sich die Größe geändert hat
+    if (this.canvas.width !== displayWidth * dpr || this.canvas.height !== displayHeight * dpr) {
+      this.canvas.width = displayWidth * dpr;
+      this.canvas.height = displayHeight * dpr;
+      this.canvas.style.width = `${displayWidth}px`;
+      this.canvas.style.height = `${displayHeight}px`;
+      
+      // Reset Transform und skaliere für Retina
+      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+      this.ctx.scale(dpr, dpr);
+    }
+    
+    // Aktualisiere Dimensionen
+    this.width = displayWidth;
+    this.height = displayHeight;
+    this.centerX = this.width / 2;
+    this.centerY = this.height / 2;
+    this.radius = Math.min(this.width, this.height) / 2 - 30;
+    
+    // Lade Karte neu, falls aktiviert
+    if (this.satelliteMapEnabled && this.latitude !== null && this.longitude !== null) {
+      this.loadMap();
+    } else {
+      this.update(this.lastAzimuth, this.lastElevation);
+    }
+  }
+
+  setupResizeHandler() {
+    // ResizeObserver für Container-Größenänderungen
+    if (window.ResizeObserver && this.container) {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.resizeCanvas();
+      });
+      this.resizeObserver.observe(this.container);
+    } else {
+      // Fallback: Window-Resize-Event
+      window.addEventListener('resize', () => {
+        this.resizeCanvas();
+      });
+    }
   }
 
   setupZoomHandlers() {
@@ -121,8 +181,8 @@ class MapView {
       // Berechne benötigte Anzahl Tiles, um den Canvas vollständig zu füllen
       // Berücksichtige auch die Pixel-Position der Koordinaten im zentralen Tile
       const pixelsPerTile = tileSize;
-      const neededTilesX = Math.ceil(this.canvas.width / pixelsPerTile) + 2; // +2 für Puffer
-      const neededTilesY = Math.ceil(this.canvas.height / pixelsPerTile) + 2;
+      const neededTilesX = Math.ceil(this.width / pixelsPerTile) + 2; // +2 für Puffer
+      const neededTilesY = Math.ceil(this.height / pixelsPerTile) + 2;
       const gridSize = Math.max(neededTilesX, neededTilesY, zoom >= 16 ? 5 : 3);
       const tiles = [];
       
@@ -172,8 +232,8 @@ class MapView {
       // Das Canvas muss groß genug sein, um den Ziel-Canvas zu füllen
       const combinedCanvas = document.createElement('canvas');
       // Berechne benötigte Größe: Canvas-Größe + Puffer für Zentrierung
-      const neededWidth = this.canvas.width + tileSize * 2;
-      const neededHeight = this.canvas.height + tileSize * 2;
+      const neededWidth = this.width + tileSize * 2;
+      const neededHeight = this.height + tileSize * 2;
       combinedCanvas.width = neededWidth;
       combinedCanvas.height = neededHeight;
       const combinedCtx = combinedCanvas.getContext('2d');
@@ -183,8 +243,8 @@ class MapView {
       const centerTilePixelY = pixelPos.pixelY;
       
       // Die Koordinaten sollen in der Mitte des Ziel-Canvas sein
-      const targetCenterX = this.canvas.width / 2;
-      const targetCenterY = this.canvas.height / 2;
+      const targetCenterX = this.width / 2;
+      const targetCenterY = this.height / 2;
       
       // Position im combined Canvas (mit Puffer)
       const combinedCenterX = neededWidth / 2;
@@ -207,8 +267,8 @@ class MapView {
         image: null,
         sourceWidth: neededWidth,
         sourceHeight: neededHeight,
-        targetWidth: this.canvas.width,
-        targetHeight: this.canvas.height,
+        targetWidth: this.width,
+        targetHeight: this.height,
         sourceCenterX: combinedCenterX,
         sourceCenterY: combinedCenterY,
         targetCenterX: targetCenterX,
@@ -244,6 +304,7 @@ class MapView {
 
   drawBase() {
     const { ctx } = this;
+    // clearRect verwendet die internen Canvas-Dimensionen (mit devicePixelRatio)
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     
     // Zeichne Satellitenkarte als Hintergrund, falls aktiviert
@@ -263,6 +324,7 @@ class MapView {
       const scaledHeight = sourceHeight * scale;
       
       // Berechne Position, damit die Zentren übereinstimmen
+      // Die Zentren müssen exakt übereinstimmen, damit die Koordinaten in der Mitte sind
       const drawX = targetCenterX - (sourceCenterX * scale);
       const drawY = targetCenterY - (sourceCenterY * scale);
       

@@ -13,13 +13,20 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body {
   background: radial-gradient(circle at 20% 20%, rgba(47, 212, 255, 0.08), transparent 50%),
     radial-gradient(circle at 80% 0%, rgba(255, 179, 71, 0.08), transparent 40%),
     var(--bg);
   color: var(--text);
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .top-bar {
@@ -28,6 +35,7 @@ body {
   align-items: center;
   padding: 1rem 2rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
 }
 
 .connection-group {
@@ -139,9 +147,38 @@ button:active {
 
 .dashboard {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: auto 1fr auto;
   gap: 1.5rem;
-  padding: 1.5rem 2rem 3rem;
+  padding: 1.5rem 2rem;
+  align-items: start;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 320px;
+  height: 100%;
+  min-height: 0;
+}
+
+.right-column > section {
+  flex: 0 0 auto;
+}
+
+.map-card {
+  grid-column: 2;
+  min-width: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.compass-card {
+  grid-column: 1;
+  min-width: 280px;
 }
 
 .card {
@@ -149,6 +186,11 @@ button:active {
   border-radius: 16px;
   padding: 1rem 1.5rem 1.5rem;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .card-header {
@@ -207,11 +249,30 @@ button:active {
   transition: transform 0.3s ease;
 }
 
+.elevation {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.elevation-svg {
+  width: 220px;
+  height: 200px;
+}
+
+.elevation-indicator {
+  transform-origin: 100px 180px;
+  transition: transform 0.3s ease;
+}
+
 .map-controls {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   margin-bottom: 1rem;
+  flex-shrink: 0;
 }
 
 .map-options {
@@ -276,12 +337,28 @@ button:active {
   width: 100%;
 }
 
+.map-card .canvas-wrapper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
 .map-card canvas {
+  display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.03), transparent 70%);
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.controls-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .control-grid {
@@ -308,9 +385,34 @@ button:active {
   gap: 0.75rem;
 }
 
+.last-status {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.last-status-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.last-status-value {
+  font-size: 0.9rem;
+  font-family: 'Courier New', monospace;
+  color: var(--text);
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .history-table-wrapper {
-  margin-top: 1rem;
-  max-height: 320px;
+  margin-top: 0.5rem;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -321,14 +423,58 @@ button:active {
 
 .history-table-wrapper th,
 .history-table-wrapper td {
-  padding: 0.45rem;
+  padding: 0.3rem 0.4rem;
   text-align: left;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  font-size: 0.9rem;
+  font-size: 0.75rem;
+}
+
+.history-table-compact th {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 0.4rem;
+}
+
+.history-table-compact td {
+  font-size: 0.8rem;
+  font-family: 'Courier New', monospace;
 }
 
 .history-table-wrapper tbody tr:nth-child(even) {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.history-card {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.history-card .card-header {
+  padding-bottom: 0.5rem;
+}
+
+.history-card h2 {
+  font-size: 1rem;
+}
+
+.history-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.history-actions button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .checkbox {
@@ -342,6 +488,30 @@ button:active {
   gap: 0.75rem;
 }
 
+@media (max-width: 1200px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+  
+  .map-card {
+    grid-column: 1;
+  }
+  
+  .compass-card {
+    grid-column: 1;
+  }
+  
+  .right-column {
+    grid-column: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  
+  .right-column > section {
+    flex: 1 1 300px;
+  }
+}
+
 @media (max-width: 768px) {
   .top-bar {
     flex-direction: column;
@@ -351,5 +521,9 @@ button:active {
 
   .status-line {
     width: 100%;
+  }
+  
+  .right-column {
+    flex-direction: column;
   }
 }

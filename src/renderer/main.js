@@ -15,13 +15,10 @@ const modeSelect = document.getElementById('modeSelect');
 const modeStatus = document.getElementById('modeStatus');
 const azValue = document.getElementById('azValue');
 const elValue = document.getElementById('elValue');
-const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-const exportCsvBtn = document.getElementById('exportCsvBtn');
-const historyBody = document.getElementById('historyBody');
-
 const compass = new Compass(document.getElementById('compassRoot'));
+const elevation = new Elevation(document.getElementById('elevationRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
-const historyLog = new HistoryLog(historyBody);
+const lastStatusValue = document.getElementById('lastStatusValue');
 const mapCoordinatesInput = document.getElementById('mapCoordinatesInput');
 const loadMapBtn = document.getElementById('loadMapBtn');
 const satelliteMapToggle = document.getElementById('satelliteMapToggle');
@@ -103,8 +100,6 @@ async function init() {
   connectBtn.addEventListener('click', () => void handleConnect());
   disconnectBtn.addEventListener('click', () => void handleDisconnect());
   modeSelect.addEventListener('change', () => void handleModeChange());
-  clearHistoryBtn.addEventListener('click', () => historyLog.clear());
-  exportCsvBtn.addEventListener('click', () => historyLog.exportCsv());
   
   // Karten-Event-Handler
   loadMapBtn.addEventListener('click', () => void handleLoadMap());
@@ -240,8 +235,14 @@ function handleStatus(status) {
     elValue.textContent = `${status.elevation.toFixed(0)}deg`;
   }
   compass.update(status.azimuth);
+  elevation.update(status.elevation);
   mapView.update(status.azimuth, status.elevation);
-  historyLog.addEntry(status);
+  
+  // Zeige letzten Status an
+  const time = new Date(status.timestamp).toLocaleTimeString();
+  const az = typeof status.azimuth === 'number' ? status.azimuth.toFixed(0) : '--';
+  const el = typeof status.elevation === 'number' ? status.elevation.toFixed(0) : '--';
+  lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
 }
 
 function updateModeLabel() {

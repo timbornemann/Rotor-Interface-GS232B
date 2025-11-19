@@ -62,11 +62,14 @@ class HistoryLog {
     this.body.innerHTML = '';
     this.entries.forEach((entry) => {
       const row = document.createElement('tr');
+      // Kompakte Darstellung ohne Rohdaten
+      const time = new Date(entry.timestamp).toLocaleTimeString();
+      const az = entry.azimuth ?? '--';
+      const el = entry.elevation ?? '--';
       row.innerHTML = `
-        <td>${new Date(entry.timestamp).toLocaleTimeString()}</td>
-        <td>${entry.azimuth ?? '--'}deg</td>
-        <td>${entry.elevation ?? '--'}deg</td>
-        <td>${entry.raw}</td>
+        <td>${time}</td>
+        <td>${az}°</td>
+        <td>${el}°</td>
       `;
       this.body.appendChild(row);
     });
