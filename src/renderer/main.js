@@ -22,6 +22,10 @@ const historyBody = document.getElementById('historyBody');
 const compass = new Compass(document.getElementById('compassRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
 const historyLog = new HistoryLog(historyBody);
+const mapLatInput = document.getElementById('mapLatInput');
+const mapLonInput = document.getElementById('mapLonInput');
+const loadMapBtn = document.getElementById('loadMapBtn');
+const satelliteMapToggle = document.getElementById('satelliteMapToggle');
 const controls = new Controls(document.querySelector('.controls-card'), {
   onCommand: async (command) => {
     if (!connected) {
@@ -72,6 +76,20 @@ async function init() {
   controls.setEnabled(false);
   disconnectBtn.disabled = true;
 
+  // Karten-Einstellungen laden
+  if (config.mapLatitude !== null && config.mapLatitude !== undefined) {
+    mapLatInput.value = config.mapLatitude.toString();
+  }
+  if (config.mapLongitude !== null && config.mapLongitude !== undefined) {
+    mapLonInput.value = config.mapLongitude.toString();
+  }
+  satelliteMapToggle.checked = config.satelliteMapEnabled || false;
+  
+  if (config.mapLatitude !== null && config.mapLongitude !== null) {
+    mapView.setCoordinates(config.mapLatitude, config.mapLongitude);
+  }
+  mapView.setSatelliteMapEnabled(config.satelliteMapEnabled || false);
+
   if (!rotor.supportsWebSerial() && serialSupportNotice) {
     serialSupportNotice.classList.remove('hidden');
   }
@@ -88,6 +106,22 @@ async function init() {
   modeSelect.addEventListener('change', () => void handleModeChange());
   clearHistoryBtn.addEventListener('click', () => historyLog.clear());
   exportCsvBtn.addEventListener('click', () => historyLog.exportCsv());
+  
+  // Karten-Event-Handler
+  loadMapBtn.addEventListener('click', () => void handleLoadMap());
+  satelliteMapToggle.addEventListener('change', () => void handleSatelliteMapToggle());
+  
+  // Enter-Taste in Koordinatenfeldern
+  mapLatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      void handleLoadMap();
+    }
+  });
+  mapLonInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      void handleLoadMap();
+    }
+  });
 }
 
 async function handleRequestPort() {
@@ -213,6 +247,58 @@ function handleStatus(status) {
 
 function updateModeLabel() {
   modeStatus.textContent = `Modus: ${modeSelect.value}deg`;
+}
+
+async function handleLoadMap() {
+  const lat = parseFloat(mapLatInput.value);
+  const lon = parseFloat(mapLonInput.value);
+  
+  if (isNaN(lat) || lat < -90 || lat > 90) {
+    reportError('Ungültiger Breitengrad. Bitte einen Wert zwischen -90 und 90 eingeben.');
+    return;
+  }
+  
+  if (isNaN(lon) || lon < -180 || lon > 180) {
+    reportError('Ungültiger Längengrad. Bitte einen Wert zwischen -180 und 180 eingeben.');
+    return;
+  }
+  
+  try {
+    mapView.setCoordinates(lat, lon);
+    config = configStore.save({ mapLatitude: lat, mapLongitude: lon });
+    
+    if (satelliteMapToggle.checked) {
+      loadMapBtn.disabled = true;
+      loadMapBtn.textContent = 'Lädt...';
+      await mapView.loadMap();
+      loadMapBtn.disabled = false;
+      loadMapBtn.textContent = 'Karte laden';
+    }
+  } catch (error) {
+    reportError(error);
+    loadMapBtn.disabled = false;
+    loadMapBtn.textContent = 'Karte laden';
+  }
+}
+
+async function handleSatelliteMapToggle() {
+  const enabled = satelliteMapToggle.checked;
+  mapView.setSatelliteMapEnabled(enabled);
+  config = configStore.save({ satelliteMapEnabled: enabled });
+  
+  if (enabled && mapView.latitude !== null && mapView.longitude !== null) {
+    try {
+      loadMapBtn.disabled = true;
+      loadMapBtn.textContent = 'Lädt...';
+      await mapView.loadMap();
+      loadMapBtn.disabled = false;
+      loadMapBtn.textContent = 'Karte laden';
+    } catch (error) {
+      reportError(error);
+      loadMapBtn.disabled = false;
+      loadMapBtn.textContent = 'Karte laden';
+    }
+  }
 }
 
 function reportError(error) {

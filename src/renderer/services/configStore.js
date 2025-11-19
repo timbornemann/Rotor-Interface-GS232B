@@ -4,7 +4,10 @@ const defaultConfig = {
   baudRate: 9600,
   pollingIntervalMs: 1000,
   simulation: true,
-  azimuthMode: 360
+  azimuthMode: 360,
+  mapLatitude: null,
+  mapLongitude: null,
+  satelliteMapEnabled: false
 };
 
 class ConfigStore {
