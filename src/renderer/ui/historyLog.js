@@ -1,4 +1,4 @@
-export class HistoryLog {
+class HistoryLog {
   constructor(body) {
     this.body = body;
     this.entries = [];

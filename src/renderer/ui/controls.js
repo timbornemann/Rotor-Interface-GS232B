@@ -1,4 +1,4 @@
-export class Controls {
+class Controls {
   constructor(root, callbacks) {
     this.root = root;
     this.callbacks = callbacks;

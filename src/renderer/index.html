@@ -141,6 +141,15 @@
       </section>
     </main>
 
-    <script type="module" src="./main.js"></script>
+    <!-- Services zuerst -->
+    <script src="./services/configStore.js"></script>
+    <script src="./services/rotorService.js"></script>
+    <!-- UI-Komponenten -->
+    <script src="./ui/compass.js"></script>
+    <script src="./ui/mapView.js"></script>
+    <script src="./ui/historyLog.js"></script>
+    <script src="./ui/controls.js"></script>
+    <!-- Hauptlogik zuletzt -->
+    <script src="./main.js"></script>
   </body>
 </html>

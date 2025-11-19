@@ -1,4 +1,4 @@
-export class MapView {
+class MapView {
   constructor(canvas) {
     const context = canvas.getContext('2d');
     if (!context) {

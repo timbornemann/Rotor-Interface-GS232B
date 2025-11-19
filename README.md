@@ -27,23 +27,37 @@ src/
 
 ## Nutzung
 
-### 1. Ohne Webserver
+### Direkt im Browser öffnen
 
-1. Repository klonen oder herunterladen.
-2. Datei `src/renderer/index.html` im Browser öffnen (per Doppelklick oder via `file://`).
-3. Simulation aktivieren oder – falls Web Serial verfügbar – `Port hinzufügen` klicken, Port auswählen, verbinden.
+1. Öffne `src/renderer/index.html` direkt im Browser (Doppelklick oder `file://`-Pfad).
+2. Die Anwendung funktioniert sofort im Simulationsmodus.
 
-> Hinweis: Die Web-Serial-API steht nur in sicheren Kontexten (HTTPS oder `http://localhost`) zur Verfügung. Beim Öffnen per `file://` ist ausschließlich der Simulationsmodus möglich.
+### Web Serial verwenden
 
-### 2. Mit leichtgewichtigem Dev-Server (optional)
+Die Web-Serial-API steht nur in sicheren Kontexten (HTTPS oder `http://localhost`) zur Verfügung. Für Web Serial benötigst du einen lokalen Webserver:
 
+**Option 1: Mit Python (falls installiert)**
+```bash
+cd src/renderer
+python -m http.server 4173
+```
+Öffne dann: `http://localhost:4173`
+
+**Option 2: Mit PHP (falls installiert)**
+```bash
+cd src/renderer
+php -S localhost:4173
+```
+Öffne dann: `http://localhost:4173`
+
+**Option 3: Mit npm/http-server (optional)**
 ```bash
 npm install
-npm run serve   # startet http-server auf http://localhost:4173
+npm run serve
 ```
+Öffne dann: `http://localhost:4173`
 
-Der Dev-Server liefert automatisch einen sicheren Kontext für Web Serial.
-`npm install` bringt lediglich den kleinen `http-server` ins Projekt; die App selbst benötigt kein Build.
+> **Hinweis:** Die Anwendung läuft komplett im Browser ohne Node.js zur Laufzeit. Ein Webserver wird nur für Web Serial benötigt; im Simulationsmodus funktioniert alles direkt per `file://`.
 
 ## Arbeiten mit Web Serial
 

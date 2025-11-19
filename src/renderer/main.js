@@ -1,9 +1,4 @@
-import { Compass } from './ui/compass.js';
-import { MapView } from './ui/mapView.js';
-import { HistoryLog } from './ui/historyLog.js';
-import { Controls } from './ui/controls.js';
-import { ConfigStore } from './services/configStore.js';
-import { createRotorService, SIMULATED_PORT_ID } from './services/rotorService.js';
+// Alle Klassen werden über Script-Tags geladen
 
 const rotor = createRotorService();
 

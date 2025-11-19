@@ -1,4 +1,4 @@
-export class Compass {
+class Compass {
   constructor(root) {
     this.root = root;
     this.needle = this.root.querySelector('#compassNeedle');

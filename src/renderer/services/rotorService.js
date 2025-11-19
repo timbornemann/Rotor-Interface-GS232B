@@ -288,7 +288,7 @@ class WebSerialConnection extends SerialConnection {
   }
 }
 
-export class RotorService {
+class RotorService {
   constructor() {
     this.serial = null;
     this.simulationMode = true;
@@ -480,8 +480,6 @@ export class RotorService {
   }
 }
 
-export function createRotorService() {
+function createRotorService() {
   return new RotorService();
 }
-
-export { SIMULATED_PORT_ID };

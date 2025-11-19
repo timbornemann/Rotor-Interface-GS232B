@@ -7,7 +7,7 @@ const defaultConfig = {
   azimuthMode: 360
 };
 
-export class ConfigStore {
+class ConfigStore {
   load() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
