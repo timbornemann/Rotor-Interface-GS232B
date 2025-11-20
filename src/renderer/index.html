@@ -150,6 +150,38 @@
             </div>
           </div>
 
+          <div class="ramp-controls">
+            <div class="ramp-header">
+              <h3>Softstart/Softstop (PI)</h3>
+              <label class="checkbox">
+                <input id="rampEnabledToggle" type="checkbox" />
+                Aktivieren
+              </label>
+            </div>
+            <div class="ramp-grid">
+              <label>
+                Kp
+                <input id="rampKpInput" type="number" min="0" max="5" step="0.01" value="0.4" />
+              </label>
+              <label>
+                Ki
+                <input id="rampKiInput" type="number" min="0" max="5" step="0.01" value="0.05" />
+              </label>
+              <label>
+                Abtastzeit (ms)
+                <input id="rampSampleInput" type="number" min="100" max="2000" step="50" value="400" />
+              </label>
+              <label>
+                Max. Schritt (deg)
+                <input id="rampMaxStepInput" type="number" min="0.1" max="45" step="0.1" value="8" />
+              </label>
+              <label>
+                Toleranz (deg)
+                <input id="rampToleranceInput" type="number" min="0.1" max="10" step="0.1" value="1.5" />
+              </label>
+            </div>
+          </div>
+
           <div class="goto-form">
             <label>
               Ziel-Azimut (deg)

@@ -13,6 +13,12 @@ const defaultConfig = {
   elevationOffset: 0,
   azimuthSpeedDegPerSec: 4,
   elevationSpeedDegPerSec: 2,
+  rampEnabled: false,
+  rampKp: 0.4,
+  rampKi: 0.05,
+  rampSampleTimeMs: 400,
+  rampMaxStepDeg: 8,
+  rampToleranceDeg: 1.5,
   mapLatitude: null,
   mapLongitude: null,
   satelliteMapEnabled: false
@@ -41,6 +47,27 @@ class ConfigStore {
       20,
       defaultConfig.elevationSpeedDegPerSec
     );
+    sanitized.rampKp = this.sanitizeNumber(config.rampKp, 0, 5, defaultConfig.rampKp);
+    sanitized.rampKi = this.sanitizeNumber(config.rampKi, 0, 5, defaultConfig.rampKi);
+    sanitized.rampSampleTimeMs = this.sanitizeNumber(
+      config.rampSampleTimeMs,
+      100,
+      2000,
+      defaultConfig.rampSampleTimeMs
+    );
+    sanitized.rampMaxStepDeg = this.sanitizeNumber(
+      config.rampMaxStepDeg,
+      0.1,
+      45,
+      defaultConfig.rampMaxStepDeg
+    );
+    sanitized.rampToleranceDeg = this.sanitizeNumber(
+      config.rampToleranceDeg,
+      0.1,
+      10,
+      defaultConfig.rampToleranceDeg
+    );
+    sanitized.rampEnabled = Boolean(config.rampEnabled);
     return sanitized;
   }
 
