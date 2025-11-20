@@ -46,6 +46,27 @@ function generateAzimuthCandidates(value, min, max, range) {
   return candidates;
 }
 
+function shortestAngularDelta(target, current, range) {
+  if (typeof target !== 'number' || typeof current !== 'number') {
+    return 0;
+  }
+  if (!range || range <= 0) {
+    return target - current;
+  }
+  let delta = target - current;
+  while (delta > range / 2) {
+    delta -= range;
+  }
+  while (delta < -range / 2) {
+    delta += range;
+  }
+  return delta;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class SerialConnection {
   constructor() {
     this.dataListeners = new Set();
@@ -457,6 +478,16 @@ class RotorService {
       azimuthSpeedDegPerSec: 4,
       elevationSpeedDegPerSec: 2
     };
+    this.rampSettings = {
+      rampEnabled: false,
+      rampKp: 0.4,
+      rampKi: 0.05,
+      rampSampleTimeMs: 400,
+      rampMaxStepDeg: 8,
+      rampToleranceDeg: 1.5,
+      rampIntegralLimit: 50
+    };
+    this.activeRamp = null;
     this.pollingTimer = null;
     this.currentStatus = null;
     this.statusListeners = new Set();
@@ -537,6 +568,7 @@ class RotorService {
 
   async disconnect() {
     this.stopPolling();
+    this.cancelActiveRamp();
     if (this.serial) {
       try {
         await this.serial.close();
@@ -562,6 +594,11 @@ class RotorService {
   }
 
   async setAzimuth(target) {
+    const rampSettings = this.getRampSettings();
+    if (rampSettings.rampEnabled) {
+      await this.executeRamp({ az: target });
+      return;
+    }
     const plan = this.planAzimuthTarget(target);
     const value = Math.round(plan.commandValue).toString().padStart(3, '0');
     console.log('[RotorService] Azimut setzen', { target, plan, value });
@@ -569,12 +606,131 @@ class RotorService {
   }
 
   async setAzEl({ az, el }) {
+    const rampSettings = this.getRampSettings();
+    if (rampSettings.rampEnabled) {
+      await this.executeRamp({ az, el });
+      return;
+    }
     const azPlan = this.planAzimuthTarget(az);
     const elPlan = this.planElevationTarget(el);
     const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
     const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
     console.log('[RotorService] Azimut/Elevation setzen', { az, el, azPlan, elPlan, azValue, elValue });
     await this.sendRawCommand(`W${azValue} ${elValue}`);
+  }
+
+  async executeRamp(targets) {
+    if (!this.serial || !this.serial.isOpen()) {
+      throw new Error('Rotor ist nicht verbunden.');
+    }
+    const rampSettings = this.getRampSettings();
+    const hasAz = typeof targets.az === 'number' && !Number.isNaN(targets.az);
+    const hasEl = typeof targets.el === 'number' && !Number.isNaN(targets.el);
+    if (!hasAz && !hasEl) {
+      return;
+    }
+
+    if (!this.currentStatus) {
+      await this.sendPlannedTarget(targets.az, targets.el);
+      return;
+    }
+
+    this.cancelActiveRamp();
+    const rampContext = { cancelled: false };
+    this.activeRamp = rampContext;
+
+    const azGoal = hasAz ? this.planAzimuthTarget(targets.az).calibrated : null;
+    const elGoal = hasEl ? this.planElevationTarget(targets.el).calibrated : null;
+    let azIntegral = 0;
+    let elIntegral = 0;
+
+    while (!rampContext.cancelled) {
+      const status = this.currentStatus;
+      if (!status) {
+        await this.sendPlannedTarget(targets.az, targets.el);
+        break;
+      }
+
+      const azError = hasAz && typeof status.azimuth === 'number'
+        ? shortestAngularDelta(azGoal, status.azimuth, this.maxAzimuthRange)
+        : 0;
+      const elError = hasEl && typeof status.elevation === 'number' ? elGoal - status.elevation : 0;
+
+      const azDone = !hasAz || Math.abs(azError) <= rampSettings.rampToleranceDeg;
+      const elDone = !hasEl || Math.abs(elError) <= rampSettings.rampToleranceDeg;
+
+      if (azDone && elDone) {
+        await this.sendPlannedTarget(targets.az, targets.el);
+        break;
+      }
+
+      const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
+      let nextAz = hasAz ? status.azimuth : null;
+      if (!azDone && hasAz && typeof status.azimuth === 'number') {
+        azIntegral = clamp(azIntegral + azError * dtSeconds, -rampSettings.rampIntegralLimit, rampSettings.rampIntegralLimit);
+        const azOutput = clamp(
+          rampSettings.rampKp * azError + rampSettings.rampKi * azIntegral,
+          -rampSettings.rampMaxStepDeg,
+          rampSettings.rampMaxStepDeg
+        );
+        nextAz = clamp(status.azimuth + azOutput, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+      }
+
+      let nextEl = hasEl ? status.elevation : null;
+      if (!elDone && hasEl && typeof status.elevation === 'number') {
+        elIntegral = clamp(elIntegral + elError * dtSeconds, -rampSettings.rampIntegralLimit, rampSettings.rampIntegralLimit);
+        const elOutput = clamp(
+          rampSettings.rampKp * elError + rampSettings.rampKi * elIntegral,
+          -rampSettings.rampMaxStepDeg,
+          rampSettings.rampMaxStepDeg
+        );
+        nextEl = clamp(status.elevation + elOutput, this.softLimits.elevationMin, this.softLimits.elevationMax);
+      }
+
+      await this.sendPlannedTarget(nextAz, nextEl);
+      await delay(rampSettings.rampSampleTimeMs);
+    }
+
+    if (this.activeRamp === rampContext) {
+      this.activeRamp = null;
+    }
+  }
+
+  cancelActiveRamp() {
+    if (this.activeRamp) {
+      this.activeRamp.cancelled = true;
+      this.activeRamp = null;
+    }
+  }
+
+  async sendPlannedTarget(azimuth, elevation) {
+    const azPlan = typeof azimuth === 'number' && !Number.isNaN(azimuth) ? this.planAzimuthTarget(azimuth) : null;
+    const elPlan =
+      typeof elevation === 'number' && !Number.isNaN(elevation) ? this.planElevationTarget(elevation) : null;
+
+    if (azPlan && elPlan) {
+      const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
+      const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
+      console.log('[RotorService] PI-Rampe Schritt (Az+El)', { azimuth, elevation, azPlan, elPlan, azValue, elValue });
+      await this.sendRawCommand(`W${azValue} ${elValue}`);
+      return;
+    }
+
+    if (azPlan) {
+      const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
+      console.log('[RotorService] PI-Rampe Schritt (Az)', { azimuth, azPlan, azValue });
+      await this.sendRawCommand(`M${azValue}`);
+      return;
+    }
+
+    if (elPlan) {
+      const currentAzRaw = typeof this.currentStatus?.azimuthRaw === 'number'
+        ? Math.round(this.currentStatus.azimuthRaw).toString().padStart(3, '0')
+        : '000';
+      const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
+      console.log('[RotorService] PI-Rampe Schritt (El)', { elevation, elPlan, elValue, currentAzRaw });
+      await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+    }
   }
 
   async setMode(mode) {
@@ -597,6 +753,14 @@ class RotorService {
     }
     this.speedSettings = nextSettings;
     await this.applySpeedSettings();
+  }
+
+  setRampSettings(settings) {
+    if (!settings) {
+      return;
+    }
+    const sanitized = this.getRampSettings(settings);
+    this.rampSettings = sanitized;
   }
 
   setSoftLimits(limits) {
@@ -792,6 +956,25 @@ class RotorService {
     return {
       calibrated,
       commandValue: rawCommand
+    };
+  }
+
+  getRampSettings(overrides = {}) {
+    const next = { ...this.rampSettings, ...overrides };
+    const clampNumber = (value, min, max, fallback) => {
+      if (typeof value !== 'number' || Number.isNaN(value)) {
+        return fallback;
+      }
+      return clamp(value, min, max);
+    };
+    return {
+      rampEnabled: Boolean(next.rampEnabled),
+      rampKp: clampNumber(next.rampKp, 0, 5, this.rampSettings.rampKp),
+      rampKi: clampNumber(next.rampKi, 0, 5, this.rampSettings.rampKi),
+      rampSampleTimeMs: clampNumber(next.rampSampleTimeMs, 100, 2000, this.rampSettings.rampSampleTimeMs),
+      rampMaxStepDeg: clampNumber(next.rampMaxStepDeg, 0.1, 45, this.rampSettings.rampMaxStepDeg),
+      rampToleranceDeg: clampNumber(next.rampToleranceDeg, 0.1, 10, this.rampSettings.rampToleranceDeg),
+      rampIntegralLimit: clampNumber(next.rampIntegralLimit, 1, 200, this.rampSettings.rampIntegralLimit)
     };
   }
 

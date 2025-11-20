@@ -35,6 +35,12 @@ const setAzZeroBtn = document.getElementById('setAzZeroBtn');
 const setAzFullBtn = document.getElementById('setAzFullBtn');
 const resetOffsetsBtn = document.getElementById('resetOffsetsBtn');
 const limitWarning = document.getElementById('limitWarning');
+const rampEnabledToggle = document.getElementById('rampEnabledToggle');
+const rampKpInput = document.getElementById('rampKpInput');
+const rampKiInput = document.getElementById('rampKiInput');
+const rampSampleInput = document.getElementById('rampSampleInput');
+const rampMaxStepInput = document.getElementById('rampMaxStepInput');
+const rampToleranceInput = document.getElementById('rampToleranceInput');
 
 function logAction(message, details = {}) {
   console.log('[UI]', message, details);
@@ -63,6 +69,17 @@ function getSpeedConfigFromState() {
   };
 }
 
+function getRampConfigFromState() {
+  return {
+    rampEnabled: Boolean(config.rampEnabled),
+    rampKp: Number(config.rampKp || 0),
+    rampKi: Number(config.rampKi || 0),
+    rampSampleTimeMs: Number(config.rampSampleTimeMs || 0),
+    rampMaxStepDeg: Number(config.rampMaxStepDeg || 0),
+    rampToleranceDeg: Number(config.rampToleranceDeg || 0)
+  };
+}
+
 function updateLimitInputsFromConfig() {
   azLimitMinInput.value = config.azimuthMinLimit.toString();
   azLimitMaxInput.value = config.azimuthMaxLimit.toString();
@@ -76,6 +93,15 @@ function updateSpeedInputsFromConfig() {
     azimuthSpeedDegPerSec: config.azimuthSpeedDegPerSec,
     elevationSpeedDegPerSec: config.elevationSpeedDegPerSec
   });
+}
+
+function updateRampInputsFromConfig() {
+  rampEnabledToggle.checked = Boolean(config.rampEnabled);
+  rampKpInput.value = config.rampKp;
+  rampKiInput.value = config.rampKi;
+  rampSampleInput.value = config.rampSampleTimeMs;
+  rampMaxStepInput.value = config.rampMaxStepDeg;
+  rampToleranceInput.value = config.rampToleranceDeg;
 }
 
 function syncGotoInputBounds() {
@@ -171,6 +197,7 @@ async function init() {
   modeSelect.value = config.azimuthMode.toString();
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
+  updateRampInputsFromConfig();
   updateModeLabel();
   controls.setEnabled(false);
   disconnectBtn.disabled = true;
@@ -188,6 +215,7 @@ async function init() {
   mapView.setSatelliteMapEnabled(config.satelliteMapEnabled || false);
   applyLimitsToRotor();
   applyOffsetsToRotor();
+  rotor.setRampSettings(getRampConfigFromState());
   await rotor.setSpeed(getSpeedConfigFromState());
 
   if (!rotor.supportsWebSerial() && serialSupportNotice) {
@@ -215,6 +243,10 @@ async function init() {
   setAzZeroBtn.addEventListener('click', () => void handleSetAzReference(0));
   setAzFullBtn.addEventListener('click', () => void handleSetAzReference(360));
   resetOffsetsBtn.addEventListener('click', () => void handleResetOffsets());
+  rampEnabledToggle.addEventListener('change', () => handleRampSettingsChange());
+  [rampKpInput, rampKiInput, rampSampleInput, rampMaxStepInput, rampToleranceInput].forEach((input) => {
+    input.addEventListener('change', () => handleRampSettingsChange());
+  });
 
   // Karten-Event-Handler
   loadMapBtn.addEventListener('click', () => void handleLoadMap());
@@ -412,6 +444,25 @@ async function handleSpeedChange(speedSettings) {
   updateSpeedInputsFromConfig();
   logAction('Geschwindigkeit angepasst', getSpeedConfigFromState());
   await rotor.setSpeed(getSpeedConfigFromState());
+}
+
+function readRampInputs() {
+  return {
+    rampEnabled: rampEnabledToggle.checked,
+    rampKp: Number(rampKpInput.value),
+    rampKi: Number(rampKiInput.value),
+    rampSampleTimeMs: Number(rampSampleInput.value),
+    rampMaxStepDeg: Number(rampMaxStepInput.value),
+    rampToleranceDeg: Number(rampToleranceInput.value)
+  };
+}
+
+function handleRampSettingsChange() {
+  const rampSettings = readRampInputs();
+  config = configStore.save(rampSettings);
+  updateRampInputsFromConfig();
+  rotor.setRampSettings(getRampConfigFromState());
+  logAction('Rampen-PI-Regler aktualisiert', getRampConfigFromState());
 }
 
 function setConnectionState(state) {

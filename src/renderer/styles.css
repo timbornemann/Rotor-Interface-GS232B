@@ -414,6 +414,39 @@ button:active {
   margin-top: 1rem;
 }
 
+.ramp-controls {
+  margin-top: 1.25rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.ramp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ramp-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ramp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.ramp-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 .speed-control {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.07);
