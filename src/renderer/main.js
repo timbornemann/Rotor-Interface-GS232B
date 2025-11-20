@@ -24,11 +24,17 @@ const loadMapBtn = document.getElementById('loadMapBtn');
 const satelliteMapToggle = document.getElementById('satelliteMapToggle');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
+
+function logAction(message, details = {}) {
+  console.log('[UI]', message, details);
+}
 const controls = new Controls(document.querySelector('.controls-card'), {
   onCommand: async (command) => {
     if (!connected) {
+      logAction('Steuerbefehl verworfen, nicht verbunden', { command });
       return;
     }
+    logAction('Steuerbefehl senden', { command });
     try {
       await rotor.control(command);
     } catch (error) {
@@ -37,8 +43,10 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   },
   onGotoAzimuth: async (azimuth) => {
     if (!connected) {
+      logAction('Azimut-Befehl verworfen, nicht verbunden', { azimuth });
       return;
     }
+    logAction('Azimut-Befehl senden', { azimuth });
     try {
       await rotor.setAzimuth(azimuth);
     } catch (error) {
@@ -47,8 +55,10 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   },
   onGotoAzimuthElevation: async (azimuth, elevation) => {
     if (!connected) {
+      logAction('Azimut/Elevation-Befehl verworfen, nicht verbunden', { azimuth, elevation });
       return;
     }
+    logAction('Azimut/Elevation-Befehl senden', { azimuth, elevation });
     try {
       await rotor.setAzEl({ az: azimuth, el: elevation });
     } catch (error) {
@@ -66,6 +76,7 @@ const unsubscribeError = rotor.onError((error) => reportError(error));
 init().catch(reportError);
 
 async function init() {
+  logAction('Initialisierung gestartet');
   baudInput.value = config.baudRate.toString();
   pollingInput.value = config.pollingIntervalMs.toString();
   simulationToggle.checked = config.simulation;
@@ -75,7 +86,7 @@ async function init() {
   disconnectBtn.disabled = true;
 
   // Karten-Einstellungen laden
-  if (config.mapLatitude !== null && config.mapLatitude !== undefined && 
+  if (config.mapLatitude !== null && config.mapLatitude !== undefined &&
       config.mapLongitude !== null && config.mapLongitude !== undefined) {
     mapCoordinatesInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
   }
@@ -96,6 +107,13 @@ async function init() {
 
   await refreshPorts();
   subscribeToStatus();
+
+  logAction('Initialisierung abgeschlossen', {
+    baudRate: baudInput.value,
+    pollingIntervalMs: pollingInput.value,
+    simulation: simulationToggle.checked,
+    azimuthMode: modeSelect.value
+  });
 
   connectBtn.addEventListener('click', () => void handleConnect());
   disconnectBtn.addEventListener('click', () => void handleDisconnect());
@@ -120,8 +138,10 @@ async function init() {
 
 async function handleRequestPort() {
   try {
+    logAction('Port-Anforderung gestartet');
     await rotor.requestPortAccess();
     await refreshPorts();
+    logAction('Port-Anforderung abgeschlossen');
   } catch (error) {
     reportError(error);
   }
@@ -129,6 +149,7 @@ async function handleRequestPort() {
 
 async function refreshPorts() {
   try {
+    logAction('Portliste wird aktualisiert');
     const ports = await rotor.listPorts();
     portSelect.innerHTML = '';
     ports.forEach((port) => {
@@ -150,6 +171,7 @@ async function refreshPorts() {
         portSelect.value = simulatedOption.value;
       }
     }
+    logAction('Portliste aktualisiert', { selected: portSelect.value, options: ports });
   } catch (error) {
     reportError(error);
   }
@@ -164,17 +186,20 @@ async function handleConnect() {
   const azimuthMode = Number(modeSelect.value) === 450 ? 450 : 360;
 
   if (!path) {
+    logAction('Verbindungsversuch ohne Port');
     reportError('Bitte zuerst einen Port auswaehlen.');
     return;
   }
 
   try {
+    logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode });
     await rotor.connect({ path, baudRate, simulation });
     await rotor.setMode(azimuthMode);
     rotor.startPolling(pollingIntervalMs);
     connected = true;
     config = configStore.save({ baudRate, pollingIntervalMs, simulation, portPath: path, azimuthMode });
     setConnectionState(true);
+    logAction('Verbindung hergestellt', { path, baudRate, pollingIntervalMs, simulation, azimuthMode });
   } catch (error) {
     reportError(error);
     setConnectionState(false);
@@ -183,8 +208,10 @@ async function handleConnect() {
 
 async function handleDisconnect() {
   try {
+    logAction('Verbindung wird getrennt');
     rotor.stopPolling();
     await rotor.disconnect();
+    logAction('Verbindung getrennt');
   } catch (error) {
     reportError(error);
   } finally {
@@ -196,6 +223,7 @@ async function handleDisconnect() {
 async function handleModeChange() {
   const mode = Number(modeSelect.value) === 450 ? 450 : 360;
   config = configStore.save({ azimuthMode: mode });
+  logAction('Azimutmodus geändert', { mode });
   updateModeLabel();
   if (!connected) {
     return;
@@ -209,6 +237,7 @@ async function handleModeChange() {
 
 function setConnectionState(state) {
   connected = state;
+  logAction('Verbindungsstatus gesetzt', { connected: state });
   controls.setEnabled(state);
   connectBtn.disabled = state;
   disconnectBtn.disabled = !state;
@@ -243,10 +272,12 @@ function handleStatus(status) {
   const az = typeof status.azimuth === 'number' ? status.azimuth.toFixed(0) : '--';
   const el = typeof status.elevation === 'number' ? status.elevation.toFixed(0) : '--';
   lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
+  logAction('Status aktualisiert', { status, display: lastStatusValue.textContent });
 }
 
 function updateModeLabel() {
   modeStatus.textContent = `Modus: ${modeSelect.value}deg`;
+  logAction('Modus-Label aktualisiert', { label: modeStatus.textContent });
 }
 
 async function handleLoadMap() {
@@ -272,17 +303,20 @@ async function handleLoadMap() {
     reportError('Ungültiger Längengrad. Bitte einen Wert zwischen -180 und 180 eingeben.');
     return;
   }
-  
+
   try {
+    logAction('Kartenkoordinaten werden gesetzt', { lat, lon });
     mapView.setCoordinates(lat, lon);
     config = configStore.save({ mapLatitude: lat, mapLongitude: lon });
-    
+
     if (satelliteMapToggle.checked) {
       loadMapBtn.disabled = true;
       loadMapBtn.textContent = 'Lädt...';
+      logAction('Satellitenkarte wird geladen');
       await mapView.loadMap();
       loadMapBtn.disabled = false;
       loadMapBtn.textContent = 'Karte laden';
+      logAction('Satellitenkarte geladen');
     }
   } catch (error) {
     reportError(error);
@@ -293,16 +327,19 @@ async function handleLoadMap() {
 
 async function handleSatelliteMapToggle() {
   const enabled = satelliteMapToggle.checked;
+  logAction('Satellitenansicht umgeschaltet', { enabled });
   mapView.setSatelliteMapEnabled(enabled);
   config = configStore.save({ satelliteMapEnabled: enabled });
-  
+
   if (enabled && mapView.latitude !== null && mapView.longitude !== null) {
     try {
       loadMapBtn.disabled = true;
       loadMapBtn.textContent = 'Lädt...';
+      logAction('Satellitenkarte wird nach Umschalten geladen');
       await mapView.loadMap();
       loadMapBtn.disabled = false;
       loadMapBtn.textContent = 'Karte laden';
+      logAction('Satellitenkarte nach Umschalten geladen');
     } catch (error) {
       reportError(error);
       loadMapBtn.disabled = false;
@@ -313,7 +350,8 @@ async function handleSatelliteMapToggle() {
 
 function reportError(error) {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(error);
+  console.error('[UI] Fehler', error);
+  logAction('Fehler gemeldet', { message });
   connectionStatus.textContent = `Fehler: ${message}`;
   connectionStatus.classList.remove('connected');
   connectionStatus.classList.add('disconnected');

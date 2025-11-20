@@ -38,10 +38,12 @@ class SerialConnection {
   }
 
   emitData(data) {
+    console.log('[RotorService][SerialConnection] Empfangene Daten', { data });
     this.dataListeners.forEach((listener) => listener(data));
   }
 
   emitError(error) {
+    console.error('[RotorService][SerialConnection] Fehler', error);
     this.errorListeners.forEach((listener) => listener(error));
   }
 }
@@ -63,6 +65,7 @@ class SimulationSerialConnection extends SerialConnection {
       return;
     }
     this.isConnected = true;
+    console.log('[RotorService][Simulation] Verbunden');
     this.startTicker();
     this.emitStatus();
   }
@@ -75,6 +78,7 @@ class SimulationSerialConnection extends SerialConnection {
     this.isConnected = false;
     this.azDirection = 0;
     this.elDirection = 0;
+    console.log('[RotorService][Simulation] Verbindung getrennt');
   }
 
   isOpen() {
@@ -83,6 +87,7 @@ class SimulationSerialConnection extends SerialConnection {
 
   async writeCommand(command) {
     const normalized = command.trim().toUpperCase();
+    console.log('[RotorService][Simulation] Befehl empfangen', { command: normalized });
 
     if (normalized.startsWith('M')) {
       const value = Number(normalized.slice(1));
@@ -169,6 +174,7 @@ class SimulationSerialConnection extends SerialConnection {
     const az = Math.round(this.azimuth).toString().padStart(3, '0');
     const el = Math.round(this.elevation).toString().padStart(3, '0');
     this.emitData(`AZ=${az} EL=${el}`);
+    console.log('[RotorService][Simulation] Status ausgegeben', { azimuth: this.azimuth, elevation: this.elevation, mode: this.modeMaxAz });
   }
 
   normalizeAzimuth(value) {
@@ -202,6 +208,7 @@ class WebSerialConnection extends SerialConnection {
   async open(options) {
     await this.port.open({ baudRate: options?.baudRate ?? 9600 });
     this.readLoopActive = true;
+    console.log('[RotorService][WebSerial] Port geöffnet', { options });
     this.startReadLoop();
   }
 
@@ -237,6 +244,7 @@ class WebSerialConnection extends SerialConnection {
     if (!this.port?.writable) {
       throw new Error('Serial-Port ist nicht geoeffnet.');
     }
+    console.log('[RotorService][WebSerial] Sende Befehl', { command });
     const writer = this.port.writable.getWriter();
     const payload = encoder.encode(command.endsWith('\r') ? command : `${command}\r`);
     try {
@@ -318,6 +326,7 @@ class RotorService {
         });
       });
     }
+    console.log('[RotorService] Gefundene Ports', { ports: ports.map((port) => ({ ...port })) });
     ports.push({
       path: SIMULATED_PORT_ID,
       friendlyName: 'Simulierter Rotor',
@@ -335,6 +344,7 @@ class RotorService {
     const port = await navigator.serial.requestPort();
     const id = this.ensurePortId(port);
     this.portRegistry.set(id, port);
+    console.log('[RotorService] Zugriff auf neuen Port gewährt', { id });
     return { path: id, friendlyName: formatPortLabel(port, id) };
   }
 
@@ -342,6 +352,7 @@ class RotorService {
     const useSimulation =
       Boolean(config.simulation) || config.path === SIMULATED_PORT_ID || !supportsWebSerial();
 
+    console.log('[RotorService] Verbindungsaufbau gestartet', { config, useSimulation });
     await this.disconnect();
     this.maxAzimuthRange = 360;
     this.currentStatus = null;
@@ -362,6 +373,7 @@ class RotorService {
     this.serial.onError((error) => this.emitError(error));
 
     await this.serial.open({ baudRate: config.baudRate });
+    console.log('[RotorService] Verbindung hergestellt', { mode: this.simulationMode ? 'Simulation' : 'WebSerial' });
   }
 
   async disconnect() {
@@ -373,10 +385,12 @@ class RotorService {
         this.emitError(error);
       }
     }
+    console.log('[RotorService] Verbindung geschlossen');
     this.serial = null;
   }
 
   async control(command) {
+    console.log('[RotorService] Steuerbefehl', { command });
     await this.sendRawCommand(command);
   }
 
@@ -384,23 +398,27 @@ class RotorService {
     if (!this.serial || !this.serial.isOpen()) {
       throw new Error('Rotor ist nicht verbunden.');
     }
+    console.log('[RotorService] Rohbefehl senden', { command });
     await this.serial.writeCommand(command.trim().toUpperCase());
   }
 
   async setAzimuth(target) {
     const normalized = this.normalizeAzimuth(target);
     const value = Math.round(normalized).toString().padStart(3, '0');
+    console.log('[RotorService] Azimut setzen', { target, normalized, value });
     await this.sendRawCommand(`M${value}`);
   }
 
   async setAzEl({ az, el }) {
     const azValue = Math.round(this.normalizeAzimuth(az)).toString().padStart(3, '0');
     const elValue = Math.round(this.normalizeElevation(el)).toString().padStart(3, '0');
+    console.log('[RotorService] Azimut/Elevation setzen', { az, el, azValue, elValue });
     await this.sendRawCommand(`W${azValue} ${elValue}`);
   }
 
   async setMode(mode) {
     this.maxAzimuthRange = mode === 450 ? 450 : 360;
+    console.log('[RotorService] Modus setzen', { mode: this.maxAzimuthRange });
     await this.sendRawCommand(mode === 450 ? 'P45' : 'P36');
   }
 
@@ -409,6 +427,7 @@ class RotorService {
     if (!this.serial || !this.serial.isOpen()) {
       return;
     }
+    console.log('[RotorService] Starte Polling', { intervalMs });
     this.pollingTimer = setInterval(() => {
       this.sendRawCommand('C2').catch((error) => this.emitError(error));
     }, intervalMs);
@@ -419,6 +438,7 @@ class RotorService {
     if (this.pollingTimer) {
       clearInterval(this.pollingTimer);
       this.pollingTimer = null;
+      console.log('[RotorService] Polling gestoppt');
     }
   }
 
@@ -437,6 +457,7 @@ class RotorService {
   }
 
   handleSerialLine(line) {
+    console.log('[RotorService] Zeile vom Rotor empfangen', { line });
     const status = {
       raw: line,
       timestamp: Date.now()
@@ -449,6 +470,7 @@ class RotorService {
     if (elMatch) {
       status.elevation = Number(elMatch[1]);
     }
+    console.log('[RotorService] Verarbeiteter Status', status);
     this.currentStatus = status;
     this.statusListeners.forEach((listener) => listener(status));
   }
@@ -457,6 +479,7 @@ class RotorService {
     if (!error) {
       return;
     }
+    console.error('[RotorService] Weitergeleiteter Fehler', error);
     this.errorListeners.forEach((listener) => listener(error));
   }
 
