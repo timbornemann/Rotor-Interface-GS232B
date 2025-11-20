@@ -199,6 +199,45 @@ button:active {
   align-items: center;
 }
 
+.limit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.limit-group h3 {
+  margin: 0 0 0.5rem;
+}
+
+.limit-group label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--muted);
+}
+
+.limit-group input {
+  margin-top: 0;
+}
+
+.calibration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.limit-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+#limitWarning {
+  margin-top: 0.75rem;
+}
+
 .card h2 {
   margin: 0;
   font-weight: 600;

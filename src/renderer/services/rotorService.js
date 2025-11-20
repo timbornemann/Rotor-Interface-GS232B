@@ -23,6 +23,29 @@ function formatPortLabel(port, id) {
   return `Port ${vendor}`;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function wrapAzimuth(value, range) {
+  return ((value % range) + range) % range;
+}
+
+function generateAzimuthCandidates(value, min, max, range) {
+  const candidates = [];
+  const base = clamp(value, min, max);
+  candidates.push(base);
+  const above = base + range;
+  const below = base - range;
+  if (above <= max) {
+    candidates.push(above);
+  }
+  if (below >= min) {
+    candidates.push(below);
+  }
+  return candidates;
+}
+
 class SerialConnection {
   constructor() {
     this.dataListeners = new Set();
@@ -52,11 +75,17 @@ class SimulationSerialConnection extends SerialConnection {
   constructor() {
     super();
     this.isConnected = false;
-    this.azimuth = 0;
-    this.elevation = 0;
+    this.azimuthRaw = 0;
+    this.elevationRaw = 0;
     this.azDirection = 0;
     this.elDirection = 0;
     this.modeMaxAz = 360;
+    this.azimuthOffset = 0;
+    this.elevationOffset = 0;
+    this.azimuthMin = 0;
+    this.azimuthMax = 360;
+    this.elevationMin = 0;
+    this.elevationMax = 90;
     this.ticker = null;
   }
 
@@ -68,6 +97,36 @@ class SimulationSerialConnection extends SerialConnection {
     console.log('[RotorService][Simulation] Verbunden');
     this.startTicker();
     this.emitStatus();
+  }
+
+  setSoftLimits(limits) {
+    if (!limits) {
+      return;
+    }
+    if (typeof limits.azimuthMin === 'number') {
+      this.azimuthMin = limits.azimuthMin;
+    }
+    if (typeof limits.azimuthMax === 'number') {
+      this.azimuthMax = limits.azimuthMax;
+    }
+    if (typeof limits.elevationMin === 'number') {
+      this.elevationMin = limits.elevationMin;
+    }
+    if (typeof limits.elevationMax === 'number') {
+      this.elevationMax = limits.elevationMax;
+    }
+  }
+
+  setCalibrationOffsets(offsets) {
+    if (!offsets) {
+      return;
+    }
+    if (typeof offsets.azimuthOffset === 'number') {
+      this.azimuthOffset = offsets.azimuthOffset;
+    }
+    if (typeof offsets.elevationOffset === 'number') {
+      this.elevationOffset = offsets.elevationOffset;
+    }
   }
 
   async close() {
@@ -92,7 +151,7 @@ class SimulationSerialConnection extends SerialConnection {
     if (normalized.startsWith('M')) {
       const value = Number(normalized.slice(1));
       if (!Number.isNaN(value)) {
-        this.azimuth = this.normalizeAzimuth(value);
+        this.azimuthRaw = this.planRawAzimuthTarget(value);
         this.emitStatus();
       }
       return;
@@ -103,10 +162,10 @@ class SimulationSerialConnection extends SerialConnection {
       const az = Number(parts[0]);
       const el = Number(parts[1]);
       if (!Number.isNaN(az)) {
-        this.azimuth = this.normalizeAzimuth(az);
+        this.azimuthRaw = this.planRawAzimuthTarget(az);
       }
       if (!Number.isNaN(el)) {
-        this.elevation = this.normalizeElevation(el);
+        this.elevationRaw = this.constrainRawElevation(el);
       }
       this.emitStatus();
       return;
@@ -142,11 +201,11 @@ class SimulationSerialConnection extends SerialConnection {
         break;
       case 'P36':
         this.modeMaxAz = 360;
-        this.azimuth = this.normalizeAzimuth(this.azimuth);
+        this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
         break;
       case 'P45':
         this.modeMaxAz = 450;
-        this.azimuth = this.normalizeAzimuth(this.azimuth);
+        this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
         break;
       default:
         break;
@@ -159,10 +218,12 @@ class SimulationSerialConnection extends SerialConnection {
     }
     this.ticker = setInterval(() => {
       if (this.azDirection !== 0) {
-        this.azimuth = this.normalizeAzimuth(this.azimuth + this.azDirection * 2);
+        const candidate = this.azimuthRaw + this.azDirection * 2;
+        this.azimuthRaw = this.constrainRawAzimuth(candidate, this.azimuthRaw);
       }
       if (this.elDirection !== 0) {
-        this.elevation = this.normalizeElevation(this.elevation + this.elDirection);
+        const candidate = this.elevationRaw + this.elDirection;
+        this.elevationRaw = this.constrainRawElevation(candidate);
       }
       if (this.azDirection !== 0 || this.elDirection !== 0) {
         this.emitStatus();
@@ -171,28 +232,72 @@ class SimulationSerialConnection extends SerialConnection {
   }
 
   emitStatus() {
-    const az = Math.round(this.azimuth).toString().padStart(3, '0');
-    const el = Math.round(this.elevation).toString().padStart(3, '0');
+    const az = Math.round(wrapAzimuth(this.azimuthRaw, this.modeMaxAz)).toString().padStart(3, '0');
+    const el = Math.round(clamp(this.elevationRaw, 0, this.elevationMax)).toString().padStart(3, '0');
     this.emitData(`AZ=${az} EL=${el}`);
-    console.log('[RotorService][Simulation] Status ausgegeben', { azimuth: this.azimuth, elevation: this.elevation, mode: this.modeMaxAz });
+    console.log('[RotorService][Simulation] Status ausgegeben', {
+      azimuthRaw: this.azimuthRaw,
+      elevationRaw: this.elevationRaw,
+      azimuthCalibrated: this.getCalibratedAzimuth(),
+      elevationCalibrated: this.getCalibratedElevation(),
+      mode: this.modeMaxAz
+    });
   }
 
-  normalizeAzimuth(value) {
-    if (this.modeMaxAz === 360) {
-      return ((value % 360) + 360) % 360;
-    }
-    let normalized = value;
-    while (normalized < 0) {
-      normalized += this.modeMaxAz;
-    }
-    while (normalized >= this.modeMaxAz) {
-      normalized -= this.modeMaxAz;
-    }
-    return normalized;
+  getCalibratedAzimuth() {
+    return clamp(this.azimuthRaw + this.azimuthOffset, this.azimuthMin, this.azimuthMax);
   }
 
-  normalizeElevation(value) {
-    return Math.min(90, Math.max(0, value));
+  getCalibratedElevation() {
+    return clamp(this.elevationRaw + this.elevationOffset, this.elevationMin, this.elevationMax);
+  }
+
+  planRawAzimuthTarget(rawTarget) {
+    const currentCalibrated = this.getCalibratedAzimuth();
+    const targetCalibrated = clamp(rawTarget + this.azimuthOffset, this.azimuthMin, this.azimuthMax);
+    const targetCandidates = generateAzimuthCandidates(
+      targetCalibrated,
+      this.azimuthMin,
+      this.azimuthMax,
+      this.modeMaxAz
+    );
+    const currentCandidates = generateAzimuthCandidates(
+      currentCalibrated,
+      this.azimuthMin,
+      this.azimuthMax,
+      this.modeMaxAz
+    );
+
+    let bestTarget = targetCalibrated;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    targetCandidates.forEach((candidate) => {
+      currentCandidates.forEach((current) => {
+        const distance = Math.abs(candidate - current);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestTarget = candidate;
+        }
+      });
+    });
+
+    const rawTarget = bestTarget - this.azimuthOffset;
+    return this.constrainRawAzimuth(rawTarget, this.azimuthRaw);
+  }
+
+  constrainRawAzimuth(rawValue, reference) {
+    const calibrated = clamp(rawValue + this.azimuthOffset, this.azimuthMin, this.azimuthMax);
+    const unclampedRaw = calibrated - this.azimuthOffset;
+    if (typeof reference === 'number') {
+      const revolutions = Math.round((reference - unclampedRaw) / this.modeMaxAz);
+      return unclampedRaw + revolutions * this.modeMaxAz;
+    }
+    return unclampedRaw;
+  }
+
+  constrainRawElevation(rawValue) {
+    const calibrated = clamp(rawValue + this.elevationOffset, this.elevationMin, this.elevationMax);
+    const raw = calibrated - this.elevationOffset;
+    return clamp(raw, 0, Math.max(this.elevationMax, 90));
   }
 }
 
@@ -301,6 +406,14 @@ class RotorService {
     this.serial = null;
     this.simulationMode = true;
     this.maxAzimuthRange = 360;
+    this.azimuthOffset = 0;
+    this.elevationOffset = 0;
+    this.softLimits = {
+      azimuthMin: 0,
+      azimuthMax: 360,
+      elevationMin: 0,
+      elevationMax: 90
+    };
     this.pollingTimer = null;
     this.currentStatus = null;
     this.statusListeners = new Set();
@@ -373,6 +486,8 @@ class RotorService {
     this.serial.onError((error) => this.emitError(error));
 
     await this.serial.open({ baudRate: config.baudRate });
+    this.applySoftLimitConfig();
+    this.applyCalibrationOffsets();
     console.log('[RotorService] Verbindung hergestellt', { mode: this.simulationMode ? 'Simulation' : 'WebSerial' });
   }
 
@@ -403,16 +518,18 @@ class RotorService {
   }
 
   async setAzimuth(target) {
-    const normalized = this.normalizeAzimuth(target);
-    const value = Math.round(normalized).toString().padStart(3, '0');
-    console.log('[RotorService] Azimut setzen', { target, normalized, value });
+    const plan = this.planAzimuthTarget(target);
+    const value = Math.round(plan.commandValue).toString().padStart(3, '0');
+    console.log('[RotorService] Azimut setzen', { target, plan, value });
     await this.sendRawCommand(`M${value}`);
   }
 
   async setAzEl({ az, el }) {
-    const azValue = Math.round(this.normalizeAzimuth(az)).toString().padStart(3, '0');
-    const elValue = Math.round(this.normalizeElevation(el)).toString().padStart(3, '0');
-    console.log('[RotorService] Azimut/Elevation setzen', { az, el, azValue, elValue });
+    const azPlan = this.planAzimuthTarget(az);
+    const elPlan = this.planElevationTarget(el);
+    const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
+    const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
+    console.log('[RotorService] Azimut/Elevation setzen', { az, el, azPlan, elPlan, azValue, elValue });
     await this.sendRawCommand(`W${azValue} ${elValue}`);
   }
 
@@ -420,6 +537,47 @@ class RotorService {
     this.maxAzimuthRange = mode === 450 ? 450 : 360;
     console.log('[RotorService] Modus setzen', { mode: this.maxAzimuthRange });
     await this.sendRawCommand(mode === 450 ? 'P45' : 'P36');
+    this.applySoftLimitConfig();
+  }
+
+  setSoftLimits(limits) {
+    if (!limits) {
+      return;
+    }
+    const nextLimits = { ...this.softLimits };
+    if (typeof limits.azimuthMin === 'number') {
+      nextLimits.azimuthMin = limits.azimuthMin;
+    }
+    if (typeof limits.azimuthMax === 'number') {
+      nextLimits.azimuthMax = limits.azimuthMax;
+    }
+    if (typeof limits.elevationMin === 'number') {
+      nextLimits.elevationMin = limits.elevationMin;
+    }
+    if (typeof limits.elevationMax === 'number') {
+      nextLimits.elevationMax = limits.elevationMax;
+    }
+    if (nextLimits.azimuthMax < nextLimits.azimuthMin) {
+      throw new Error('Azimut-Maximum muss groesser als Minimum sein.');
+    }
+    if (nextLimits.elevationMax < nextLimits.elevationMin) {
+      throw new Error('Elevation-Maximum muss groesser als Minimum sein.');
+    }
+    this.softLimits = nextLimits;
+    this.applySoftLimitConfig();
+  }
+
+  setCalibrationOffsets(offsets) {
+    if (!offsets) {
+      return;
+    }
+    if (typeof offsets.azimuthOffset === 'number') {
+      this.azimuthOffset = offsets.azimuthOffset;
+    }
+    if (typeof offsets.elevationOffset === 'number') {
+      this.elevationOffset = offsets.elevationOffset;
+    }
+    this.applyCalibrationOffsets();
   }
 
   startPolling(intervalMs = 1000) {
@@ -464,11 +622,13 @@ class RotorService {
     };
     const azMatch = line.match(/AZ\s*=\s*(\d+)/i);
     if (azMatch) {
-      status.azimuth = Number(azMatch[1]);
+      status.azimuthRaw = Number(azMatch[1]);
+      status.azimuth = this.normalizeAzimuth(status.azimuthRaw);
     }
     const elMatch = line.match(/EL\s*=\s*(\d+)/i);
     if (elMatch) {
-      status.elevation = Number(elMatch[1]);
+      status.elevationRaw = Number(elMatch[1]);
+      status.elevation = this.normalizeElevation(status.elevationRaw);
     }
     console.log('[RotorService] Verarbeiteter Status', status);
     this.currentStatus = status;
@@ -483,13 +643,73 @@ class RotorService {
     this.errorListeners.forEach((listener) => listener(error));
   }
 
+  applySoftLimitConfig() {
+    if (this.serial instanceof SimulationSerialConnection) {
+      this.serial.setSoftLimits(this.softLimits);
+    }
+  }
+
+  applyCalibrationOffsets() {
+    if (this.serial instanceof SimulationSerialConnection) {
+      this.serial.setCalibrationOffsets({
+        azimuthOffset: this.azimuthOffset,
+        elevationOffset: this.elevationOffset
+      });
+    }
+  }
+
   normalizeAzimuth(value) {
-    const range = this.maxAzimuthRange;
-    return ((value % range) + range) % range;
+    return clamp(value + this.azimuthOffset, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
   }
 
   normalizeElevation(value) {
-    return Math.min(90, Math.max(0, value));
+    return clamp(value + this.elevationOffset, this.softLimits.elevationMin, this.softLimits.elevationMax);
+  }
+
+  planAzimuthTarget(target) {
+    const range = this.maxAzimuthRange;
+    const clampedTarget = clamp(target, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+    const current = typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : clampedTarget;
+
+    const targetCandidates = generateAzimuthCandidates(
+      clampedTarget,
+      this.softLimits.azimuthMin,
+      this.softLimits.azimuthMax,
+      range
+    );
+    const currentCandidates = generateAzimuthCandidates(
+      current,
+      this.softLimits.azimuthMin,
+      this.softLimits.azimuthMax,
+      range
+    );
+
+    let bestTarget = clampedTarget;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    targetCandidates.forEach((candidate) => {
+      currentCandidates.forEach((currentCandidate) => {
+        const distance = Math.abs(candidate - currentCandidate);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestTarget = candidate;
+        }
+      });
+    });
+
+    const rawCommand = bestTarget - this.azimuthOffset;
+    return {
+      calibrated: bestTarget,
+      commandValue: wrapAzimuth(rawCommand, range)
+    };
+  }
+
+  planElevationTarget(target) {
+    const calibrated = clamp(target, this.softLimits.elevationMin, this.softLimits.elevationMax);
+    const rawCommand = clamp(calibrated - this.elevationOffset, 0, Math.max(this.softLimits.elevationMax, 90));
+    return {
+      calibrated,
+      commandValue: rawCommand
+    };
   }
 
   ensurePortId(port) {

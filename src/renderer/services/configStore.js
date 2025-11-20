@@ -5,6 +5,12 @@ const defaultConfig = {
   pollingIntervalMs: 1000,
   simulation: true,
   azimuthMode: 360,
+  azimuthMinLimit: 0,
+  azimuthMaxLimit: 360,
+  elevationMinLimit: 0,
+  elevationMaxLimit: 90,
+  azimuthOffset: 0,
+  elevationOffset: 0,
   mapLatitude: null,
   mapLongitude: null,
   satelliteMapEnabled: false
