@@ -41,6 +41,10 @@ const rampKiInput = document.getElementById('rampKiInput');
 const rampSampleInput = document.getElementById('rampSampleInput');
 const rampMaxStepInput = document.getElementById('rampMaxStepInput');
 const rampToleranceInput = document.getElementById('rampToleranceInput');
+const serialCommandInput = document.getElementById('serialCommandInput');
+const sendSerialCommandBtn = document.getElementById('sendSerialCommandBtn');
+const commandHistoryList = document.getElementById('commandHistoryList');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 
 function logAction(message, details = {}) {
   console.log('[UI]', message, details);
@@ -263,6 +267,32 @@ async function init() {
   
   // Initialisiere Zoom-Anzeige
   mapView.updateZoomDisplay();
+
+  // Serielles Tool Event-Handler
+  if (sendSerialCommandBtn) {
+    sendSerialCommandBtn.addEventListener('click', () => void handleSendSerialCommand());
+  }
+  if (serialCommandInput) {
+    serialCommandInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        void handleSendSerialCommand();
+      }
+    });
+  }
+  if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', () => clearCommandHistory());
+  }
+  
+  // Quick-Command Buttons
+  document.querySelectorAll('.quick-cmd-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cmd = btn.dataset.cmd;
+      if (serialCommandInput) {
+        serialCommandInput.value = cmd;
+      }
+      void handleSendSerialCommand(cmd);
+    });
+  });
 }
 
 async function handleRequestPort() {
@@ -556,6 +586,11 @@ function handleStatus(status) {
     connectionStatus.classList.add('connected');
     connectionStatus.classList.remove('disconnected');
   }
+  
+  // Status-Updates auch in der Historie anzeigen
+  if (status && status.raw) {
+    addCommandToHistory(`← ${status.raw}`, 'received');
+  }
 }
 
 function updateModeLabel() {
@@ -639,6 +674,95 @@ function reportError(error) {
   connectionStatus.classList.remove('connected');
   connectionStatus.classList.add('disconnected');
 }
+
+// Serielles Tool Funktionen
+let commandHistory = [];
+
+async function handleSendSerialCommand(cmdOverride = null) {
+  if (!connected) {
+    reportError('Nicht verbunden. Bitte zuerst eine Verbindung herstellen.');
+    return;
+  }
+
+  const command = cmdOverride || (serialCommandInput ? serialCommandInput.value.trim() : '');
+  if (!command) {
+    reportError('Bitte einen Befehl eingeben.');
+    return;
+  }
+
+  try {
+    logAction('Serieller Befehl senden', { command });
+    addCommandToHistory(command, 'sent');
+    await rotor.sendRawCommand(command);
+    
+    // Eingabefeld leeren
+    if (serialCommandInput && !cmdOverride) {
+      serialCommandInput.value = '';
+    }
+  } catch (error) {
+    reportError(error);
+    addCommandToHistory(`FEHLER: ${error.message}`, 'error');
+  }
+}
+
+function addCommandToHistory(command, type = 'sent') {
+  const time = new Date().toLocaleTimeString();
+  const item = {
+    time,
+    command,
+    type
+  };
+  commandHistory.unshift(item);
+  
+  // Maximal 100 Einträge behalten
+  if (commandHistory.length > 100) {
+    commandHistory = commandHistory.slice(0, 100);
+  }
+  
+  updateCommandHistoryDisplay();
+}
+
+function updateCommandHistoryDisplay() {
+  if (!commandHistoryList) {
+    return;
+  }
+  
+  commandHistoryList.innerHTML = '';
+  
+  if (commandHistory.length === 0) {
+    const emptyMsg = document.createElement('div');
+    emptyMsg.className = 'command-history-item';
+    emptyMsg.textContent = 'Keine Befehle gesendet';
+    emptyMsg.style.color = 'var(--muted)';
+    emptyMsg.style.fontStyle = 'italic';
+    commandHistoryList.appendChild(emptyMsg);
+    return;
+  }
+  
+  commandHistory.forEach((item) => {
+    const div = document.createElement('div');
+    div.className = `command-history-item ${item.type}`;
+    
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'command-history-time';
+    timeSpan.textContent = item.time;
+    
+    const cmdSpan = document.createElement('span');
+    cmdSpan.className = 'command-history-command';
+    cmdSpan.textContent = item.command;
+    
+    div.appendChild(timeSpan);
+    div.appendChild(cmdSpan);
+    commandHistoryList.appendChild(div);
+  });
+}
+
+function clearCommandHistory() {
+  commandHistory = [];
+  updateCommandHistoryDisplay();
+  logAction('Befehls-Historie gelöscht');
+}
+
 
 window.addEventListener('beforeunload', () => {
   rotor.stopPolling();

@@ -619,6 +619,175 @@ button:active {
   }
 }
 
+/* Serielles Tool */
+.serial-tool-card {
+  margin-top: 1.5rem;
+}
+
+.serial-tool-description {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.serial-tool-description p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.serial-tool-description code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: var(--accent);
+}
+
+.serial-command-input {
+  margin-bottom: 1.5rem;
+}
+
+.command-input-group {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.command-input-group input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+}
+
+.command-input-group input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.command-input-group button {
+  min-width: 100px;
+}
+
+.quick-commands {
+  margin-bottom: 1.5rem;
+}
+
+.quick-commands h3 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.quick-commands-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.5rem;
+}
+
+.quick-cmd-btn {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-cmd-btn:hover {
+  background: rgba(47, 212, 255, 0.15);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.quick-cmd-btn:active {
+  transform: translateY(0);
+}
+
+.serial-command-history {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.history-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.command-history-list {
+  max-height: 300px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 0.5rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
+.command-history-item {
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border-left: 3px solid var(--accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.command-history-item.sent {
+  border-left-color: var(--accent);
+}
+
+.command-history-item.received {
+  border-left-color: var(--accent-strong);
+  background: rgba(255, 179, 71, 0.05);
+}
+
+.command-history-time {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-right: 0.5rem;
+}
+
+.command-history-command {
+  flex: 1;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.command-history-item.sent .command-history-command {
+  color: var(--accent);
+}
+
+.command-history-item.received .command-history-command {
+  color: var(--accent-strong);
+}
+
 @media (max-width: 768px) {
   .top-bar {
     flex-direction: column;
@@ -632,5 +801,17 @@ button:active {
   
   .right-column {
     flex-direction: column;
+  }
+
+  .quick-commands-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .command-input-group {
+    flex-direction: column;
+  }
+
+  .command-input-group button {
+    width: 100%;
   }
 }

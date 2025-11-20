@@ -245,6 +245,50 @@
             <button id="applyLimitsBtn" class="primary" type="button">Limits speichern</button>
           </div>
         </section>
+
+        <section class="card serial-tool-card">
+          <div class="card-header">
+            <h2>Serielles Tool</h2>
+          </div>
+
+          <div class="serial-tool-description">
+            <p>Direkt Befehle an den Rotor-Controller senden. Siehe <code>GS232B_Befehle.md</code> für alle verfügbaren Befehle.</p>
+          </div>
+
+          <div class="serial-command-input">
+            <label>
+              Befehl eingeben
+              <div class="command-input-group">
+                <input id="serialCommandInput" type="text" placeholder="z.B. R, M180, C2, W090 045" />
+                <button id="sendSerialCommandBtn" class="primary" type="button">Senden</button>
+              </div>
+            </label>
+          </div>
+
+          <div class="quick-commands">
+            <h3>Schnellbefehle</h3>
+            <div class="quick-commands-grid">
+              <button class="quick-cmd-btn" data-cmd="R">R (Az Rechts)</button>
+              <button class="quick-cmd-btn" data-cmd="L">L (Az Links)</button>
+              <button class="quick-cmd-btn" data-cmd="A">A (Az Stopp)</button>
+              <button class="quick-cmd-btn" data-cmd="U">U (El Hoch)</button>
+              <button class="quick-cmd-btn" data-cmd="D">D (El Runter)</button>
+              <button class="quick-cmd-btn" data-cmd="E">E (El Stopp)</button>
+              <button class="quick-cmd-btn" data-cmd="S">S (Alles Stopp)</button>
+              <button class="quick-cmd-btn" data-cmd="C2">C2 (Status)</button>
+              <button class="quick-cmd-btn" data-cmd="P36">P36 (360°)</button>
+              <button class="quick-cmd-btn" data-cmd="P45">P45 (450°)</button>
+            </div>
+          </div>
+
+          <div class="serial-command-history">
+            <div class="history-header">
+              <h3>Befehls-Historie</h3>
+              <button id="clearHistoryBtn" class="secondary" type="button">Löschen</button>
+            </div>
+            <div id="commandHistoryList" class="command-history-list"></div>
+          </div>
+        </section>
       </div>
     </main>
 
