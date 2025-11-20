@@ -147,7 +147,7 @@ button:active {
 
 .dashboard {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr 2fr 1fr;
   gap: 1.5rem;
   padding: 1.5rem 2rem;
   align-items: start;
