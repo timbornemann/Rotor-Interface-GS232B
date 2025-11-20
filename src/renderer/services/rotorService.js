@@ -371,9 +371,16 @@ class WebSerialConnection extends SerialConnection {
   }
 
   async open(options) {
-    await this.port.open({ baudRate: options?.baudRate ?? 9600 });
+    const portOptions = {
+      baudRate: options?.baudRate ?? 9600,
+      dataBits: 8,
+      stopBits: 1,
+      parity: 'none',
+      bufferSize: 255
+    };
+    await this.port.open(portOptions);
     this.readLoopActive = true;
-    console.log('[RotorService][WebSerial] Port geöffnet', { options });
+    console.log('[RotorService][WebSerial] Port geöffnet', { portOptions });
     this.startReadLoop();
   }
 
@@ -409,11 +416,23 @@ class WebSerialConnection extends SerialConnection {
     if (!this.port?.writable) {
       throw new Error('Serial-Port ist nicht geoeffnet.');
     }
-    console.log('[RotorService][WebSerial] Sende Befehl', { command });
+    const commandWithCr = command.endsWith('\r') ? command : `${command}\r`;
+    const payload = encoder.encode(commandWithCr);
+    console.log('[RotorService][WebSerial] Sende Befehl', { 
+      command, 
+      commandWithCr, 
+      payloadLength: payload.length,
+      payloadBytes: Array.from(payload).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' ')
+    });
     const writer = this.port.writable.getWriter();
-    const payload = encoder.encode(command.endsWith('\r') ? command : `${command}\r`);
     try {
+      await writer.ready;
       await writer.write(payload);
+      await writer.ready;
+      console.log('[RotorService][WebSerial] Befehl erfolgreich gesendet');
+    } catch (error) {
+      console.error('[RotorService][WebSerial] Fehler beim Senden', error);
+      throw error;
     } finally {
       writer.releaseLock();
     }
@@ -590,7 +609,12 @@ class RotorService {
       throw new Error('Rotor ist nicht verbunden.');
     }
     console.log('[RotorService] Rohbefehl senden', { command });
-    await this.serial.writeCommand(command.trim().toUpperCase());
+    // Für Befehle mit Leerzeichen (wie "W123 045") trim nur am Anfang/Ende, nicht in der Mitte
+    const trimmed = command.trim();
+    const upperCased = trimmed.toUpperCase();
+    await this.serial.writeCommand(upperCased);
+    // Kleine Verzögerung, damit der Controller Zeit hat, den Befehl zu verarbeiten
+    await delay(10);
   }
 
   async setAzimuth(target) {
