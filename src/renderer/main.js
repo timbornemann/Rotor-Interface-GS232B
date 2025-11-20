@@ -15,6 +15,8 @@ const modeSelect = document.getElementById('modeSelect');
 const modeStatus = document.getElementById('modeStatus');
 const azValue = document.getElementById('azValue');
 const elValue = document.getElementById('elValue');
+const gotoAzInput = document.getElementById('gotoAzInput');
+const gotoElInput = document.getElementById('gotoElInput');
 const compass = new Compass(document.getElementById('compassRoot'));
 const elevation = new Elevation(document.getElementById('elevationRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
@@ -24,9 +26,70 @@ const loadMapBtn = document.getElementById('loadMapBtn');
 const satelliteMapToggle = document.getElementById('satelliteMapToggle');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
+const azLimitMinInput = document.getElementById('azLimitMinInput');
+const azLimitMaxInput = document.getElementById('azLimitMaxInput');
+const elLimitMinInput = document.getElementById('elLimitMinInput');
+const elLimitMaxInput = document.getElementById('elLimitMaxInput');
+const applyLimitsBtn = document.getElementById('applyLimitsBtn');
+const setAzZeroBtn = document.getElementById('setAzZeroBtn');
+const setAzFullBtn = document.getElementById('setAzFullBtn');
+const resetOffsetsBtn = document.getElementById('resetOffsetsBtn');
+const limitWarning = document.getElementById('limitWarning');
 
 function logAction(message, details = {}) {
   console.log('[UI]', message, details);
+}
+
+function getSoftLimitConfigFromState() {
+  return {
+    azimuthMin: Number(config.azimuthMinLimit),
+    azimuthMax: Number(config.azimuthMaxLimit),
+    elevationMin: Number(config.elevationMinLimit),
+    elevationMax: Number(config.elevationMaxLimit)
+  };
+}
+
+function getOffsetConfigFromState() {
+  return {
+    azimuthOffset: Number(config.azimuthOffset || 0),
+    elevationOffset: Number(config.elevationOffset || 0)
+  };
+}
+
+function updateLimitInputsFromConfig() {
+  azLimitMinInput.value = config.azimuthMinLimit.toString();
+  azLimitMaxInput.value = config.azimuthMaxLimit.toString();
+  elLimitMinInput.value = config.elevationMinLimit.toString();
+  elLimitMaxInput.value = config.elevationMaxLimit.toString();
+  syncGotoInputBounds();
+}
+
+function syncGotoInputBounds() {
+  gotoAzInput.min = config.azimuthMinLimit;
+  gotoAzInput.max = config.azimuthMaxLimit;
+  gotoElInput.min = config.elevationMinLimit;
+  gotoElInput.max = config.elevationMaxLimit;
+}
+
+function applyLimitsToRotor() {
+  rotor.setSoftLimits(getSoftLimitConfigFromState());
+}
+
+function applyOffsetsToRotor() {
+  rotor.setCalibrationOffsets(getOffsetConfigFromState());
+}
+
+function showLimitWarning(message) {
+  if (!limitWarning) {
+    return;
+  }
+  if (message) {
+    limitWarning.textContent = message;
+    limitWarning.classList.remove('hidden');
+  } else {
+    limitWarning.textContent = '';
+    limitWarning.classList.add('hidden');
+  }
 }
 const controls = new Controls(document.querySelector('.controls-card'), {
   onCommand: async (command) => {
@@ -46,6 +109,10 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       logAction('Azimut-Befehl verworfen, nicht verbunden', { azimuth });
       return;
     }
+    if (!validateTargets({ az: azimuth })) {
+      logAction('Azimut-Befehl verworfen, Ziel ausserhalb Limits', { azimuth });
+      return;
+    }
     logAction('Azimut-Befehl senden', { azimuth });
     try {
       await rotor.setAzimuth(azimuth);
@@ -56,6 +123,10 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   onGotoAzimuthElevation: async (azimuth, elevation) => {
     if (!connected) {
       logAction('Azimut/Elevation-Befehl verworfen, nicht verbunden', { azimuth, elevation });
+      return;
+    }
+    if (!validateTargets({ az: azimuth, el: elevation })) {
+      logAction('Azimut/Elevation-Befehl verworfen, Ziel ausserhalb Limits', { azimuth, elevation });
       return;
     }
     logAction('Azimut/Elevation-Befehl senden', { azimuth, elevation });
@@ -81,6 +152,7 @@ async function init() {
   pollingInput.value = config.pollingIntervalMs.toString();
   simulationToggle.checked = config.simulation;
   modeSelect.value = config.azimuthMode.toString();
+  updateLimitInputsFromConfig();
   updateModeLabel();
   controls.setEnabled(false);
   disconnectBtn.disabled = true;
@@ -96,6 +168,8 @@ async function init() {
     mapView.setCoordinates(config.mapLatitude, config.mapLongitude);
   }
   mapView.setSatelliteMapEnabled(config.satelliteMapEnabled || false);
+  applyLimitsToRotor();
+  applyOffsetsToRotor();
 
   if (!rotor.supportsWebSerial() && serialSupportNotice) {
     serialSupportNotice.classList.remove('hidden');
@@ -118,7 +192,11 @@ async function init() {
   connectBtn.addEventListener('click', () => void handleConnect());
   disconnectBtn.addEventListener('click', () => void handleDisconnect());
   modeSelect.addEventListener('change', () => void handleModeChange());
-  
+  applyLimitsBtn.addEventListener('click', () => void handleApplyLimits());
+  setAzZeroBtn.addEventListener('click', () => void handleSetAzReference(0));
+  setAzFullBtn.addEventListener('click', () => void handleSetAzReference(360));
+  resetOffsetsBtn.addEventListener('click', () => void handleResetOffsets());
+
   // Karten-Event-Handler
   loadMapBtn.addEventListener('click', () => void handleLoadMap());
   satelliteMapToggle.addEventListener('change', () => void handleSatelliteMapToggle());
@@ -193,6 +271,8 @@ async function handleConnect() {
 
   try {
     logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode });
+    applyLimitsToRotor();
+    applyOffsetsToRotor();
     await rotor.connect({ path, baudRate, simulation });
     await rotor.setMode(azimuthMode);
     rotor.startPolling(pollingIntervalMs);
@@ -233,6 +313,79 @@ async function handleModeChange() {
   } catch (error) {
     reportError(error);
   }
+}
+
+function readLimitInputs() {
+  return {
+    azimuthMinLimit: Number(azLimitMinInput.value),
+    azimuthMaxLimit: Number(azLimitMaxInput.value),
+    elevationMinLimit: Number(elLimitMinInput.value),
+    elevationMaxLimit: Number(elLimitMaxInput.value)
+  };
+}
+
+function limitsAreValid(limits) {
+  return limits.azimuthMaxLimit > limits.azimuthMinLimit && limits.elevationMaxLimit > limits.elevationMinLimit;
+}
+
+function isWithinAzLimit(value) {
+  return value >= config.azimuthMinLimit && value <= config.azimuthMaxLimit;
+}
+
+function isWithinElLimit(value) {
+  return value >= config.elevationMinLimit && value <= config.elevationMaxLimit;
+}
+
+function validateTargets({ az, el }) {
+  if (typeof az === 'number' && !Number.isNaN(az) && !isWithinAzLimit(az)) {
+    showLimitWarning(`Ziel-Azimut ${az}° liegt ausserhalb der Limits (${config.azimuthMinLimit}…${config.azimuthMaxLimit}°).`);
+    return false;
+  }
+  if (typeof el === 'number' && !Number.isNaN(el) && !isWithinElLimit(el)) {
+    showLimitWarning(
+      `Ziel-Elevation ${el}° liegt ausserhalb der Limits (${config.elevationMinLimit}…${config.elevationMaxLimit}°).`
+    );
+    return false;
+  }
+  showLimitWarning('');
+  return true;
+}
+
+function handleApplyLimits() {
+  const limits = readLimitInputs();
+  if (Object.values(limits).some((value) => Number.isNaN(value))) {
+    reportError('Bitte gueltige numerische Limits angeben.');
+    return;
+  }
+  if (!limitsAreValid(limits)) {
+    reportError('Limits ungueltig: Minimum muss kleiner als Maximum sein.');
+    return;
+  }
+  config = configStore.save(limits);
+  applyLimitsToRotor();
+  updateLimitInputsFromConfig();
+  showLimitWarning('Limits wurden aktualisiert.');
+  logAction('Soft-Limits aktualisiert', limits);
+}
+
+function handleSetAzReference(targetAzimuth) {
+  const status = rotor.getCurrentStatus();
+  if (!status || typeof status.azimuthRaw !== 'number') {
+    reportError('Keine aktuelle Positionsrueckmeldung fuer die Referenz vorhanden.');
+    return;
+  }
+  const newAzOffset = targetAzimuth - status.azimuthRaw;
+  config = configStore.save({ azimuthOffset: newAzOffset });
+  applyOffsetsToRotor();
+  showLimitWarning(`Referenz gesetzt: aktueller Azimut wird als ${targetAzimuth}° verwendet.`);
+  logAction('Azimut-Referenz gesetzt', { targetAzimuth, newAzOffset });
+}
+
+function handleResetOffsets() {
+  config = configStore.save({ azimuthOffset: 0, elevationOffset: 0 });
+  applyOffsetsToRotor();
+  showLimitWarning('Offsets wurden auf 0° zurueckgesetzt.');
+  logAction('Offsets zurueckgesetzt');
 }
 
 function setConnectionState(state) {

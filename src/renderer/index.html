@@ -147,10 +147,53 @@
               <button id="gotoAzElBtn">Goto Az/El</button>
             </div>
           </div>
-          
+
+          <div class="notice hidden" id="limitWarning"></div>
+
           <div class="last-status">
             <div class="last-status-label">Letzter Status:</div>
             <div class="last-status-value" id="lastStatusValue">--</div>
+          </div>
+        </section>
+
+        <section class="card limits-card">
+          <div class="card-header">
+            <h2>Soft-Limits &amp; Kalibrierung</h2>
+          </div>
+
+          <div class="limit-grid">
+            <div class="limit-group">
+              <h3>Azimut</h3>
+              <label>
+                Minimum (deg)
+                <input id="azLimitMinInput" type="number" step="1" value="0" />
+              </label>
+              <label>
+                Maximum (deg)
+                <input id="azLimitMaxInput" type="number" step="1" value="360" />
+              </label>
+            </div>
+            <div class="limit-group">
+              <h3>Elevation</h3>
+              <label>
+                Minimum (deg)
+                <input id="elLimitMinInput" type="number" step="1" value="0" />
+              </label>
+              <label>
+                Maximum (deg)
+                <input id="elLimitMaxInput" type="number" step="1" value="90" />
+              </label>
+            </div>
+          </div>
+
+          <div class="calibration-actions">
+            <button id="setAzZeroBtn" class="secondary" type="button">Aktuellen Azimut = 0° setzen</button>
+            <button id="setAzFullBtn" class="secondary" type="button">Aktuellen Azimut = 360° setzen</button>
+            <button id="resetOffsetsBtn" type="button">Offsets zuruecksetzen</button>
+          </div>
+
+          <div class="limit-actions">
+            <button id="applyLimitsBtn" class="primary" type="button">Limits speichern</button>
           </div>
         </section>
       </div>
