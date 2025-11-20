@@ -465,13 +465,53 @@ function handleRampSettingsChange() {
   logAction('Rampen-PI-Regler aktualisiert', getRampConfigFromState());
 }
 
+let lastStatusReceivedTime = null;
+let statusCheckInterval = null;
+
 function setConnectionState(state) {
   connected = state;
   logAction('Verbindungsstatus gesetzt', { connected: state });
   controls.setEnabled(state);
   connectBtn.disabled = state;
   disconnectBtn.disabled = !state;
-  connectionStatus.textContent = state ? 'Verbunden' : 'Getrennt';
+  
+  if (state) {
+    // Prüfe, ob es eine echte Verbindung oder Simulation ist
+    const isSimulation = simulationToggle.checked || portSelect.value === SIMULATED_PORT_ID;
+    const portInfo = portSelect.selectedOptions[0]?.textContent || '';
+    connectionStatus.textContent = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
+    
+    // Starte Überwachung, ob Status-Updates empfangen werden
+    lastStatusReceivedTime = Date.now();
+    if (statusCheckInterval) {
+      clearInterval(statusCheckInterval);
+    }
+    statusCheckInterval = setInterval(() => {
+      if (connected) {
+        const timeSinceLastStatus = Date.now() - lastStatusReceivedTime;
+        const isSimulation = simulationToggle.checked || portSelect.value === SIMULATED_PORT_ID;
+        const portInfo = portSelect.selectedOptions[0]?.textContent || '';
+        
+        if (timeSinceLastStatus > 5000 && !isSimulation) {
+          // Keine Status-Updates seit 5 Sekunden - möglicherweise Problem
+          connectionStatus.textContent = `Verbunden (${portInfo}) - Keine Daten`;
+          connectionStatus.classList.remove('connected');
+          connectionStatus.classList.add('disconnected');
+        } else {
+          connectionStatus.textContent = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
+          connectionStatus.classList.add('connected');
+          connectionStatus.classList.remove('disconnected');
+        }
+      }
+    }, 2000);
+  } else {
+    connectionStatus.textContent = 'Getrennt';
+    if (statusCheckInterval) {
+      clearInterval(statusCheckInterval);
+      statusCheckInterval = null;
+    }
+  }
+  
   connectionStatus.classList.toggle('connected', state);
   connectionStatus.classList.toggle('disconnected', !state);
 }
@@ -487,6 +527,10 @@ function handleStatus(status) {
   if (!status) {
     return;
   }
+  
+  // Aktualisiere Zeitstempel für Verbindungsüberwachung
+  lastStatusReceivedTime = Date.now();
+  
   if (typeof status.azimuth === 'number') {
     azValue.textContent = `${status.azimuth.toFixed(0)}deg`;
   }
@@ -503,6 +547,15 @@ function handleStatus(status) {
   const el = typeof status.elevation === 'number' ? status.elevation.toFixed(0) : '--';
   lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
   logAction('Status aktualisiert', { status, display: lastStatusValue.textContent });
+  
+  // Aktualisiere Verbindungsstatus-Anzeige, wenn Daten empfangen werden
+  if (connected) {
+    const isSimulation = simulationToggle.checked || portSelect.value === SIMULATED_PORT_ID;
+    const portInfo = portSelect.selectedOptions[0]?.textContent || '';
+    connectionStatus.textContent = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
+    connectionStatus.classList.add('connected');
+    connectionStatus.classList.remove('disconnected');
+  }
 }
 
 function updateModeLabel() {
