@@ -56,12 +56,26 @@ function getOffsetConfigFromState() {
   };
 }
 
+function getSpeedConfigFromState() {
+  return {
+    azimuthSpeedDegPerSec: Number(config.azimuthSpeedDegPerSec || 0),
+    elevationSpeedDegPerSec: Number(config.elevationSpeedDegPerSec || 0)
+  };
+}
+
 function updateLimitInputsFromConfig() {
   azLimitMinInput.value = config.azimuthMinLimit.toString();
   azLimitMaxInput.value = config.azimuthMaxLimit.toString();
   elLimitMinInput.value = config.elevationMinLimit.toString();
   elLimitMaxInput.value = config.elevationMaxLimit.toString();
   syncGotoInputBounds();
+}
+
+function updateSpeedInputsFromConfig() {
+  controls.setSpeedValues({
+    azimuthSpeedDegPerSec: config.azimuthSpeedDegPerSec,
+    elevationSpeedDegPerSec: config.elevationSpeedDegPerSec
+  });
 }
 
 function syncGotoInputBounds() {
@@ -135,6 +149,9 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     } catch (error) {
       reportError(error);
     }
+  },
+  onSpeedChange: (speedSettings) => {
+    handleSpeedChange(speedSettings).catch(reportError);
   }
 });
 
@@ -153,6 +170,7 @@ async function init() {
   simulationToggle.checked = config.simulation;
   modeSelect.value = config.azimuthMode.toString();
   updateLimitInputsFromConfig();
+  updateSpeedInputsFromConfig();
   updateModeLabel();
   controls.setEnabled(false);
   disconnectBtn.disabled = true;
@@ -170,6 +188,7 @@ async function init() {
   mapView.setSatelliteMapEnabled(config.satelliteMapEnabled || false);
   applyLimitsToRotor();
   applyOffsetsToRotor();
+  await rotor.setSpeed(getSpeedConfigFromState());
 
   if (!rotor.supportsWebSerial() && serialSupportNotice) {
     serialSupportNotice.classList.remove('hidden');
@@ -386,6 +405,13 @@ function handleResetOffsets() {
   applyOffsetsToRotor();
   showLimitWarning('Offsets wurden auf 0° zurueckgesetzt.');
   logAction('Offsets zurueckgesetzt');
+}
+
+async function handleSpeedChange(speedSettings) {
+  config = configStore.save(speedSettings);
+  updateSpeedInputsFromConfig();
+  logAction('Geschwindigkeit angepasst', getSpeedConfigFromState());
+  await rotor.setSpeed(getSpeedConfigFromState());
 }
 
 function setConnectionState(state) {

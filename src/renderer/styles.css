@@ -407,6 +407,41 @@ button:active {
   margin-top: 1rem;
 }
 
+.speed-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.speed-control {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.speed-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.speed-inputs {
+  display: grid;
+  grid-template-columns: 1fr 90px;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.speed-inputs input[type='range'] {
+  width: 100%;
+}
+
+.speed-inputs input[type='number'] {
+  width: 100%;
+}
+
 .goto-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

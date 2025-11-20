@@ -86,6 +86,11 @@ class SimulationSerialConnection extends SerialConnection {
     this.azimuthMax = 360;
     this.elevationMin = 0;
     this.elevationMax = 90;
+    this.azimuthSpeedDegPerSec = 4;
+    this.elevationSpeedDegPerSec = 2;
+    this.tickIntervalMs = 500;
+    this.azimuthStep = this.calculateStepSize(this.azimuthSpeedDegPerSec);
+    this.elevationStep = this.calculateStepSize(this.elevationSpeedDegPerSec);
     this.ticker = null;
   }
 
@@ -115,6 +120,20 @@ class SimulationSerialConnection extends SerialConnection {
     if (typeof limits.elevationMax === 'number') {
       this.elevationMax = limits.elevationMax;
     }
+  }
+
+  setSpeed(settings) {
+    if (!settings) {
+      return;
+    }
+    if (typeof settings.azimuthSpeedDegPerSec === 'number') {
+      this.azimuthSpeedDegPerSec = clamp(settings.azimuthSpeedDegPerSec, 0.5, 20);
+    }
+    if (typeof settings.elevationSpeedDegPerSec === 'number') {
+      this.elevationSpeedDegPerSec = clamp(settings.elevationSpeedDegPerSec, 0.5, 20);
+    }
+    this.azimuthStep = this.calculateStepSize(this.azimuthSpeedDegPerSec);
+    this.elevationStep = this.calculateStepSize(this.elevationSpeedDegPerSec);
   }
 
   setCalibrationOffsets(offsets) {
@@ -171,6 +190,22 @@ class SimulationSerialConnection extends SerialConnection {
       return;
     }
 
+    if (normalized.startsWith('S') && normalized.length > 1) {
+      const value = Number(normalized.slice(1));
+      if (!Number.isNaN(value)) {
+        this.setSpeed({ azimuthSpeedDegPerSec: value });
+      }
+      return;
+    }
+
+    if (normalized.startsWith('B') && normalized.length > 1) {
+      const value = Number(normalized.slice(1));
+      if (!Number.isNaN(value)) {
+        this.setSpeed({ elevationSpeedDegPerSec: value });
+      }
+      return;
+    }
+
     switch (normalized) {
       case 'R':
         this.azDirection = 1;
@@ -218,17 +253,21 @@ class SimulationSerialConnection extends SerialConnection {
     }
     this.ticker = setInterval(() => {
       if (this.azDirection !== 0) {
-        const candidate = this.azimuthRaw + this.azDirection * 2;
+        const candidate = this.azimuthRaw + this.azDirection * this.azimuthStep;
         this.azimuthRaw = this.constrainRawAzimuth(candidate, this.azimuthRaw);
       }
       if (this.elDirection !== 0) {
-        const candidate = this.elevationRaw + this.elDirection;
+        const candidate = this.elevationRaw + this.elDirection * this.elevationStep;
         this.elevationRaw = this.constrainRawElevation(candidate);
       }
       if (this.azDirection !== 0 || this.elDirection !== 0) {
         this.emitStatus();
       }
-    }, 500);
+    }, this.tickIntervalMs);
+  }
+
+  calculateStepSize(degreesPerSecond) {
+    return (degreesPerSecond * this.tickIntervalMs) / 1000;
   }
 
   emitStatus() {
@@ -414,6 +453,10 @@ class RotorService {
       elevationMin: 0,
       elevationMax: 90
     };
+    this.speedSettings = {
+      azimuthSpeedDegPerSec: 4,
+      elevationSpeedDegPerSec: 2
+    };
     this.pollingTimer = null;
     this.currentStatus = null;
     this.statusListeners = new Set();
@@ -488,6 +531,7 @@ class RotorService {
     await this.serial.open({ baudRate: config.baudRate });
     this.applySoftLimitConfig();
     this.applyCalibrationOffsets();
+    await this.applySpeedSettings();
     console.log('[RotorService] Verbindung hergestellt', { mode: this.simulationMode ? 'Simulation' : 'WebSerial' });
   }
 
@@ -538,6 +582,21 @@ class RotorService {
     console.log('[RotorService] Modus setzen', { mode: this.maxAzimuthRange });
     await this.sendRawCommand(mode === 450 ? 'P45' : 'P36');
     this.applySoftLimitConfig();
+  }
+
+  async setSpeed(settings) {
+    if (!settings) {
+      return;
+    }
+    const nextSettings = { ...this.speedSettings };
+    if (typeof settings.azimuthSpeedDegPerSec === 'number' && !Number.isNaN(settings.azimuthSpeedDegPerSec)) {
+      nextSettings.azimuthSpeedDegPerSec = clamp(settings.azimuthSpeedDegPerSec, 0.5, 20);
+    }
+    if (typeof settings.elevationSpeedDegPerSec === 'number' && !Number.isNaN(settings.elevationSpeedDegPerSec)) {
+      nextSettings.elevationSpeedDegPerSec = clamp(settings.elevationSpeedDegPerSec, 0.5, 20);
+    }
+    this.speedSettings = nextSettings;
+    await this.applySpeedSettings();
   }
 
   setSoftLimits(limits) {
@@ -655,6 +714,30 @@ class RotorService {
         azimuthOffset: this.azimuthOffset,
         elevationOffset: this.elevationOffset
       });
+    }
+  }
+
+  async applySpeedSettings() {
+    if (!this.serial || !this.serial.isOpen()) {
+      return;
+    }
+    if (this.serial instanceof SimulationSerialConnection) {
+      this.serial.setSpeed(this.speedSettings);
+      return;
+    }
+
+    const commands = [];
+    if (typeof this.speedSettings.azimuthSpeedDegPerSec === 'number') {
+      const value = Math.round(this.speedSettings.azimuthSpeedDegPerSec).toString().padStart(3, '0');
+      commands.push(`S${value}`);
+    }
+    if (typeof this.speedSettings.elevationSpeedDegPerSec === 'number') {
+      const value = Math.round(this.speedSettings.elevationSpeedDegPerSec).toString().padStart(3, '0');
+      commands.push(`B${value}`);
+    }
+
+    for (const command of commands) {
+      await this.sendRawCommand(command);
     }
   }
 

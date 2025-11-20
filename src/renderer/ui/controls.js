@@ -6,6 +6,10 @@ class Controls {
     this.gotoElInput = root.querySelector('#gotoElInput');
     this.gotoAzBtn = root.querySelector('#gotoAzBtn');
     this.gotoAzElBtn = root.querySelector('#gotoAzElBtn');
+    this.azSpeedRange = root.querySelector('#azSpeedRange');
+    this.azSpeedInput = root.querySelector('#azSpeedInput');
+    this.elSpeedRange = root.querySelector('#elSpeedRange');
+    this.elSpeedInput = root.querySelector('#elSpeedInput');
 
     this.buttons = Array.from(root.querySelectorAll('[data-command]'));
     this.bindEvents();
@@ -19,6 +23,17 @@ class Controls {
     this.gotoAzElBtn.disabled = !enabled;
     this.gotoAzInput.disabled = !enabled;
     this.gotoElInput.disabled = !enabled;
+  }
+
+  setSpeedValues({ azimuthSpeedDegPerSec, elevationSpeedDegPerSec }) {
+    if (typeof azimuthSpeedDegPerSec === 'number') {
+      this.azSpeedRange.value = azimuthSpeedDegPerSec;
+      this.azSpeedInput.value = azimuthSpeedDegPerSec;
+    }
+    if (typeof elevationSpeedDegPerSec === 'number') {
+      this.elSpeedRange.value = elevationSpeedDegPerSec;
+      this.elSpeedInput.value = elevationSpeedDegPerSec;
+    }
   }
 
   bindEvents() {
@@ -44,6 +59,35 @@ class Controls {
       if (Number.isFinite(az) && Number.isFinite(el)) {
         void this.callbacks.onGotoAzimuthElevation(az, el);
       }
+    });
+
+    this.bindSpeedInputs(this.azSpeedRange, this.azSpeedInput);
+    this.bindSpeedInputs(this.elSpeedRange, this.elSpeedInput);
+  }
+
+  bindSpeedInputs(rangeInput, numberInput) {
+    const syncFromRange = () => {
+      numberInput.value = rangeInput.value;
+      this.emitSpeedChange();
+    };
+    const syncFromNumber = () => {
+      rangeInput.value = numberInput.value;
+      this.emitSpeedChange();
+    };
+
+    rangeInput.addEventListener('input', syncFromRange);
+    numberInput.addEventListener('change', syncFromNumber);
+  }
+
+  emitSpeedChange() {
+    const az = Number(this.azSpeedInput.value);
+    const el = Number(this.elSpeedInput.value);
+    if (!Number.isFinite(az) || !Number.isFinite(el)) {
+      return;
+    }
+    void this.callbacks.onSpeedChange({
+      azimuthSpeedDegPerSec: az,
+      elevationSpeedDegPerSec: el
     });
   }
 }
