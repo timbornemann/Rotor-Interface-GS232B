@@ -340,8 +340,8 @@ class SimulationSerialConnection extends SerialConnection {
       });
     });
 
-    const rawTarget = bestTarget - this.azimuthOffset;
-    return this.constrainRawAzimuth(rawTarget, this.azimuthRaw);
+    const computedRawTarget = bestTarget - this.azimuthOffset;
+    return this.constrainRawAzimuth(computedRawTarget, this.azimuthRaw);
   }
 
   constrainRawAzimuth(rawValue, reference) {
