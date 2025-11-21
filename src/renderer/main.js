@@ -69,8 +69,8 @@ function logAction(message, details = {}) {
   console.log('[UI]', message, details);
 }
 
-const SPEED_MIN = 0.5;
-const SPEED_MAX = 20;
+const SPEED_MIN_DEFAULT = 0.5;
+const SPEED_MAX_DEFAULT = 20;
 
 function getSoftLimitConfigFromState() {
   return {
@@ -92,11 +92,27 @@ function getSpeedConfigFromState() {
   return sanitizeSpeedSettings(config).sanitized;
 }
 
+function getSpeedLimits() {
+  const min = Number(config.speedMinDegPerSec ?? SPEED_MIN_DEFAULT);
+  const max = Number(config.speedMaxDegPerSec ?? SPEED_MAX_DEFAULT);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max < min) {
+    return { min: SPEED_MIN_DEFAULT, max: SPEED_MAX_DEFAULT };
+  }
+  return { min, max };
+}
+
+function getSpeedLimitText() {
+  const { min, max } = getSpeedLimits();
+  const format = (value) => Number(value).toFixed(1);
+  return `${format(min)}-${format(max)}`;
+}
+
 function sanitizeSpeedSettings(speedSettings = {}) {
-  const clampToRange = (value) => Math.min(SPEED_MAX, Math.max(SPEED_MIN, value));
+  const { min, max } = getSpeedLimits();
+  const clampToRange = (value) => Math.min(max, Math.max(min, value));
   const sanitized = {
-    azimuthSpeedDegPerSec: clampToRange(Number(config.azimuthSpeedDegPerSec) || SPEED_MIN),
-    elevationSpeedDegPerSec: clampToRange(Number(config.elevationSpeedDegPerSec) || SPEED_MIN)
+    azimuthSpeedDegPerSec: clampToRange(Number(config.azimuthSpeedDegPerSec) || min),
+    elevationSpeedDegPerSec: clampToRange(Number(config.elevationSpeedDegPerSec) || min)
   };
   const corrections = [];
 
@@ -321,7 +337,10 @@ function updateUIFromConfig() {
     mapCoordinatesInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
   }
   if (satelliteMapToggle) satelliteMapToggle.checked = config.satelliteMapEnabled || false;
-  
+
+  // Map zoom limits
+  mapView.setZoomLimits(config.mapZoomMin, config.mapZoomMax, config.mapZoomLevel);
+
   if (config.mapLatitude !== null && config.mapLongitude !== null) {
     mapView.setCoordinates(config.mapLatitude, config.mapLongitude);
   }
@@ -445,7 +464,7 @@ async function init() {
           newConfig.elevationSpeedDegPerSec = sanitized.elevationSpeedDegPerSec;
           if (corrections.length) {
             showSpeedWarning(
-              `Geschwindigkeiten wurden auf ${SPEED_MIN}-${SPEED_MAX}°/s begrenzt (${corrections.join('; ')}).`
+              `Geschwindigkeiten wurden auf ${getSpeedLimitText()}°/s begrenzt (${corrections.join('; ')}).`
             );
           } else {
             showSpeedWarning('');
@@ -789,7 +808,7 @@ async function handleResetOffsets() {
 async function handleSpeedChange(speedSettings) {
   const { sanitized, corrections } = sanitizeSpeedSettings(speedSettings);
   if (corrections.length) {
-    showSpeedWarning(`Geschwindigkeiten wurden auf ${SPEED_MIN}-${SPEED_MAX}°/s begrenzt (${corrections.join('; ')}).`);
+    showSpeedWarning(`Geschwindigkeiten wurden auf ${getSpeedLimitText()}°/s begrenzt (${corrections.join('; ')}).`);
   } else {
     showSpeedWarning('');
   }

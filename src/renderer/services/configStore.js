@@ -5,6 +5,9 @@ const defaultConfig = {
   pollingIntervalMs: 1000,
   simulation: false,
   connectionMode: 'local', // 'local' or 'server'
+  // Speed limits
+  speedMinDegPerSec: 0.5,
+  speedMaxDegPerSec: 20,
   azimuthMode: 360,
   azimuthMinLimit: 0,
   azimuthMaxLimit: 360,
@@ -20,12 +23,32 @@ const defaultConfig = {
   rampSampleTimeMs: 400,
   rampMaxStepDeg: 8,
   rampToleranceDeg: 1.5,
+  // Ramp limits
+  rampKpMin: 0,
+  rampKpMax: 5,
+  rampKiMin: 0,
+  rampKiMax: 5,
+  rampSampleTimeMsMin: 100,
+  rampSampleTimeMsMax: 2000,
+  rampMaxStepDegMin: 0.1,
+  rampMaxStepDegMax: 45,
+  rampToleranceDegMin: 0.1,
+  rampToleranceDegMax: 10,
   mapLatitude: null,
   mapLongitude: null,
   satelliteMapEnabled: false,
+  mapZoomLevel: 15,
+  mapZoomMin: 10,
+  mapZoomMax: 18,
   coneAngle: 10, // Kegel-Winkel in Grad
   coneLength: 1000, // Kegel-Länge in Metern
   azimuthDisplayOffset: 0, // Azimut-Korrektur für Anzeige (Grad)
+  azimuthDisplayOffsetMin: -180,
+  azimuthDisplayOffsetMax: 180,
+  coneAngleMin: 1,
+  coneAngleMax: 90,
+  coneLengthMin: 0,
+  coneLengthMax: 100000,
   elevationDisplayEnabled: true // Elevation-Anzeige aktiviert/deaktiviert
 };
 
@@ -43,57 +66,187 @@ class ConfigStore {
 
   sanitizeConfig(config) {
     const sanitized = { ...config };
+
+    // Ranges for speeds
+    sanitized.speedMinDegPerSec = this.sanitizeNumber(
+      config.speedMinDegPerSec,
+      0.1,
+      100,
+      defaultConfig.speedMinDegPerSec
+    );
+    sanitized.speedMaxDegPerSec = this.sanitizeNumber(
+      config.speedMaxDegPerSec,
+      sanitized.speedMinDegPerSec,
+      200,
+      defaultConfig.speedMaxDegPerSec
+    );
+    if (sanitized.speedMaxDegPerSec < sanitized.speedMinDegPerSec) {
+      sanitized.speedMaxDegPerSec = sanitized.speedMinDegPerSec;
+    }
+
+    // Ranges for ramp settings
+    sanitized.rampKpMin = this.sanitizeNumber(config.rampKpMin, 0, 10, defaultConfig.rampKpMin);
+    sanitized.rampKpMax = this.sanitizeNumber(
+      config.rampKpMax,
+      sanitized.rampKpMin,
+      10,
+      defaultConfig.rampKpMax
+    );
+    sanitized.rampKiMin = this.sanitizeNumber(config.rampKiMin, 0, 10, defaultConfig.rampKiMin);
+    sanitized.rampKiMax = this.sanitizeNumber(
+      config.rampKiMax,
+      sanitized.rampKiMin,
+      10,
+      defaultConfig.rampKiMax
+    );
+    sanitized.rampSampleTimeMsMin = this.sanitizeNumber(
+      config.rampSampleTimeMsMin,
+      50,
+      10000,
+      defaultConfig.rampSampleTimeMsMin
+    );
+    sanitized.rampSampleTimeMsMax = this.sanitizeNumber(
+      config.rampSampleTimeMsMax,
+      sanitized.rampSampleTimeMsMin,
+      10000,
+      defaultConfig.rampSampleTimeMsMax
+    );
+    sanitized.rampMaxStepDegMin = this.sanitizeNumber(
+      config.rampMaxStepDegMin,
+      0.01,
+      90,
+      defaultConfig.rampMaxStepDegMin
+    );
+    sanitized.rampMaxStepDegMax = this.sanitizeNumber(
+      config.rampMaxStepDegMax,
+      sanitized.rampMaxStepDegMin,
+      90,
+      defaultConfig.rampMaxStepDegMax
+    );
+    sanitized.rampToleranceDegMin = this.sanitizeNumber(
+      config.rampToleranceDegMin,
+      0.01,
+      90,
+      defaultConfig.rampToleranceDegMin
+    );
+    sanitized.rampToleranceDegMax = this.sanitizeNumber(
+      config.rampToleranceDegMax,
+      sanitized.rampToleranceDegMin,
+      90,
+      defaultConfig.rampToleranceDegMax
+    );
+
+    // Map zoom limits
+    sanitized.mapZoomMin = this.sanitizeNumber(config.mapZoomMin, 0, 22, defaultConfig.mapZoomMin);
+    sanitized.mapZoomMax = this.sanitizeNumber(
+      config.mapZoomMax,
+      sanitized.mapZoomMin,
+      22,
+      defaultConfig.mapZoomMax
+    );
+    sanitized.mapZoomLevel = this.sanitizeNumber(
+      config.mapZoomLevel,
+      sanitized.mapZoomMin,
+      sanitized.mapZoomMax,
+      defaultConfig.mapZoomLevel
+    );
+
+    // Cone and display limits
+    sanitized.coneAngleMin = this.sanitizeNumber(config.coneAngleMin, 0.1, 179, defaultConfig.coneAngleMin);
+    sanitized.coneAngleMax = this.sanitizeNumber(
+      config.coneAngleMax,
+      sanitized.coneAngleMin,
+      179,
+      defaultConfig.coneAngleMax
+    );
+    sanitized.coneLengthMin = this.sanitizeNumber(
+      config.coneLengthMin,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      defaultConfig.coneLengthMin
+    );
+    sanitized.coneLengthMax = this.sanitizeNumber(
+      config.coneLengthMax,
+      sanitized.coneLengthMin,
+      Number.MAX_SAFE_INTEGER,
+      defaultConfig.coneLengthMax
+    );
+    sanitized.azimuthDisplayOffsetMin = this.sanitizeNumber(
+      config.azimuthDisplayOffsetMin,
+      -360,
+      0,
+      defaultConfig.azimuthDisplayOffsetMin
+    );
+    sanitized.azimuthDisplayOffsetMax = this.sanitizeNumber(
+      config.azimuthDisplayOffsetMax,
+      0,
+      360,
+      defaultConfig.azimuthDisplayOffsetMax
+    );
+
+    // Apply limits to configurable values
     sanitized.azimuthSpeedDegPerSec = this.sanitizeNumber(
       config.azimuthSpeedDegPerSec,
-      0.5,
-      20,
+      sanitized.speedMinDegPerSec,
+      sanitized.speedMaxDegPerSec,
       defaultConfig.azimuthSpeedDegPerSec
     );
     sanitized.elevationSpeedDegPerSec = this.sanitizeNumber(
       config.elevationSpeedDegPerSec,
-      0.5,
-      20,
+      sanitized.speedMinDegPerSec,
+      sanitized.speedMaxDegPerSec,
       defaultConfig.elevationSpeedDegPerSec
     );
-    sanitized.rampKp = this.sanitizeNumber(config.rampKp, 0, 5, defaultConfig.rampKp);
-    sanitized.rampKi = this.sanitizeNumber(config.rampKi, 0, 5, defaultConfig.rampKi);
+    sanitized.rampKp = this.sanitizeNumber(
+      config.rampKp,
+      sanitized.rampKpMin,
+      sanitized.rampKpMax,
+      defaultConfig.rampKp
+    );
+    sanitized.rampKi = this.sanitizeNumber(
+      config.rampKi,
+      sanitized.rampKiMin,
+      sanitized.rampKiMax,
+      defaultConfig.rampKi
+    );
     sanitized.rampSampleTimeMs = this.sanitizeNumber(
       config.rampSampleTimeMs,
-      100,
-      2000,
+      sanitized.rampSampleTimeMsMin,
+      sanitized.rampSampleTimeMsMax,
       defaultConfig.rampSampleTimeMs
     );
     sanitized.rampMaxStepDeg = this.sanitizeNumber(
       config.rampMaxStepDeg,
-      0.1,
-      45,
+      sanitized.rampMaxStepDegMin,
+      sanitized.rampMaxStepDegMax,
       defaultConfig.rampMaxStepDeg
     );
     sanitized.rampToleranceDeg = this.sanitizeNumber(
       config.rampToleranceDeg,
-      0.1,
-      10,
+      sanitized.rampToleranceDegMin,
+      sanitized.rampToleranceDegMax,
       defaultConfig.rampToleranceDeg
     );
     sanitized.rampEnabled = Boolean(config.rampEnabled);
     sanitized.coneAngle = this.sanitizeNumber(
       config.coneAngle,
-      1,
-      90,
+      sanitized.coneAngleMin,
+      sanitized.coneAngleMax,
       defaultConfig.coneAngle
     );
     sanitized.coneLength = this.sanitizeNumber(
       config.coneLength,
-      0,
-      100000,
+      sanitized.coneLengthMin,
+      sanitized.coneLengthMax,
       defaultConfig.coneLength
     );
     sanitized.azimuthDisplayOffset = this.sanitizeNumber(
       config.azimuthDisplayOffset,
-      -180,
-      180,
+      sanitized.azimuthDisplayOffsetMin,
+      sanitized.azimuthDisplayOffsetMax,
       defaultConfig.azimuthDisplayOffset
     );
+
     return sanitized;
   }
 
