@@ -24,6 +24,7 @@ const defaultConfig = {
   rampSampleTimeMs: 400,
   rampMaxStepDeg: 8,
   rampToleranceDeg: 1.5,
+  rampProfile: 'linear',
   // Ramp limits
   rampKpMin: 0,
   rampKpMax: 5,
@@ -228,6 +229,7 @@ class ConfigStore {
       sanitized.rampToleranceDegMax,
       defaultConfig.rampToleranceDeg
     );
+    sanitized.rampProfile = config.rampProfile === 's-curve' ? 's-curve' : 'linear';
     sanitized.azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
     sanitized.simulationAzimuthMode =
       Number(config.simulationAzimuthMode) === 450 ? 450 : defaultConfig.simulationAzimuthMode;

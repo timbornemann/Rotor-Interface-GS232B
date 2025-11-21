@@ -146,7 +146,8 @@ function getRampConfigFromState() {
     rampKi: Number(config.rampKi || 0),
     rampSampleTimeMs: Number(config.rampSampleTimeMs || 0),
     rampMaxStepDeg: Number(config.rampMaxStepDeg || 0),
-    rampToleranceDeg: Number(config.rampToleranceDeg || 0)
+    rampToleranceDeg: Number(config.rampToleranceDeg || 0),
+    rampProfile: config.rampProfile || 'linear'
   };
 }
 
@@ -185,6 +186,7 @@ function updateRampInputsFromConfig() {
   const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
   const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
   const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
+  const settingsRampProfileSelect = document.getElementById('settingsRampProfileSelect');
 
   if (settingsRampEnabledToggle) settingsRampEnabledToggle.checked = Boolean(config.rampEnabled);
   if (settingsRampKpInput) settingsRampKpInput.value = config.rampKp ?? 0.4;
@@ -192,6 +194,7 @@ function updateRampInputsFromConfig() {
   if (settingsRampSampleInput) settingsRampSampleInput.value = config.rampSampleTimeMs ?? 400;
   if (settingsRampMaxStepInput) settingsRampMaxStepInput.value = config.rampMaxStepDeg ?? 8;
   if (settingsRampToleranceInput) settingsRampToleranceInput.value = config.rampToleranceDeg ?? 1.5;
+  if (settingsRampProfileSelect) settingsRampProfileSelect.value = config.rampProfile || 'linear';
 }
 
 function syncGotoInputBounds() {
@@ -887,6 +890,7 @@ function readRampInputs() {
   const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
   const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
   const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
+  const settingsRampProfileSelect = document.getElementById('settingsRampProfileSelect');
 
   return {
     rampEnabled: settingsRampEnabledToggle ? settingsRampEnabledToggle.checked : Boolean(config.rampEnabled),
@@ -897,7 +901,8 @@ function readRampInputs() {
     rampMaxStepDeg:
       settingsRampMaxStepInput ? Number(settingsRampMaxStepInput.value) || 8 : Number(config.rampMaxStepDeg || 8),
     rampToleranceDeg:
-      settingsRampToleranceInput ? Number(settingsRampToleranceInput.value) || 1.5 : Number(config.rampToleranceDeg || 1.5)
+      settingsRampToleranceInput ? Number(settingsRampToleranceInput.value) || 1.5 : Number(config.rampToleranceDeg || 1.5),
+    rampProfile: settingsRampProfileSelect ? settingsRampProfileSelect.value || 'linear' : config.rampProfile || 'linear'
   };
 }
 

@@ -249,6 +249,7 @@ class SettingsModal {
     const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
     const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
     const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
+    const settingsRampProfileSelect = document.getElementById('settingsRampProfileSelect');
 
     if (settingsRampEnabledToggle) settingsRampEnabledToggle.checked = config.rampEnabled || false;
     if (settingsRampKpInput) settingsRampKpInput.value = config.rampKp || 0.4;
@@ -256,6 +257,7 @@ class SettingsModal {
     if (settingsRampSampleInput) settingsRampSampleInput.value = config.rampSampleTimeMs || 400;
     if (settingsRampMaxStepInput) settingsRampMaxStepInput.value = config.rampMaxStepDeg || 8;
     if (settingsRampToleranceInput) settingsRampToleranceInput.value = config.rampToleranceDeg || 1.5;
+    if (settingsRampProfileSelect) settingsRampProfileSelect.value = config.rampProfile || 'linear';
 
     // Mode tab
     const settingsModeSelect = document.getElementById('settingsModeSelect');
@@ -330,6 +332,7 @@ class SettingsModal {
     const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
     const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
     const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
+    const settingsRampProfileSelect = document.getElementById('settingsRampProfileSelect');
 
     if (settingsRampEnabledToggle) config.rampEnabled = settingsRampEnabledToggle.checked;
     if (settingsRampKpInput) config.rampKp = Number(settingsRampKpInput.value) || 0.4;
@@ -337,6 +340,7 @@ class SettingsModal {
     if (settingsRampSampleInput) config.rampSampleTimeMs = Number(settingsRampSampleInput.value) || 400;
     if (settingsRampMaxStepInput) config.rampMaxStepDeg = Number(settingsRampMaxStepInput.value) || 8;
     if (settingsRampToleranceInput) config.rampToleranceDeg = Number(settingsRampToleranceInput.value) || 1.5;
+    if (settingsRampProfileSelect) config.rampProfile = settingsRampProfileSelect.value || 'linear';
 
     // Mode tab
     const settingsModeSelect = document.getElementById('settingsModeSelect');

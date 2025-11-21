@@ -347,6 +347,14 @@
               </div>
               <div class="ramp-grid">
                 <label>
+                  Rampenprofil
+                  <select id="settingsRampProfileSelect">
+                    <option value="linear">Linear</option>
+                    <option value="s-curve">S-Kurve</option>
+                  </select>
+                  <span class="input-help">Wählt zwischen gleichmäßiger Rampe und sanfter S-Kurve.</span>
+                </label>
+                <label>
                   PI-Verstärkung (Kp)
                   <input id="settingsRampKpInput" type="number" min="0" max="5" step="0.01" value="0.4" />
                   <span class="input-help">Anfangsschub des Softstarts: höher = reagiert schneller.</span>

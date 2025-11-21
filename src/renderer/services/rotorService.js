@@ -155,6 +155,9 @@ class SimulationSerialConnection extends SerialConnection {
     this.azimuthStep = this.calculateStepSize(this.azimuthSpeedDegPerSec);
     this.elevationStep = this.calculateStepSize(this.elevationSpeedDegPerSec);
     this.ticker = null;
+    this.rampProfile = 'linear';
+    this.azMoveDistance = null;
+    this.elMoveDistance = null;
   }
 
   async open(options = {}) {
@@ -219,6 +222,10 @@ class SimulationSerialConnection extends SerialConnection {
     this.elevationStep = this.calculateStepSize(this.elevationSpeedDegPerSec);
   }
 
+  setRampProfile(profile) {
+    this.rampProfile = profile === 's-curve' ? 's-curve' : 'linear';
+  }
+
   setCalibrationOffsets(offsets) {
     if (!offsets) {
       return;
@@ -258,9 +265,11 @@ class SimulationSerialConnection extends SerialConnection {
         const currentCalibrated = this.getCalibratedAzimuth();
         const targetCalibrated = this.getCalibratedAzimuthFromRaw(this.azTargetRaw);
         const delta = shortestAngularDelta(targetCalibrated, currentCalibrated, this.modeMaxAz);
+        this.azMoveDistance = Math.abs(delta);
         if (Math.abs(delta) < 0.1) {
           this.azimuthRaw = this.azTargetRaw;
           this.azTargetRaw = null;
+          this.azMoveDistance = null;
         }
         // Richtung wird im Ticker basierend auf Ziel berechnet
         this.emitStatus();
@@ -279,20 +288,24 @@ class SimulationSerialConnection extends SerialConnection {
         const currentCalibrated = this.getCalibratedAzimuth();
         const targetCalibrated = this.getCalibratedAzimuthFromRaw(this.azTargetRaw);
         const delta = shortestAngularDelta(targetCalibrated, currentCalibrated, this.modeMaxAz);
+        this.azMoveDistance = Math.abs(delta);
         if (Math.abs(delta) < 0.1) {
           // Bereits am Ziel, setze sofort
           this.azimuthRaw = this.azTargetRaw;
           this.azTargetRaw = null;
+          this.azMoveDistance = null;
         }
         // Richtung wird im Ticker basierend auf Ziel berechnet
       }
       if (!Number.isNaN(el)) {
         this.elTargetRaw = this.constrainRawElevation(el);
         const delta = this.elTargetRaw - this.elevationRaw;
+        this.elMoveDistance = Math.abs(delta);
         if (Math.abs(delta) < 0.1) {
           // Bereits am Ziel, setze sofort
           this.elevationRaw = this.elTargetRaw;
           this.elTargetRaw = null;
+          this.elMoveDistance = null;
         }
         // Richtung wird im Ticker basierend auf Ziel berechnet
       }
@@ -320,32 +333,40 @@ class SimulationSerialConnection extends SerialConnection {
       case 'R':
         this.azDirection = 1;
         this.azTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
+        this.azMoveDistance = null;
         break;
       case 'L':
         this.azDirection = -1;
         this.azTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
+        this.azMoveDistance = null;
         break;
       case 'A':
         this.azDirection = 0;
         this.azTargetRaw = null; // Stoppe auch Zielbewegung
+        this.azMoveDistance = null;
         break;
       case 'U':
         this.elDirection = 1;
         this.elTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
+        this.elMoveDistance = null;
         break;
       case 'D':
         this.elDirection = -1;
         this.elTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
+        this.elMoveDistance = null;
         break;
       case 'E':
         this.elDirection = 0;
         this.elTargetRaw = null; // Stoppe auch Zielbewegung
+        this.elMoveDistance = null;
         break;
       case 'S':
         this.azDirection = 0;
         this.elDirection = 0;
         this.azTargetRaw = null; // Stoppe auch Zielbewegungen
         this.elTargetRaw = null;
+        this.azMoveDistance = null;
+        this.elMoveDistance = null;
         break;
       case 'C':
       case 'B':
@@ -382,10 +403,11 @@ class SimulationSerialConnection extends SerialConnection {
           this.azimuthRaw = this.azTargetRaw;
           this.azTargetRaw = null;
           this.azDirection = 0;
+          this.azMoveDistance = null;
           positionChanged = true;
         } else {
           // Bewege in Richtung Ziel
-          const step = Math.min(absDelta, this.azimuthStep);
+          const step = this.getProfiledStep(this.azimuthStep, absDelta, this.azMoveDistance);
           const direction = delta > 0 ? 1 : -1;
           const candidate = this.azimuthRaw + direction * step;
           this.azimuthRaw = this.constrainRawAzimuth(candidate, this.azimuthRaw);
@@ -407,10 +429,11 @@ class SimulationSerialConnection extends SerialConnection {
           this.elevationRaw = this.elTargetRaw;
           this.elTargetRaw = null;
           this.elDirection = 0;
+          this.elMoveDistance = null;
           positionChanged = true;
         } else {
           // Bewege in Richtung Ziel
-          const step = Math.min(absDelta, this.elevationStep);
+          const step = this.getProfiledStep(this.elevationStep, absDelta, this.elMoveDistance);
           const direction = delta > 0 ? 1 : -1;
           const candidate = this.elevationRaw + direction * step;
           this.elevationRaw = this.constrainRawElevation(candidate);
@@ -431,6 +454,23 @@ class SimulationSerialConnection extends SerialConnection {
 
   calculateStepSize(degreesPerSecond) {
     return (degreesPerSecond * this.tickIntervalMs) / 1000;
+  }
+
+  getProfiledStep(baseStep, remainingDistance, plannedDistance) {
+    if (remainingDistance <= 0) {
+      return 0;
+    }
+    const totalDistance = plannedDistance || remainingDistance;
+    if (this.rampProfile !== 's-curve' || totalDistance <= 0) {
+      return Math.min(remainingDistance, baseStep);
+    }
+
+    const progress = clamp(1 - remainingDistance / totalDistance, 0, 1);
+    const sCurveScale = Math.sin(Math.PI * progress);
+    const envelope = Math.max(0.2, Math.min(1, sCurveScale));
+    const scaledStep = baseStep * envelope;
+
+    return Math.min(remainingDistance, scaledStep);
   }
 
   emitStatus() {
@@ -859,7 +899,8 @@ class RotorService {
       rampSampleTimeMs: 400,
       rampMaxStepDeg: 8,
       rampToleranceDeg: 1.5,
-      rampIntegralLimit: 50
+      rampIntegralLimit: 50,
+      rampProfile: 'linear'
     };
     this.activeRamp = null;
     this.pollingTimer = null;
@@ -996,6 +1037,7 @@ class RotorService {
       this.simulationMode = true;
       this.connectionMode = 'simulation';
       this.serial = new SimulationSerialConnection({ modeMaxAz: requestedMode });
+      this.serial.setRampProfile(this.rampSettings.rampProfile);
     } else if (useServer) {
       this.simulationMode = false;
       this.connectionMode = 'server';
@@ -1134,8 +1176,12 @@ class RotorService {
     let azIntegral = 0;
     let elIntegral = 0;
     const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
+    let azInitialError = hasAz && this.currentStatus?.azimuth != null
+      ? Math.abs(shortestAngularDelta(azGoal, this.currentStatus.azimuth, this.maxAzimuthRange))
+      : null;
+    let elInitialError = hasEl && this.currentStatus?.elevation != null ? Math.abs(elGoal - this.currentStatus.elevation) : null;
 
-    const computeEasedStep = (error, integral) => {
+    const computeEasedStep = (error, integral, initialError) => {
       const nextIntegral = clamp(
         integral + error * dtSeconds,
         -rampSettings.rampIntegralLimit,
@@ -1145,8 +1191,16 @@ class RotorService {
       const limitedOutput = clamp(rawOutput, -rampSettings.rampMaxStepDeg, rampSettings.rampMaxStepDeg);
 
       // Reduce step size when starting or approaching the goal for a softer motion
-      const envelope = Math.min(1, Math.abs(error) / (rampSettings.rampMaxStepDeg * 2));
-      const easedOutput = limitedOutput * Math.max(0.15, envelope);
+      const baseEnvelope = Math.min(1, Math.abs(error) / (rampSettings.rampMaxStepDeg * 2));
+      let envelope = Math.max(0.15, baseEnvelope);
+
+      if (rampSettings.rampProfile === 's-curve' && typeof initialError === 'number' && initialError > rampSettings.rampToleranceDeg) {
+        const progress = clamp(1 - Math.abs(error) / initialError, 0, 1);
+        const sCurveEnvelope = Math.sin(Math.PI * progress);
+        envelope = Math.max(envelope, Math.max(0.15, sCurveEnvelope));
+      }
+
+      const easedOutput = limitedOutput * envelope;
 
       return { step: easedOutput, nextIntegral };
     };
@@ -1163,6 +1217,13 @@ class RotorService {
         : 0;
       const elError = hasEl && typeof status.elevation === 'number' ? elGoal - status.elevation : 0;
 
+      if (hasAz && azInitialError === null && typeof status.azimuth === 'number') {
+        azInitialError = Math.abs(shortestAngularDelta(azGoal, status.azimuth, this.maxAzimuthRange));
+      }
+      if (hasEl && elInitialError === null && typeof status.elevation === 'number') {
+        elInitialError = Math.abs(elGoal - status.elevation);
+      }
+
       const azDone = !hasAz || Math.abs(azError) <= rampSettings.rampToleranceDeg;
       const elDone = !hasEl || Math.abs(elError) <= rampSettings.rampToleranceDeg;
 
@@ -1173,14 +1234,14 @@ class RotorService {
 
       let nextAz = hasAz ? status.azimuth : null;
       if (!azDone && hasAz && typeof status.azimuth === 'number') {
-        const { step, nextIntegral } = computeEasedStep(azError, azIntegral);
+        const { step, nextIntegral } = computeEasedStep(azError, azIntegral, azInitialError);
         azIntegral = nextIntegral;
         nextAz = clamp(status.azimuth + step, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
       }
 
       let nextEl = hasEl ? status.elevation : null;
       if (!elDone && hasEl && typeof status.elevation === 'number') {
-        const { step, nextIntegral } = computeEasedStep(elError, elIntegral);
+        const { step, nextIntegral } = computeEasedStep(elError, elIntegral, elInitialError);
         elIntegral = nextIntegral;
         nextEl = clamp(status.elevation + step, this.softLimits.elevationMin, this.softLimits.elevationMax);
       }
@@ -1271,6 +1332,9 @@ class RotorService {
     }
     const sanitized = this.getRampSettings(settings);
     this.rampSettings = sanitized;
+    if (this.serial instanceof SimulationSerialConnection) {
+      this.serial.setRampProfile(sanitized.rampProfile);
+    }
   }
 
   setSoftLimits(limits) {
@@ -1471,7 +1535,8 @@ class RotorService {
       rampSampleTimeMs: clampNumber(next.rampSampleTimeMs, 100, 2000, this.rampSettings.rampSampleTimeMs),
       rampMaxStepDeg: clampNumber(next.rampMaxStepDeg, 0.1, 45, this.rampSettings.rampMaxStepDeg),
       rampToleranceDeg: clampNumber(next.rampToleranceDeg, 0.1, 10, this.rampSettings.rampToleranceDeg),
-      rampIntegralLimit: clampNumber(next.rampIntegralLimit, 1, 200, this.rampSettings.rampIntegralLimit)
+      rampIntegralLimit: clampNumber(next.rampIntegralLimit, 1, 200, this.rampSettings.rampIntegralLimit),
+      rampProfile: next.rampProfile === 's-curve' ? 's-curve' : 'linear'
     };
   }
 

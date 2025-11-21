@@ -94,7 +94,7 @@ class IniHandler {
       'Coordinates': ['mapLatitude', 'mapLongitude', 'satelliteMapEnabled', 'mapZoomLevel', 'mapZoomMin', 'mapZoomMax'],
       'Cone': ['coneAngle', 'coneLength', 'azimuthDisplayOffset', 'coneAngleMin', 'coneAngleMax', 'coneLengthMin', 'coneLengthMax', 'azimuthDisplayOffsetMin', 'azimuthDisplayOffsetMax'],
       'Speed': ['azimuthSpeedDegPerSec', 'elevationSpeedDegPerSec', 'speedMinDegPerSec', 'speedMaxDegPerSec'],
-      'Ramp': ['rampEnabled', 'rampKp', 'rampKi', 'rampSampleTimeMs', 'rampMaxStepDeg', 'rampToleranceDeg', 'rampKpMin', 'rampKpMax', 'rampKiMin', 'rampKiMax', 'rampSampleTimeMsMin', 'rampSampleTimeMsMax', 'rampMaxStepDegMin', 'rampMaxStepDegMax', 'rampToleranceDegMin', 'rampToleranceDegMax'],
+      'Ramp': ['rampEnabled', 'rampKp', 'rampKi', 'rampSampleTimeMs', 'rampMaxStepDeg', 'rampToleranceDeg', 'rampKpMin', 'rampKpMax', 'rampKiMin', 'rampKiMax', 'rampSampleTimeMsMin', 'rampSampleTimeMsMax', 'rampMaxStepDegMin', 'rampMaxStepDegMax', 'rampToleranceDegMin', 'rampToleranceDegMax', 'rampProfile'],
       'Mode': ['azimuthMode', 'simulationAzimuthMode', 'elevationDisplayEnabled'],
       'Limits': ['azimuthMinLimit', 'azimuthMaxLimit', 'elevationMinLimit', 'elevationMaxLimit'],
       'Calibration': ['azimuthOffset', 'elevationOffset']
