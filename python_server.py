@@ -251,6 +251,7 @@ class RotorHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
+        global ROTOR_CONNECTION
         parsed = urlparse(self.path)
         
         # Legacy endpoint
@@ -289,6 +290,7 @@ class RotorHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:
+        global ROTOR_CONNECTION
         parsed = urlparse(self.path)
         
         # Legacy endpoint
@@ -328,7 +330,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
             
             try:
                 with ROTOR_LOCK:
-                    global ROTOR_CONNECTION
                     if ROTOR_CONNECTION is None:
                         ROTOR_CONNECTION = RotorConnection()
                     ROTOR_CONNECTION.connect(port.strip(), int(baud_rate))
@@ -343,7 +344,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
             
             try:
                 with ROTOR_LOCK:
-                    global ROTOR_CONNECTION
                     if ROTOR_CONNECTION:
                         ROTOR_CONNECTION.disconnect()
                         ROTOR_CONNECTION = None
