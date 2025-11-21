@@ -43,6 +43,14 @@ python -m http.server 4173
 ```
 Öffne dann: `http://localhost:4173`
 
+**Option 1b: Mit integriertem Auth-Server**
+```bash
+python python_server.py --port 8081 --key rotor-secret-key
+```
+Öffne dann: `http://localhost:8081` (Standard-Key: `rotor-secret-key`).
+Der Server liefert die UI aus `src/renderer` und stellt eine einfache API
+zur Verfügung.
+
 **Option 2: Mit PHP (falls installiert)**
 ```bash
 cd src/renderer
@@ -58,6 +66,17 @@ npm run serve
 Öffne dann: `http://localhost:4173`
 
 > **Hinweis:** Die Anwendung läuft komplett im Browser ohne Node.js zur Laufzeit. Ein Webserver wird nur für Web Serial benötigt; im Simulationsmodus funktioniert alles direkt per `file://`.
+
+### Authentifizierter Python-Server & API
+
+- Start: `python python_server.py --port 8081 --key rotor-secret-key`
+- Authentifizierung: Per `X-API-Key` Header oder `?key=<API_KEY>` Query-Parameter.
+- API:
+  - `POST /api/commands` – JSON `{ "command": "R1", "meta": { ... } }` speichern.
+  - `GET /api/commands` – alle bisher eingegangenen Kommandos abrufen.
+
+Der Server läuft auf `0.0.0.0` und nutzt standardmäßig Port `8081`. Der API-Key
+kann per `--key` überschrieben oder für lokale Tests hartcodiert bleiben.
 
 ## Arbeiten mit Web Serial
 
