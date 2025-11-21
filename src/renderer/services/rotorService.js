@@ -984,6 +984,23 @@ class RotorService {
     const elGoal = hasEl ? this.planElevationTarget(targets.el).calibrated : null;
     let azIntegral = 0;
     let elIntegral = 0;
+    const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
+
+    const computeEasedStep = (error, integral) => {
+      const nextIntegral = clamp(
+        integral + error * dtSeconds,
+        -rampSettings.rampIntegralLimit,
+        rampSettings.rampIntegralLimit
+      );
+      const rawOutput = rampSettings.rampKp * error + rampSettings.rampKi * nextIntegral;
+      const limitedOutput = clamp(rawOutput, -rampSettings.rampMaxStepDeg, rampSettings.rampMaxStepDeg);
+
+      // Reduce step size when starting or approaching the goal for a softer motion
+      const envelope = Math.min(1, Math.abs(error) / (rampSettings.rampMaxStepDeg * 2));
+      const easedOutput = limitedOutput * Math.max(0.15, envelope);
+
+      return { step: easedOutput, nextIntegral };
+    };
 
     while (!rampContext.cancelled) {
       const status = this.currentStatus;
@@ -1005,27 +1022,18 @@ class RotorService {
         break;
       }
 
-      const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
       let nextAz = hasAz ? status.azimuth : null;
       if (!azDone && hasAz && typeof status.azimuth === 'number') {
-        azIntegral = clamp(azIntegral + azError * dtSeconds, -rampSettings.rampIntegralLimit, rampSettings.rampIntegralLimit);
-        const azOutput = clamp(
-          rampSettings.rampKp * azError + rampSettings.rampKi * azIntegral,
-          -rampSettings.rampMaxStepDeg,
-          rampSettings.rampMaxStepDeg
-        );
-        nextAz = clamp(status.azimuth + azOutput, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+        const { step, nextIntegral } = computeEasedStep(azError, azIntegral);
+        azIntegral = nextIntegral;
+        nextAz = clamp(status.azimuth + step, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
       }
 
       let nextEl = hasEl ? status.elevation : null;
       if (!elDone && hasEl && typeof status.elevation === 'number') {
-        elIntegral = clamp(elIntegral + elError * dtSeconds, -rampSettings.rampIntegralLimit, rampSettings.rampIntegralLimit);
-        const elOutput = clamp(
-          rampSettings.rampKp * elError + rampSettings.rampKi * elIntegral,
-          -rampSettings.rampMaxStepDeg,
-          rampSettings.rampMaxStepDeg
-        );
-        nextEl = clamp(status.elevation + elOutput, this.softLimits.elevationMin, this.softLimits.elevationMax);
+        const { step, nextIntegral } = computeEasedStep(elError, elIntegral);
+        elIntegral = nextIntegral;
+        nextEl = clamp(status.elevation + step, this.softLimits.elevationMin, this.softLimits.elevationMax);
       }
 
       await this.sendPlannedTarget(nextAz, nextEl);
