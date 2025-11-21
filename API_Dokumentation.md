@@ -28,17 +28,26 @@ Diese Dokumentation beschreibt die REST-API des Rotor Interface GS232B Servers. 
 
 ## Übersicht
 
-**Base URL:** `http://localhost:8081` (Standard-Port, konfigurierbar)
+**Base URL:** `http://localhost:8081` (Standard-Port, über `--port` änderbar)
 
 **API Version:** 0.1
 
 **Content-Type:** `application/json`
 
-**CORS:** Unterstützt (Access-Control-Allow-Origin: *)
+**CORS:** Aktiviert (Access-Control-Allow-Origin: *)
 
-**Authentifizierung:** Keine erforderlich - alle Endpunkte sind öffentlich zugänglich.
+**Authentifizierung:** Derzeit **keine** – bitte nur in vertrauenswürdigen Netzen einsetzen.
 
-Die API verwendet JSON für alle Anfragen und Antworten. Alle Endpunkte können ohne Authentifizierung verwendet werden.
+Die API verwendet JSON für alle Anfragen und Antworten und kann wahlweise echte COM-Ports (Server-Modus) oder die Simulation bedienen. Der Python-Server hostet gleichzeitig die Web-Oberfläche aus `src/renderer`.
+
+### Schnellstart
+
+```bash
+pip install -r requirements.txt        # pyserial inklusive
+python python_server.py --port 8081    # API + UI bereitstellen
+```
+
+Anschließend ist die Oberfläche unter `http://localhost:8081` erreichbar und die Endpunkte stehen unter `/api/...` bereit.
 
 ---
 
