@@ -1070,9 +1070,21 @@ class RotorService {
       return;
     }
 
+    // Warte auf ersten Status-Update, falls noch keiner vorhanden ist
+    // (maximal 2 Sekunden, dann verwende direkten Befehl als Fallback)
     if (!this.currentStatus) {
-      await this.sendPlannedTarget(targets.az, targets.el);
-      return;
+      let waited = 0;
+      const maxWaitMs = 2000;
+      const checkInterval = 50;
+      while (!this.currentStatus && waited < maxWaitMs) {
+        await delay(checkInterval);
+        waited += checkInterval;
+      }
+      // Wenn nach Wartezeit immer noch kein Status vorhanden, direkten Befehl senden
+      if (!this.currentStatus) {
+        await this.sendPlannedTarget(targets.az, targets.el);
+        return;
+      }
     }
 
     this.cancelActiveRamp();
