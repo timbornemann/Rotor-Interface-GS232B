@@ -102,6 +102,8 @@ class SimulationSerialConnection extends SerialConnection {
     this.elevationRaw = 0;
     this.azDirection = 0;
     this.elDirection = 0;
+    this.azTargetRaw = null;
+    this.elTargetRaw = null;
     this.modeMaxAz = options.modeMaxAz === 450 ? 450 : 360;
     this.azimuthOffset = 0;
     this.elevationOffset = 0;
@@ -213,7 +215,16 @@ class SimulationSerialConnection extends SerialConnection {
     if (normalized.startsWith('M')) {
       const value = Number(normalized.slice(1));
       if (!Number.isNaN(value)) {
-        this.azimuthRaw = this.planRawAzimuthTarget(value);
+        // M-Befehl setzt Azimut direkt (wie W, aber nur Azimut)
+        this.azTargetRaw = this.planRawAzimuthTarget(value);
+        const currentCalibrated = this.getCalibratedAzimuth();
+        const targetCalibrated = this.getCalibratedAzimuthFromRaw(this.azTargetRaw);
+        const delta = shortestAngularDelta(targetCalibrated, currentCalibrated, this.modeMaxAz);
+        if (Math.abs(delta) < 0.1) {
+          this.azimuthRaw = this.azTargetRaw;
+          this.azTargetRaw = null;
+        }
+        // Richtung wird im Ticker basierend auf Ziel berechnet
         this.emitStatus();
       }
       return;
@@ -223,11 +234,29 @@ class SimulationSerialConnection extends SerialConnection {
       const parts = normalized.slice(1).trim().split(/\s+/);
       const az = Number(parts[0]);
       const el = Number(parts[1]);
+      // Setze Zielpositionen für graduelle Bewegung
       if (!Number.isNaN(az)) {
-        this.azimuthRaw = this.planRawAzimuthTarget(az);
+        this.azTargetRaw = this.planRawAzimuthTarget(az);
+        // Berechne ob bereits am Ziel
+        const currentCalibrated = this.getCalibratedAzimuth();
+        const targetCalibrated = this.getCalibratedAzimuthFromRaw(this.azTargetRaw);
+        const delta = shortestAngularDelta(targetCalibrated, currentCalibrated, this.modeMaxAz);
+        if (Math.abs(delta) < 0.1) {
+          // Bereits am Ziel, setze sofort
+          this.azimuthRaw = this.azTargetRaw;
+          this.azTargetRaw = null;
+        }
+        // Richtung wird im Ticker basierend auf Ziel berechnet
       }
       if (!Number.isNaN(el)) {
-        this.elevationRaw = this.constrainRawElevation(el);
+        this.elTargetRaw = this.constrainRawElevation(el);
+        const delta = this.elTargetRaw - this.elevationRaw;
+        if (Math.abs(delta) < 0.1) {
+          // Bereits am Ziel, setze sofort
+          this.elevationRaw = this.elTargetRaw;
+          this.elTargetRaw = null;
+        }
+        // Richtung wird im Ticker basierend auf Ziel berechnet
       }
       this.emitStatus();
       return;
@@ -252,25 +281,33 @@ class SimulationSerialConnection extends SerialConnection {
     switch (normalized) {
       case 'R':
         this.azDirection = 1;
+        this.azTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
         break;
       case 'L':
         this.azDirection = -1;
+        this.azTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
         break;
       case 'A':
         this.azDirection = 0;
+        this.azTargetRaw = null; // Stoppe auch Zielbewegung
         break;
       case 'U':
         this.elDirection = 1;
+        this.elTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
         break;
       case 'D':
         this.elDirection = -1;
+        this.elTargetRaw = null; // Stoppe Zielbewegung bei manueller Steuerung
         break;
       case 'E':
         this.elDirection = 0;
+        this.elTargetRaw = null; // Stoppe auch Zielbewegung
         break;
       case 'S':
         this.azDirection = 0;
         this.elDirection = 0;
+        this.azTargetRaw = null; // Stoppe auch Zielbewegungen
+        this.elTargetRaw = null;
         break;
       case 'C':
       case 'B':
@@ -293,15 +330,62 @@ class SimulationSerialConnection extends SerialConnection {
       clearInterval(this.ticker);
     }
     this.ticker = setInterval(() => {
-      if (this.azDirection !== 0) {
+      let positionChanged = false;
+      
+      // Bewegung zu Zielpositionen (W-Befehl)
+      if (this.azTargetRaw !== null) {
+        const currentCalibrated = this.getCalibratedAzimuth();
+        const targetCalibrated = this.getCalibratedAzimuthFromRaw(this.azTargetRaw);
+        const delta = shortestAngularDelta(targetCalibrated, currentCalibrated, this.modeMaxAz);
+        const absDelta = Math.abs(delta);
+        
+        if (absDelta < 0.1) {
+          // Ziel erreicht
+          this.azimuthRaw = this.azTargetRaw;
+          this.azTargetRaw = null;
+          this.azDirection = 0;
+          positionChanged = true;
+        } else {
+          // Bewege in Richtung Ziel
+          const step = Math.min(absDelta, this.azimuthStep);
+          const direction = delta > 0 ? 1 : -1;
+          const candidate = this.azimuthRaw + direction * step;
+          this.azimuthRaw = this.constrainRawAzimuth(candidate, this.azimuthRaw);
+          positionChanged = true;
+        }
+      } else if (this.azDirection !== 0) {
+        // Manuelle Richtungssteuerung (R/L-Befehle)
         const candidate = this.azimuthRaw + this.azDirection * this.azimuthStep;
         this.azimuthRaw = this.constrainRawAzimuth(candidate, this.azimuthRaw);
+        positionChanged = true;
       }
-      if (this.elDirection !== 0) {
+      
+      if (this.elTargetRaw !== null) {
+        const delta = this.elTargetRaw - this.elevationRaw;
+        const absDelta = Math.abs(delta);
+        
+        if (absDelta < 0.1) {
+          // Ziel erreicht
+          this.elevationRaw = this.elTargetRaw;
+          this.elTargetRaw = null;
+          this.elDirection = 0;
+          positionChanged = true;
+        } else {
+          // Bewege in Richtung Ziel
+          const step = Math.min(absDelta, this.elevationStep);
+          const direction = delta > 0 ? 1 : -1;
+          const candidate = this.elevationRaw + direction * step;
+          this.elevationRaw = this.constrainRawElevation(candidate);
+          positionChanged = true;
+        }
+      } else if (this.elDirection !== 0) {
+        // Manuelle Richtungssteuerung (U/D-Befehle)
         const candidate = this.elevationRaw + this.elDirection * this.elevationStep;
         this.elevationRaw = this.constrainRawElevation(candidate);
+        positionChanged = true;
       }
-      if (this.azDirection !== 0 || this.elDirection !== 0) {
+      
+      if (positionChanged) {
         this.emitStatus();
       }
     }, this.tickIntervalMs);
@@ -330,6 +414,10 @@ class SimulationSerialConnection extends SerialConnection {
 
   getCalibratedElevation() {
     return clamp(this.elevationRaw + this.elevationOffset, this.elevationMin, this.elevationMax);
+  }
+
+  getCalibratedAzimuthFromRaw(rawValue) {
+    return clamp(rawValue + this.azimuthOffset, this.azimuthMin, this.azimuthMax);
   }
 
   planRawAzimuthTarget(rawTarget) {

@@ -39,8 +39,8 @@ const defaultConfig = {
   mapLongitude: null,
   satelliteMapEnabled: false,
   mapZoomLevel: 15,
-  mapZoomMin: 10,
-  mapZoomMax: 18,
+  mapZoomMin: 0,
+  mapZoomMax: 20,
   coneAngle: 10, // Kegel-Winkel in Grad
   coneLength: 1000, // Kegel-Länge in Metern
   azimuthDisplayOffset: 0, // Azimut-Korrektur für Anzeige (Grad)
@@ -137,12 +137,12 @@ class ConfigStore {
       defaultConfig.rampToleranceDegMax
     );
 
-    // Map zoom limits
-    sanitized.mapZoomMin = this.sanitizeNumber(config.mapZoomMin, 0, 22, defaultConfig.mapZoomMin);
+    // Map zoom limits (allow up to 25 for higher detail maps)
+    sanitized.mapZoomMin = this.sanitizeNumber(config.mapZoomMin, 0, 25, defaultConfig.mapZoomMin);
     sanitized.mapZoomMax = this.sanitizeNumber(
       config.mapZoomMax,
       sanitized.mapZoomMin,
-      22,
+      25,
       defaultConfig.mapZoomMax
     );
     sanitized.mapZoomLevel = this.sanitizeNumber(

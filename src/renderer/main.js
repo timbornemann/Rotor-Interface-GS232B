@@ -494,6 +494,50 @@ async function init() {
     });
   }
 
+  // INI-Datei manuell laden (für file:// Protokoll)
+  const settingsLoadIniFile = document.getElementById('settingsLoadIniFile');
+  if (settingsLoadIniFile) {
+    settingsLoadIniFile.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      try {
+        const text = await file.text();
+        if (typeof IniHandler !== 'undefined') {
+          const handler = new IniHandler();
+          const iniConfig = handler.parseIni(text);
+          const flattened = handler.iniToConfig(iniConfig);
+          
+          // Merge with current config and sanitize
+          const merged = { ...config, ...flattened };
+          config = await configStore.save(merged);
+          
+          // Update UI
+          updateUIFromConfig();
+          applyLimitsToRotor();
+          applyOffsetsToRotor();
+          rotor.setRampSettings(getRampConfigFromState());
+          await rotor.setSpeed(getSpeedConfigFromState());
+          updateConeSettings();
+          
+          // Update settings modal if open
+          if (settingsModal) {
+            settingsModal.loadConfigIntoModal(config);
+          }
+          
+          logAction('INI-Datei geladen', { fileName: file.name });
+          reportError(null); // Clear any previous errors
+        }
+      } catch (error) {
+        console.error('[main] Fehler beim Laden der INI-Datei:', error);
+        reportError('Fehler beim Laden der INI-Datei: ' + error.message);
+      } finally {
+        // Reset file input
+        e.target.value = '';
+      }
+    });
+  }
+
   // Serielles Tool Event-Handler
   if (sendSerialCommandBtn) {
     sendSerialCommandBtn.addEventListener('click', () => void handleSendSerialCommand());

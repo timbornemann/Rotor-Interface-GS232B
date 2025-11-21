@@ -248,6 +248,13 @@
               </label>
               <button id="settingsRequestPortBtn" class="secondary" type="button">Port hinzufügen</button>
               <button id="settingsRefreshPortsBtn" class="secondary" type="button">Ports aktualisieren</button>
+              <label style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                INI-Datei laden (optional)
+                <input id="settingsLoadIniFile" type="file" accept=".ini" style="margin-top: 0.5rem;" />
+                <small style="display: block; margin-top: 0.25rem; opacity: 0.7; font-size: 0.85em;">
+                  Nur nötig wenn direkt im Browser geöffnet (file://). Bei Server-Betrieb wird die INI automatisch geladen.
+                </small>
+              </label>
               <label>
                 Baudrate
                 <input id="settingsBaudInput" type="number" min="1200" max="115200" step="100" value="9600" />

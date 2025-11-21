@@ -127,10 +127,10 @@ class IniHandler {
   async load() {
     try {
       if (this.isFileProtocol) {
-        // In file:// protocol, we cannot load files via fetch due to CORS restrictions
-        // The INI file will be created when settings are saved, but we can't read it here
-        // Fall back to localStorage in this case
-        console.log('[IniHandler] file:// protocol detected - INI file loading not available, using localStorage');
+        // In file:// protocol, browsers block file access due to CORS security restrictions
+        // The INI file cannot be loaded automatically when opening HTML directly in the browser
+        // Fall back to localStorage silently - user can load INI manually if needed
+        console.log('[IniHandler] file:// protocol - using localStorage (INI file requires local server)');
         return null;
       } else {
         // Load via server API

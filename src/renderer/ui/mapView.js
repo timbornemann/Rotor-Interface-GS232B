@@ -42,7 +42,7 @@ class MapView {
     const parsedMax = Number(maxZoom);
     this.minZoom = Number.isFinite(parsedMin) ? Math.max(0, Math.round(parsedMin)) : this.minZoom;
     this.maxZoom = Number.isFinite(parsedMax)
-      ? Math.max(this.minZoom, Math.round(Math.min(22, parsedMax)))
+      ? Math.max(this.minZoom, Math.round(Math.min(25, parsedMax)))
       : Math.max(this.minZoom, this.maxZoom);
 
     const targetZoom = Number.isFinite(preferredZoom) ? preferredZoom : this.zoomLevel;
