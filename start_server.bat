@@ -29,14 +29,14 @@ if not exist "python_server.py" (
 echo Starte Server...
 echo.
 echo Server läuft auf: http://localhost:8081
-echo API-Key: rotor-secret-key
+echo Keine Authentifizierung erforderlich
 echo.
 echo Zum Beenden: Strg+C drücken
 echo ========================================
 echo.
 
 REM Starte den Server mit Standard-Parametern
-python python_server.py --port 8081 --key rotor-secret-key
+python python_server.py --port 8081
 
 pause
 

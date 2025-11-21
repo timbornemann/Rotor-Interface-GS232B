@@ -43,13 +43,13 @@ python -m http.server 4173
 ```
 Öffne dann: `http://localhost:4173`
 
-**Option 1b: Mit integriertem Auth-Server (empfohlen für Netzwerk-Zugriff)**
+**Option 1b: Mit integriertem Server (empfohlen für Netzwerk-Zugriff)**
 ```bash
 # Abhängigkeiten installieren
 pip install -r requirements.txt
 
 # Server starten
-python python_server.py --port 8081 --key rotor-secret-key
+python python_server.py --port 8081
 ```
 Öffne dann: `http://localhost:8081` (lokal) oder `http://<SERVER-IP>:8081` (vom Netzwerk).
 
@@ -71,10 +71,10 @@ npm run serve
 
 > **Hinweis:** Die Anwendung läuft komplett im Browser ohne Node.js zur Laufzeit. Ein Webserver wird nur für Web Serial benötigt; im Simulationsmodus funktioniert alles direkt per `file://`.
 
-### Authentifizierter Python-Server & API
+### Python-Server & API
 
-- Start: `python python_server.py --port 8081 --key rotor-secret-key`
-- Authentifizierung: Per `X-API-Key` Header oder `?key=<API_KEY>` Query-Parameter.
+- Start: `python python_server.py --port 8081`
+- Authentifizierung: Keine erforderlich (alle Endpunkte öffentlich)
 - API:
   - `POST /api/commands` – JSON `{ "command": "R1", "meta": { ... } }` speichern.
   - `GET /api/commands` – alle bisher eingegangenen Kommandos abrufen.
@@ -84,8 +84,9 @@ npm run serve
   - `POST /api/rotor/command` – Befehl an den Rotor senden.
   - `GET /api/rotor/status` – aktuellen Status abrufen.
 
-Der Server läuft auf `0.0.0.0` und nutzt standardmäßig Port `8081`. Der API-Key
-kann per `--key` überschrieben oder für lokale Tests hartcodiert bleiben.
+Der Server läuft auf `0.0.0.0` und nutzt standardmäßig Port `8081`.
+
+**Hinweis:** Die API ist ohne Authentifizierung - verwenden Sie sie nur in vertrauenswürdigen Netzwerken.
 
 **Wichtig:** Für COM-Port-Funktionalität ist `pyserial` erforderlich:
 ```bash
