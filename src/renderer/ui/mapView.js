@@ -21,6 +21,7 @@ class MapView {
     this.coneAngle = 10; // Kegel-Winkel in Grad
     this.coneLength = 1000; // Kegel-Länge in Metern
     this.azimuthDisplayOffset = 0; // Azimut-Korrektur für Anzeige (Grad)
+    this.onClickCallback = null; // Callback für Klick-Events
     
     // Initialisiere Canvas-Größe
     this.resizeCanvas();
@@ -28,7 +29,12 @@ class MapView {
     // Event-Handler für Zoom und Resize
     this.setupZoomHandlers();
     this.setupResizeHandler();
+    this.setupClickHandler();
     this.drawBase();
+  }
+
+  setOnClick(callback) {
+    this.onClickCallback = callback;
   }
 
   setConeSettings(angle, length, azimuthOffset = 0) {
@@ -129,6 +135,117 @@ class MapView {
       const delta = e.deltaY > 0 ? -1 : 1;
       this.setZoom(this.zoomLevel + delta);
     });
+  }
+
+  setupClickHandler() {
+    // Click-Handler für Rotor-Steuerung
+    this.canvas.addEventListener('click', (e) => {
+      if (!this.onClickCallback) {
+        return;
+      }
+
+      // Hole Canvas-Position relativ zum Viewport
+      const rect = this.canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      
+      // Berechne Click-Position relativ zum Canvas (mit devicePixelRatio berücksichtigen)
+      const clickX = (e.clientX - rect.left) * dpr;
+      const clickY = (e.clientY - rect.top) * dpr;
+      
+      // Konvertiere zu Display-Koordinaten (ohne devicePixelRatio für Berechnungen)
+      const displayX = e.clientX - rect.left;
+      const displayY = e.clientY - rect.top;
+      
+      // Berechne relative Position zum Zentrum
+      const relX = displayX - this.centerX;
+      const relY = displayY - this.centerY;
+      
+      // Berechne Entfernung vom Zentrum
+      const distance = Math.sqrt(relX * relX + relY * relY);
+      
+      // Berechne Azimut (Winkel vom Norden, im Uhrzeigersinn)
+      // Canvas-Koordinaten: relX = rechts (positiv), relY = unten (positiv)
+      // atan2(relY, relX): 0° = rechts, 90° = unten, 180° = links, -90° = oben
+      // Rotor-Koordinaten: 0° = Norden (oben), 90° = Osten (rechts), 180° = Süden (unten), 270° = Westen (links)
+      // 
+      // Die Anzeige verwendet: rad = ((correctedAzimuth - 90) * Math.PI) / 180
+      // Das bedeutet: correctedAzimuth = 0° → rad = -90° = oben (Norden) ✓
+      //               correctedAzimuth = 90° → rad = 0° = rechts (Osten) ✓
+      // 
+      // Für den Click: Wir müssen den Canvas-Winkel in Rotor-Azimut umrechnen
+      // Canvas: 0° = rechts (Osten), 90° = unten (Süden), 180° = links (Westen), 270° = oben (Norden)
+      // Rotor: 0° = Norden, 90° = Osten, 180° = Süden, 270° = Westen
+      // 
+      // Test: Klick rechts (Osten)
+      // Canvas: relX > 0, relY = 0 → atan2(0, pos) = 0°
+      // Rotor sollte sein: 90° (Osten)
+      // Formel: Rotor = (Canvas + 90) % 360 = (0 + 90) % 360 = 90° ✓
+      // 
+      // Test: Klick oben (Norden)
+      // Canvas: relX = 0, relY < 0 → atan2(neg, 0) = -90° = 270°
+      // Rotor sollte sein: 0° (Norden)
+      // Formel: Rotor = (270 + 90) % 360 = 360 % 360 = 0° ✓
+      // 
+      // ABER: Wenn es gespiegelt ist, dann ist vielleicht die X-Achse invertiert?
+      // Versuchen wir: Rotor = (90 - Canvas + 360) % 360
+      // Canvas 0° → (90 - 0) % 360 = 90° ✓
+      // Canvas 270° → (90 - 270 + 360) % 360 = 180° ✗ sollte 0° sein
+      //
+      // Berechne Winkel - versuchen wir verschiedene Ansätze
+      // Option 1: Standard (relY wie es ist)
+      // Option 2: Y invertiert (-relY) - für gespiegelte Y-Achse
+      // Option 3: X invertiert (-relX)
+      // Option 4: Beide invertiert
+      
+      // Problem-Analyse:
+      // - Osten/Westen funktionieren richtig → X-Achse ist korrekt
+      // - Norden/Süden sind 180° vertauscht → Y-Achse muss korrigiert werden
+      // 
+      // Mit atan2(-relY, relX):
+      // - Klick oben (Norden): relX=0, relY<0 → atan2(pos, 0) = 90° → (90+90)%360 = 180° ✗ (sollte 0° sein)
+      // - Klick unten (Süden): relX=0, relY>0 → atan2(neg, 0) = -90° = 270° → (270+90)%360 = 0° ✗ (sollte 180° sein)
+      //
+      // Mit atan2(relY, relX):
+      // - Klick oben (Norden): relX=0, relY<0 → atan2(neg, 0) = -90° = 270° → (270+90)%360 = 0° ✓
+      // - Klick unten (Süden): relX=0, relY>0 → atan2(pos, 0) = 90° → (90+90)%360 = 180° ✓
+      // - Klick rechts (Osten): relX>0, relY=0 → atan2(0, pos) = 0° → (0+90)%360 = 90° ✓
+      // - Klick links (Westen): relX<0, relY=0 → atan2(0, neg) = 180° → (180+90)%360 = 270° ✓
+      //
+      // Also: Verwende atan2(relY, relX) OHNE Y-Invertierung
+      let canvasAngle = Math.atan2(relY, relX) * 180 / Math.PI;
+      // Konvertiere zu 0-360° Bereich
+      if (canvasAngle < 0) {
+        canvasAngle += 360;
+      }
+      // Umrechnung: Rotor = (Canvas + 90) % 360
+      let azimuth = (canvasAngle + 90) % 360;
+      
+      // Subtrahiere die Display-Korrektur, um den echten Rotor-Azimut zu bekommen
+      // Die Anzeige zeigt: azimuth + azimuthDisplayOffset
+      // Also müssen wir die Korrektur rückgängig machen
+      azimuth = azimuth - this.azimuthDisplayOffset;
+      if (azimuth < 0) {
+        azimuth += 360;
+      }
+      if (azimuth >= 360) {
+        azimuth -= 360;
+      }
+      
+      // Berechne Elevation basierend auf Entfernung
+      // Maximale Entfernung = Radius
+      // 0° Elevation = am Rand, 90° Elevation = im Zentrum
+      // Oder: Entfernung proportional zu Elevation (umgekehrt)
+      const maxDistance = this.radius;
+      const normalizedDistance = Math.min(1, distance / maxDistance);
+      // Elevation: 90° im Zentrum, 0° am Rand
+      const elevation = 90 * (1 - normalizedDistance);
+      
+      // Rufe Callback auf
+      this.onClickCallback(azimuth, elevation);
+    });
+    
+    // Cursor-Styling für bessere UX
+    this.canvas.style.cursor = 'crosshair';
   }
 
   setZoom(level) {

@@ -23,6 +23,27 @@ const gotoElInput = document.getElementById('gotoElInput');
 const compass = new Compass(document.getElementById('compassRoot'));
 const elevation = new Elevation(document.getElementById('elevationRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
+// Setup click handler for map
+mapView.setOnClick(async (azimuth, elevation) => {
+  if (!connected) {
+    logAction('Klick auf Karte verworfen, nicht verbunden', { azimuth, elevation });
+    return;
+  }
+  
+  // Validiere gegen Limits
+  if (!validateTargets({ az: azimuth, el: elevation })) {
+    logAction('Klick auf Karte verworfen, Ziel außerhalb Limits', { azimuth, elevation });
+    return;
+  }
+  
+  logAction('Klick auf Karte - Rotor wird bewegt', { azimuth: azimuth.toFixed(1), elevation: elevation.toFixed(1) });
+  try {
+    // RotorService.setAzEl berücksichtigt bereits die kürzeste Richtung und Limits
+    await rotor.setAzEl({ az: azimuth, el: elevation });
+  } catch (error) {
+    reportError(error);
+  }
+});
 const lastStatusValue = document.getElementById('lastStatusValue');
 const mapCoordinatesInput = document.getElementById('mapCoordinatesInput');
 const loadMapBtn = document.getElementById('loadMapBtn');
