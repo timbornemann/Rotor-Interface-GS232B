@@ -688,64 +688,73 @@ class RotorService {
   async listPorts() {
     const ports = [];
     
-    // Server-Ports abrufen (immer versuchen, falls Server verfügbar ist)
-    console.log('[RotorService] Starte Server-Ports Abfrage', { 
-      apiBase: this.apiBase, 
-      apiKey: this.apiKey ? 'gesetzt' : 'nicht gesetzt',
-      url: `${this.apiBase}/api/rotor/ports`
-    });
+    // Server-Ports nur abrufen, wenn nicht im file:// Protokoll (also http/https)
+    // Im file:// Protokoll funktioniert fetch nicht und wir sind im lokalen Modus
+    const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
     
-    try {
-      const response = await fetch(`${this.apiBase}/api/rotor/ports?key=${encodeURIComponent(this.apiKey)}`, {
-        method: 'GET',
-        headers: {
-          'X-API-Key': this.apiKey,
-          'Content-Type': 'application/json'
-        }
+    if (!isFileProtocol) {
+      // Server-Ports abrufen (nur wenn über http/https)
+      console.log('[RotorService] Starte Server-Ports Abfrage', { 
+        apiBase: this.apiBase, 
+        apiKey: this.apiKey ? 'gesetzt' : 'nicht gesetzt',
+        url: `${this.apiBase}/api/rotor/ports`,
+        protocol: window.location.protocol
       });
       
-      console.log('[RotorService] Server-Antwort erhalten', { 
-        status: response.status, 
-        statusText: response.statusText,
-        ok: response.ok,
-        headers: Object.fromEntries(response.headers.entries())
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[RotorService] Server-Antwort Daten:', data);
+      try {
+        const response = await fetch(`${this.apiBase}/api/rotor/ports?key=${encodeURIComponent(this.apiKey)}`, {
+          method: 'GET',
+          headers: {
+            'X-API-Key': this.apiKey,
+            'Content-Type': 'application/json'
+          }
+        });
         
-        if (data.ports && Array.isArray(data.ports)) {
-          console.log('[RotorService] Verarbeite Server-Ports', { count: data.ports.length, ports: data.ports });
-          data.ports.forEach((port) => {
-            const portEntry = {
-              path: port.path,
-              friendlyName: port.friendlyName || port.path,
-              simulated: false,
-              serverPort: true
-            };
-            console.log('[RotorService] Füge Server-Port hinzu:', portEntry);
-            ports.push(portEntry);
-          });
-          console.log('[RotorService] Server-Ports erfolgreich abgerufen', { count: data.ports.length, totalPorts: ports.length });
-        } else {
-          console.warn('[RotorService] Keine Ports in Antwort oder falsches Format', { data });
-        }
-      } else {
-        const errorText = await response.text();
-        console.error('[RotorService] Server-Ports Anfrage fehlgeschlagen', { 
+        console.log('[RotorService] Server-Antwort erhalten', { 
           status: response.status, 
           statusText: response.statusText,
-          error: errorText 
+          ok: response.ok,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[RotorService] Server-Antwort Daten:', data);
+          
+          if (data.ports && Array.isArray(data.ports)) {
+            console.log('[RotorService] Verarbeite Server-Ports', { count: data.ports.length, ports: data.ports });
+            data.ports.forEach((port) => {
+              const portEntry = {
+                path: port.path,
+                friendlyName: port.friendlyName || port.path,
+                simulated: false,
+                serverPort: true
+              };
+              console.log('[RotorService] Füge Server-Port hinzu:', portEntry);
+              ports.push(portEntry);
+            });
+            console.log('[RotorService] Server-Ports erfolgreich abgerufen', { count: data.ports.length, totalPorts: ports.length });
+          } else {
+            console.warn('[RotorService] Keine Ports in Antwort oder falsches Format', { data });
+          }
+        } else {
+          const errorText = await response.text();
+          console.error('[RotorService] Server-Ports Anfrage fehlgeschlagen', { 
+            status: response.status, 
+            statusText: response.statusText,
+            error: errorText 
+          });
+        }
+      } catch (error) {
+        // Nur warnen, nicht als Fehler behandeln - im lokalen Modus ist das normal
+        console.warn('[RotorService] Konnte Server-Ports nicht abrufen (normal im lokalen Modus)', { 
+          error: error.message,
+          apiBase: this.apiBase,
+          protocol: window.location.protocol
         });
       }
-    } catch (error) {
-      console.error('[RotorService] Konnte Server-Ports nicht abrufen', { 
-        error: error.message,
-        errorStack: error.stack,
-        apiBase: this.apiBase,
-        apiKey: this.apiKey ? 'gesetzt' : 'nicht gesetzt'
-      });
+    } else {
+      console.log('[RotorService] Überspringe Server-Ports Abfrage (file:// Protokoll - lokaler Modus)');
     }
     
     // Web Serial Ports (nur wenn verfügbar)
