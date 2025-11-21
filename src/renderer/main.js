@@ -688,7 +688,9 @@ async function handleConnect() {
   const selectedOption = portSelect.selectedOptions[0];
   const simulation = config.simulation || selectedOption?.dataset.simulated === 'true';
   const path = simulation ? SIMULATED_PORT_ID : portSelect.value;
-  const azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
+  const azimuthMode = simulation
+    ? (Number(config.simulationAzimuthMode) === 450 ? 450 : 360)
+    : (Number(config.azimuthMode) === 450 ? 450 : 360);
   const connectionMode = config.connectionMode || 'local';
 
   if (!path) {
@@ -704,11 +706,19 @@ async function handleConnect() {
     logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
     applyLimitsToRotor();
     applyOffsetsToRotor();
-    await rotor.connect({ path, baudRate, simulation, useServer });
+    await rotor.connect({ path, baudRate, simulation, useServer, azimuthMode });
     await rotor.setMode(azimuthMode);
     rotor.startPolling(pollingIntervalMs);
     connected = true;
-    config = await configStore.save({ baudRate, pollingIntervalMs, simulation, portPath: path, azimuthMode, connectionMode });
+    config = await configStore.save({
+      baudRate,
+      pollingIntervalMs,
+      simulation,
+      simulationAzimuthMode: config.simulationAzimuthMode,
+      portPath: path,
+      azimuthMode,
+      connectionMode
+    });
     setConnectionState(true);
     logAction('Verbindung hergestellt', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
   } catch (error) {

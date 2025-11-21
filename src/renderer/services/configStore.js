@@ -9,6 +9,7 @@ const defaultConfig = {
   speedMinDegPerSec: 0.5,
   speedMaxDegPerSec: 20,
   azimuthMode: 360,
+  simulationAzimuthMode: 360,
   azimuthMinLimit: 0,
   azimuthMaxLimit: 360,
   elevationMinLimit: 0,
@@ -227,6 +228,9 @@ class ConfigStore {
       sanitized.rampToleranceDegMax,
       defaultConfig.rampToleranceDeg
     );
+    sanitized.azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
+    sanitized.simulationAzimuthMode =
+      Number(config.simulationAzimuthMode) === 450 ? 450 : defaultConfig.simulationAzimuthMode;
     sanitized.rampEnabled = Boolean(config.rampEnabled);
     sanitized.coneAngle = this.sanitizeNumber(
       config.coneAngle,

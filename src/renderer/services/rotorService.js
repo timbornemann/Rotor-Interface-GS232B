@@ -95,18 +95,18 @@ class SerialConnection {
 }
 
 class SimulationSerialConnection extends SerialConnection {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.isConnected = false;
     this.azimuthRaw = 0;
     this.elevationRaw = 0;
     this.azDirection = 0;
     this.elDirection = 0;
-    this.modeMaxAz = 360;
+    this.modeMaxAz = options.modeMaxAz === 450 ? 450 : 360;
     this.azimuthOffset = 0;
     this.elevationOffset = 0;
     this.azimuthMin = 0;
-    this.azimuthMax = 360;
+    this.azimuthMax = this.modeMaxAz;
     this.elevationMin = 0;
     this.elevationMax = 90;
     this.azimuthSpeedDegPerSec = 4;
@@ -117,14 +117,29 @@ class SimulationSerialConnection extends SerialConnection {
     this.ticker = null;
   }
 
-  async open() {
+  async open(options = {}) {
     if (this.isConnected) {
       return;
     }
     this.isConnected = true;
+    this.setMode(options.modeMaxAz ?? this.modeMaxAz);
     console.log('[RotorService][Simulation] Verbunden');
     this.startTicker();
     this.emitStatus();
+  }
+
+  setMode(mode) {
+    const normalizedMode = mode === 450 ? 450 : 360;
+    this.modeMaxAz = normalizedMode;
+
+    const maxRange = normalizedMode === 450 ? 450 : 360;
+    this.azimuthMin = clamp(this.azimuthMin, 0, maxRange);
+    if (normalizedMode === 450 && this.azimuthMax < maxRange) {
+      this.azimuthMax = maxRange;
+    } else {
+      this.azimuthMax = clamp(this.azimuthMax, this.azimuthMin, maxRange);
+    }
+    this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
   }
 
   setSoftLimits(limits) {
@@ -143,6 +158,11 @@ class SimulationSerialConnection extends SerialConnection {
     if (typeof limits.elevationMax === 'number') {
       this.elevationMax = limits.elevationMax;
     }
+
+    const maxRange = this.modeMaxAz === 450 ? 450 : 360;
+    this.azimuthMin = clamp(this.azimuthMin, 0, maxRange);
+    this.azimuthMax = clamp(this.azimuthMax, this.azimuthMin, maxRange);
+    this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
   }
 
   setSpeed(settings) {
@@ -258,20 +278,10 @@ class SimulationSerialConnection extends SerialConnection {
         this.emitStatus();
         break;
       case 'P36':
-        this.modeMaxAz = 360;
-        // Bei 360°-Modus: azimuthMax auf 360 begrenzen
-        if (this.azimuthMax > 360) {
-          this.azimuthMax = 360;
-        }
-        this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
+        this.setMode(360);
         break;
       case 'P45':
-        this.modeMaxAz = 450;
-        // Bei 450°-Modus: azimuthMax auf 450 erweitern (wenn nicht manuell gesetzt)
-        if (this.azimuthMax <= 360) {
-          this.azimuthMax = 450;
-        }
-        this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
+        this.setMode(450);
         break;
       default:
         break;
@@ -846,19 +856,20 @@ class RotorService {
   }
 
   async connect(config) {
+    const requestedMode = Number(config.azimuthMode) === 450 ? 450 : 360;
     const useSimulation =
       Boolean(config.simulation) || config.path === SIMULATED_PORT_ID;
     const useServer = Boolean(config.useServer) || (config.path && !useSimulation && !supportsWebSerial());
 
     console.log('[RotorService] Verbindungsaufbau gestartet', { config, useSimulation, useServer });
     await this.disconnect();
-    this.maxAzimuthRange = 360;
+    this.maxAzimuthRange = requestedMode;
     this.currentStatus = null;
 
     if (useSimulation) {
       this.simulationMode = true;
       this.connectionMode = 'simulation';
-      this.serial = new SimulationSerialConnection();
+      this.serial = new SimulationSerialConnection({ modeMaxAz: requestedMode });
     } else if (useServer) {
       this.simulationMode = false;
       this.connectionMode = 'server';
@@ -891,7 +902,7 @@ class RotorService {
     if (useServer) {
       await this.serial.open({ port: config.path, baudRate: config.baudRate });
     } else {
-      await this.serial.open({ baudRate: config.baudRate });
+      await this.serial.open({ baudRate: config.baudRate, modeMaxAz: requestedMode });
     }
     
     this.applySoftLimitConfig();
@@ -1397,4 +1408,16 @@ class RotorService {
 
 function createRotorService() {
   return new RotorService();
+}
+
+// Export for tests (ignored in browser context)
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    SimulationSerialConnection,
+    RotorService,
+    shortestAngularDelta,
+    wrapAzimuth,
+    clamp,
+    generateAzimuthCandidates
+  };
 }
