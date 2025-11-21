@@ -360,9 +360,22 @@ async function refreshPorts() {
     const ports = await rotor.listPorts();
     portSelect.innerHTML = '';
     
+    console.log('[refreshPorts] Alle Ports vom Service:', ports);
+    console.log('[refreshPorts] Aktueller Verbindungsmodus:', connectionMode);
+    
     let hasRelevantPorts = false;
+    let serverPortCount = 0;
+    let localPortCount = 0;
+    let simulatedPortCount = 0;
     
     ports.forEach((port) => {
+      console.log('[refreshPorts] Prüfe Port:', { 
+        path: port.path, 
+        serverPort: port.serverPort, 
+        simulated: port.simulated,
+        friendlyName: port.friendlyName 
+      });
+      
       // Filtere Ports basierend auf Verbindungsmodus
       if (port.simulated || port.path === SIMULATED_PORT_ID) {
         // Simulation immer anzeigen
@@ -372,6 +385,8 @@ async function refreshPorts() {
         option.dataset.simulated = 'true';
         portSelect.appendChild(option);
         hasRelevantPorts = true;
+        simulatedPortCount++;
+        console.log('[refreshPorts] Simulation hinzugefügt');
       } else if (connectionMode === 'server' && port.serverPort) {
         // Server-Modus: nur Server-Ports anzeigen
         const option = document.createElement('option');
@@ -380,6 +395,8 @@ async function refreshPorts() {
         option.dataset.serverPort = 'true';
         portSelect.appendChild(option);
         hasRelevantPorts = true;
+        serverPortCount++;
+        console.log('[refreshPorts] Server-Port hinzugefügt:', port.path);
       } else if (connectionMode === 'local' && !port.serverPort) {
         // Lokaler Modus: nur lokale Web Serial Ports anzeigen
         const option = document.createElement('option');
@@ -387,7 +404,23 @@ async function refreshPorts() {
         option.textContent = port.friendlyName || port.path;
         portSelect.appendChild(option);
         hasRelevantPorts = true;
+        localPortCount++;
+        console.log('[refreshPorts] Lokaler Port hinzugefügt:', port.path);
+      } else {
+        console.log('[refreshPorts] Port übersprungen:', { 
+          connectionMode, 
+          serverPort: port.serverPort,
+          reason: connectionMode === 'server' ? 'nicht serverPort' : 'serverPort im lokalen Modus'
+        });
       }
+    });
+
+    console.log('[refreshPorts] Port-Zusammenfassung:', { 
+      serverPortCount, 
+      localPortCount, 
+      simulatedPortCount,
+      hasRelevantPorts,
+      totalOptions: portSelect.options.length
     });
 
     // Warnung anzeigen wenn keine Ports gefunden wurden
@@ -398,17 +431,37 @@ async function refreshPorts() {
       option.disabled = true;
       portSelect.appendChild(option);
       logAction('Keine Server-Ports gefunden - möglicherweise Server nicht erreichbar');
+      console.warn('[refreshPorts] Keine Server-Ports gefunden!');
     }
 
     if (config.portPath && Array.from(portSelect.options).some((opt) => opt.value === config.portPath)) {
       portSelect.value = config.portPath;
     } else {
-      const simulatedOption = Array.from(portSelect.options).find((option) => option.dataset.simulated === 'true');
-      if (simulatedOption) {
-        portSelect.value = simulatedOption.value;
+      // Im Server-Modus: Wähle ersten Server-Port, sonst Simulation
+      if (connectionMode === 'server') {
+        const serverOption = Array.from(portSelect.options).find((option) => option.dataset.serverPort === 'true');
+        if (serverOption) {
+          portSelect.value = serverOption.value;
+        } else {
+          const simulatedOption = Array.from(portSelect.options).find((option) => option.dataset.simulated === 'true');
+          if (simulatedOption) {
+            portSelect.value = simulatedOption.value;
+          }
+        }
+      } else {
+        const simulatedOption = Array.from(portSelect.options).find((option) => option.dataset.simulated === 'true');
+        if (simulatedOption) {
+          portSelect.value = simulatedOption.value;
+        }
       }
     }
-    logAction('Portliste aktualisiert', { selected: portSelect.value, connectionMode, options: ports });
+    logAction('Portliste aktualisiert', { 
+      selected: portSelect.value, 
+      connectionMode, 
+      serverPortCount,
+      localPortCount,
+      totalPorts: ports.length
+    });
   } catch (error) {
     console.error('[refreshPorts] Fehler beim Aktualisieren der Portliste', error);
     reportError(error);
