@@ -199,11 +199,13 @@ class SettingsModal {
     const settingsBaudInput = document.getElementById('settingsBaudInput');
     const settingsPollingInput = document.getElementById('settingsPollingInput');
     const settingsSimulationToggle = document.getElementById('settingsSimulationToggle');
+    const settingsSimulationModeSelect = document.getElementById('settingsSimulationModeSelect');
     const settingsConnectionModeSelect = document.getElementById('settingsConnectionModeSelect');
 
     if (settingsBaudInput) settingsBaudInput.value = config.baudRate || 9600;
     if (settingsPollingInput) settingsPollingInput.value = config.pollingIntervalMs || 1000;
     if (settingsSimulationToggle) settingsSimulationToggle.checked = config.simulation || false;
+    if (settingsSimulationModeSelect) settingsSimulationModeSelect.value = config.simulationAzimuthMode || 360;
     if (settingsConnectionModeSelect) settingsConnectionModeSelect.value = config.connectionMode || 'local';
 
     // Coordinates tab
@@ -269,12 +271,14 @@ class SettingsModal {
     const settingsBaudInput = document.getElementById('settingsBaudInput');
     const settingsPollingInput = document.getElementById('settingsPollingInput');
     const settingsSimulationToggle = document.getElementById('settingsSimulationToggle');
+    const settingsSimulationModeSelect = document.getElementById('settingsSimulationModeSelect');
     const settingsConnectionModeSelect = document.getElementById('settingsConnectionModeSelect');
     const settingsPortSelect = document.getElementById('settingsPortSelect');
 
     if (settingsBaudInput) config.baudRate = Number(settingsBaudInput.value) || 9600;
     if (settingsPollingInput) config.pollingIntervalMs = Number(settingsPollingInput.value) || 1000;
     if (settingsSimulationToggle) config.simulation = settingsSimulationToggle.checked;
+    if (settingsSimulationModeSelect) config.simulationAzimuthMode = Number(settingsSimulationModeSelect.value) || 360;
     if (settingsConnectionModeSelect) config.connectionMode = settingsConnectionModeSelect.value;
     if (settingsPortSelect && settingsPortSelect.value) {
       const selectedOption = settingsPortSelect.selectedOptions[0];
