@@ -20,6 +20,7 @@ class MapView {
     this.lastElevation = 0;
     this.coneAngle = 10; // Kegel-Winkel in Grad
     this.coneLength = 1000; // Kegel-Länge in Metern
+    this.azimuthDisplayOffset = 0; // Azimut-Korrektur für Anzeige (Grad)
     
     // Initialisiere Canvas-Größe
     this.resizeCanvas();
@@ -30,9 +31,10 @@ class MapView {
     this.drawBase();
   }
 
-  setConeSettings(angle, length) {
+  setConeSettings(angle, length, azimuthOffset = 0) {
     this.coneAngle = Math.max(1, Math.min(90, angle || 10));
     this.coneLength = Math.max(0, length || 1000); // Länge in Metern
+    this.azimuthDisplayOffset = Number(azimuthOffset) || 0; // Azimut-Korrektur
     // Aktualisiere die Anzeige
     this.update(this.lastAzimuth, this.lastElevation);
   }
@@ -457,7 +459,9 @@ class MapView {
     ctx.save();
     ctx.translate(this.centerX, this.centerY);
 
-    const rad = ((azimuth - 90) * Math.PI) / 180;
+    // Wende Azimut-Korrektur für die Anzeige an
+    const correctedAzimuth = azimuth + this.azimuthDisplayOffset;
+    const rad = ((correctedAzimuth - 90) * Math.PI) / 180;
     
     // Berechne Länge in Pixeln basierend auf Metern und aktueller Skalierung
     let lengthInPixels;

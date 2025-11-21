@@ -49,6 +49,7 @@ const commandHistoryList = document.getElementById('commandHistoryList');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const coneAngleInput = document.getElementById('coneAngleInput');
 const coneLengthInput = document.getElementById('coneLengthInput');
+const azimuthDisplayOffsetInput = document.getElementById('azimuthDisplayOffsetInput');
 
 function logAction(message, details = {}) {
   console.log('[UI]', message, details);
@@ -206,6 +207,7 @@ async function init() {
   modeSelect.value = config.azimuthMode.toString();
   if (coneAngleInput) coneAngleInput.value = (config.coneAngle || 10).toString();
   if (coneLengthInput) coneLengthInput.value = (config.coneLength || 1000).toString();
+  if (azimuthDisplayOffsetInput) azimuthDisplayOffsetInput.value = (config.azimuthDisplayOffset || 0).toString();
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
@@ -291,6 +293,9 @@ async function init() {
   }
   if (coneLengthInput) {
     coneLengthInput.addEventListener('change', () => handleConeSettingsChange());
+  }
+  if (azimuthDisplayOffsetInput) {
+    azimuthDisplayOffsetInput.addEventListener('change', () => handleConeSettingsChange());
   }
   
   // Enter-Taste im Koordinatenfeld
@@ -762,16 +767,18 @@ function updateConeSettings() {
   if (!coneAngleInput || !coneLengthInput) return;
   const coneAngle = Number(coneAngleInput.value) || 10;
   const coneLength = Number(coneLengthInput.value) || 1000;
-  mapView.setConeSettings(coneAngle, coneLength);
+  const azimuthDisplayOffset = Number(azimuthDisplayOffsetInput?.value) || 0;
+  mapView.setConeSettings(coneAngle, coneLength, azimuthDisplayOffset);
 }
 
 function handleConeSettingsChange() {
   if (!coneAngleInput || !coneLengthInput) return;
   const coneAngle = Number(coneAngleInput.value) || 10;
   const coneLength = Number(coneLengthInput.value) || 1000;
-  config = configStore.save({ coneAngle, coneLength });
+  const azimuthDisplayOffset = Number(azimuthDisplayOffsetInput?.value) || 0;
+  config = configStore.save({ coneAngle, coneLength, azimuthDisplayOffset });
   updateConeSettings();
-  logAction('Kegel-Einstellungen geändert', { coneAngle, coneLength: `${coneLength}m` });
+  logAction('Kegel-Einstellungen geändert', { coneAngle, coneLength: `${coneLength}m`, azimuthDisplayOffset: `${azimuthDisplayOffset}°` });
 }
 
 function updateConnectionModeUI() {

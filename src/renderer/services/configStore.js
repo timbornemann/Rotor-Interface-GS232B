@@ -24,7 +24,8 @@ const defaultConfig = {
   mapLongitude: null,
   satelliteMapEnabled: false,
   coneAngle: 10, // Kegel-Winkel in Grad
-  coneLength: 1000 // Kegel-Länge in Metern
+  coneLength: 1000, // Kegel-Länge in Metern
+  azimuthDisplayOffset: 0 // Azimut-Korrektur für Anzeige (Grad)
 };
 
 class ConfigStore {
@@ -71,6 +72,24 @@ class ConfigStore {
       defaultConfig.rampToleranceDeg
     );
     sanitized.rampEnabled = Boolean(config.rampEnabled);
+    sanitized.coneAngle = this.sanitizeNumber(
+      config.coneAngle,
+      1,
+      90,
+      defaultConfig.coneAngle
+    );
+    sanitized.coneLength = this.sanitizeNumber(
+      config.coneLength,
+      0,
+      100000,
+      defaultConfig.coneLength
+    );
+    sanitized.azimuthDisplayOffset = this.sanitizeNumber(
+      config.azimuthDisplayOffset,
+      -180,
+      180,
+      defaultConfig.azimuthDisplayOffset
+    );
     return sanitized;
   }
 
