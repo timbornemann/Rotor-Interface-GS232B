@@ -4,6 +4,7 @@ const rotor = createRotorService();
 
 const portSelect = document.getElementById('portSelect');
 const requestPortBtn = document.getElementById('requestPortBtn');
+const refreshPortsBtn = document.getElementById('refreshPortsBtn');
 const baudInput = document.getElementById('baudInput');
 const pollingInput = document.getElementById('pollingInput');
 const simulationToggle = document.getElementById('simulationToggle');
@@ -229,15 +230,17 @@ async function init() {
     serialSupportNotice.classList.remove('hidden');
   }
   if (requestPortBtn) {
-    requestPortBtn.disabled = !rotor.supportsWebSerial() || connectionModeSelect.value === 'server';
     requestPortBtn.addEventListener('click', () => void handleRequestPort());
   }
+  if (refreshPortsBtn) {
+    refreshPortsBtn.addEventListener('click', () => void refreshPorts());
+  }
+  
+  updatePortButtons();
   
   // Aktualisiere Port-Button Status wenn Modus wechselt
   connectionModeSelect.addEventListener('change', () => {
-    if (requestPortBtn) {
-      requestPortBtn.disabled = !rotor.supportsWebSerial() || connectionModeSelect.value === 'server';
-    }
+    updatePortButtons();
   });
   
   // Aktualisiere Port-Liste wenn Simulation umgeschaltet wird
@@ -309,6 +312,19 @@ async function init() {
       void handleSendSerialCommand(cmd);
     });
   });
+}
+
+function updatePortButtons() {
+  const isServerMode = connectionModeSelect.value === 'server';
+  const supportsWebSerial = rotor.supportsWebSerial();
+  
+  if (requestPortBtn) {
+    requestPortBtn.disabled = isServerMode || !supportsWebSerial;
+    requestPortBtn.style.display = isServerMode ? 'none' : '';
+  }
+  if (refreshPortsBtn) {
+    refreshPortsBtn.style.display = isServerMode ? '' : 'none';
+  }
 }
 
 async function handleRequestPort() {
@@ -649,6 +665,9 @@ function updateConnectionModeUI() {
     }
     localOption.disabled = !supportsWebSerial;
   }
+  
+  // Aktualisiere Button-Status
+  updatePortButtons();
   
   // Aktualisiere Port-Liste basierend auf Modus
   refreshPorts().catch(reportError);
