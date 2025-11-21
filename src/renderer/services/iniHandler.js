@@ -95,7 +95,7 @@ class IniHandler {
       'Cone': ['coneAngle', 'coneLength', 'azimuthDisplayOffset'],
       'Speed': ['azimuthSpeedDegPerSec', 'elevationSpeedDegPerSec'],
       'Ramp': ['rampEnabled', 'rampKp', 'rampKi', 'rampSampleTimeMs', 'rampMaxStepDeg', 'rampToleranceDeg'],
-      'Mode': ['azimuthMode'],
+      'Mode': ['azimuthMode', 'elevationDisplayEnabled'],
       'Limits': ['azimuthMinLimit', 'azimuthMaxLimit', 'elevationMinLimit', 'elevationMaxLimit'],
       'Calibration': ['azimuthOffset', 'elevationOffset']
     };
