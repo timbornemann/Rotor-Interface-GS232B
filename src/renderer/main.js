@@ -7,6 +7,7 @@ const requestPortBtn = document.getElementById('requestPortBtn');
 const baudInput = document.getElementById('baudInput');
 const pollingInput = document.getElementById('pollingInput');
 const simulationToggle = document.getElementById('simulationToggle');
+const connectionModeSelect = document.getElementById('connectionModeSelect');
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const connectionStatus = document.getElementById('connectionStatus');
@@ -198,11 +199,13 @@ async function init() {
   baudInput.value = config.baudRate.toString();
   pollingInput.value = config.pollingIntervalMs.toString();
   simulationToggle.checked = config.simulation;
+  connectionModeSelect.value = config.connectionMode || 'local';
   modeSelect.value = config.azimuthMode.toString();
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
   updateModeLabel();
+  updateConnectionModeUI();
   controls.setEnabled(false);
   disconnectBtn.disabled = true;
 
@@ -226,9 +229,21 @@ async function init() {
     serialSupportNotice.classList.remove('hidden');
   }
   if (requestPortBtn) {
-    requestPortBtn.disabled = !rotor.supportsWebSerial();
+    requestPortBtn.disabled = !rotor.supportsWebSerial() || connectionModeSelect.value === 'server';
     requestPortBtn.addEventListener('click', () => void handleRequestPort());
   }
+  
+  // Aktualisiere Port-Button Status wenn Modus wechselt
+  connectionModeSelect.addEventListener('change', () => {
+    if (requestPortBtn) {
+      requestPortBtn.disabled = !rotor.supportsWebSerial() || connectionModeSelect.value === 'server';
+    }
+  });
+  
+  // Aktualisiere Port-Liste wenn Simulation umgeschaltet wird
+  simulationToggle.addEventListener('change', () => {
+    refreshPorts().catch(reportError);
+  });
 
   await refreshPorts();
   subscribeToStatus();
@@ -243,6 +258,7 @@ async function init() {
   connectBtn.addEventListener('click', () => void handleConnect());
   disconnectBtn.addEventListener('click', () => void handleDisconnect());
   modeSelect.addEventListener('change', () => void handleModeChange());
+  connectionModeSelect.addEventListener('change', () => void handleConnectionModeChange());
   applyLimitsBtn.addEventListener('click', () => void handleApplyLimits());
   setAzZeroBtn.addEventListener('click', () => void handleSetAzReference(0));
   setAzFullBtn.addEventListener('click', () => void handleSetAzReference(360));
@@ -309,24 +325,33 @@ async function handleRequestPort() {
 async function refreshPorts() {
   try {
     logAction('Portliste wird aktualisiert');
+    const connectionMode = connectionModeSelect.value;
     const ports = await rotor.listPorts();
     portSelect.innerHTML = '';
+    
     ports.forEach((port) => {
-      const option = document.createElement('option');
-      option.value = port.path;
-      option.textContent = port.friendlyName || port.path;
+      // Filtere Ports basierend auf Verbindungsmodus
       if (port.simulated || port.path === SIMULATED_PORT_ID) {
-        option.dataset.simulated = 'true';
+        // Simulation immer anzeigen
+        const option = document.createElement('option');
+        option.value = port.path;
         option.textContent = 'Simulierter Rotor';
-      }
-      if (port.serverPort) {
+        option.dataset.simulated = 'true';
+        portSelect.appendChild(option);
+      } else if (connectionMode === 'server' && port.serverPort) {
+        // Server-Modus: nur Server-Ports anzeigen
+        const option = document.createElement('option');
+        option.value = port.path;
+        option.textContent = `[Server] ${port.friendlyName || port.path}`;
         option.dataset.serverPort = 'true';
-        // Markiere Server-Ports visuell
-        if (!port.simulated) {
-          option.textContent = `[Server] ${port.friendlyName || port.path}`;
-        }
+        portSelect.appendChild(option);
+      } else if (connectionMode === 'local' && !port.serverPort) {
+        // Lokaler Modus: nur lokale Web Serial Ports anzeigen
+        const option = document.createElement('option');
+        option.value = port.path;
+        option.textContent = port.friendlyName || port.path;
+        portSelect.appendChild(option);
       }
-      portSelect.appendChild(option);
     });
 
     if (config.portPath && Array.from(portSelect.options).some((opt) => opt.value === config.portPath)) {
@@ -337,7 +362,7 @@ async function refreshPorts() {
         portSelect.value = simulatedOption.value;
       }
     }
-    logAction('Portliste aktualisiert', { selected: portSelect.value, options: ports });
+    logAction('Portliste aktualisiert', { selected: portSelect.value, connectionMode, options: ports });
   } catch (error) {
     reportError(error);
   }
@@ -350,6 +375,7 @@ async function handleConnect() {
   const simulation = simulationToggle.checked || selectedOption?.dataset.simulated === 'true';
   const path = simulation ? SIMULATED_PORT_ID : portSelect.value;
   const azimuthMode = Number(modeSelect.value) === 450 ? 450 : 360;
+  const connectionMode = connectionModeSelect.value;
 
   if (!path) {
     logAction('Verbindungsversuch ohne Port');
@@ -357,22 +383,20 @@ async function handleConnect() {
     return;
   }
 
-  // Prüfe, ob es ein Server-Port ist (nicht simuliert und nicht Web Serial)
-  const isServerPort = selectedOption?.dataset.serverPort === 'true' || 
-                       (!simulation && !rotor.supportsWebSerial() && path !== SIMULATED_PORT_ID);
-  const useServer = isServerPort || (!simulation && !rotor.supportsWebSerial());
+  // Verwende manuelle Modus-Auswahl statt automatischer Erkennung
+  const useServer = connectionMode === 'server' && !simulation;
 
   try {
-    logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, useServer });
+    logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
     applyLimitsToRotor();
     applyOffsetsToRotor();
     await rotor.connect({ path, baudRate, simulation, useServer });
     await rotor.setMode(azimuthMode);
     rotor.startPolling(pollingIntervalMs);
     connected = true;
-    config = configStore.save({ baudRate, pollingIntervalMs, simulation, portPath: path, azimuthMode });
+    config = configStore.save({ baudRate, pollingIntervalMs, simulation, portPath: path, azimuthMode, connectionMode });
     setConnectionState(true);
-    logAction('Verbindung hergestellt', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, useServer });
+    logAction('Verbindung hergestellt', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
   } catch (error) {
     reportError(error);
     setConnectionState(false);
@@ -608,6 +632,33 @@ function handleStatus(status) {
 function updateModeLabel() {
   modeStatus.textContent = `Modus: ${modeSelect.value}deg`;
   logAction('Modus-Label aktualisiert', { label: modeStatus.textContent });
+}
+
+function updateConnectionModeUI() {
+  const connectionMode = connectionModeSelect.value;
+  const supportsWebSerial = rotor.supportsWebSerial();
+  
+  // Deaktiviere lokalen Modus wenn Web Serial nicht verfügbar ist
+  const localOption = connectionModeSelect.querySelector('option[value="local"]');
+  if (localOption) {
+    if (!supportsWebSerial && connectionMode === 'local') {
+      // Wechsle automatisch zu Server-Modus wenn Web Serial nicht verfügbar ist
+      connectionModeSelect.value = 'server';
+      config = configStore.save({ connectionMode: 'server' });
+      logAction('Automatisch zu Server-Modus gewechselt (Web Serial nicht verfügbar)');
+    }
+    localOption.disabled = !supportsWebSerial;
+  }
+  
+  // Aktualisiere Port-Liste basierend auf Modus
+  refreshPorts().catch(reportError);
+}
+
+async function handleConnectionModeChange() {
+  const connectionMode = connectionModeSelect.value;
+  config = configStore.save({ connectionMode });
+  logAction('Verbindungsmodus geändert', { connectionMode });
+  updateConnectionModeUI();
 }
 
 async function handleLoadMap() {

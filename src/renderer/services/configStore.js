@@ -3,7 +3,8 @@ const STORAGE_KEY = 'rotor-control-config-v1';
 const defaultConfig = {
   baudRate: 9600,
   pollingIntervalMs: 1000,
-  simulation: true,
+  simulation: false,
+  connectionMode: 'local', // 'local' or 'server'
   azimuthMode: 360,
   azimuthMinLimit: 0,
   azimuthMaxLimit: 360,

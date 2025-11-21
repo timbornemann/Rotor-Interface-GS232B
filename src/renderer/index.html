@@ -27,6 +27,13 @@
             <input id="simulationToggle" type="checkbox" />
             Simulation
           </label>
+          <label>
+            Verbindungsmodus
+            <select id="connectionModeSelect">
+              <option value="local">Lokal (Web Serial)</option>
+              <option value="server">Server (API)</option>
+            </select>
+          </label>
           <button id="connectBtn" class="primary">Verbinden</button>
           <button id="disconnectBtn" disabled>Trennen</button>
         </div>
