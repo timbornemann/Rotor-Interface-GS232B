@@ -1135,7 +1135,18 @@ class RotorService {
     let elIntegral = 0;
     const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
 
-    const computeEasedStep = (error, integral) => {
+    // Speichere initiale Fehler für symmetrische Beschleunigung/Verzögerung
+    let azInitialError = null;
+    let elInitialError = null;
+
+    const computeEasedStep = (error, integral, initialErrorRef) => {
+      const absError = Math.abs(error);
+      
+      // Speichere initialen Fehler beim ersten Aufruf
+      if (initialErrorRef.current === null && absError > 0.1) {
+        initialErrorRef.current = absError;
+      }
+      
       const nextIntegral = clamp(
         integral + error * dtSeconds,
         -rampSettings.rampIntegralLimit,
@@ -1144,10 +1155,26 @@ class RotorService {
       const rawOutput = rampSettings.rampKp * error + rampSettings.rampKi * nextIntegral;
       const limitedOutput = clamp(rawOutput, -rampSettings.rampMaxStepDeg, rampSettings.rampMaxStepDeg);
 
-      // Reduce step size when starting or approaching the goal for a softer motion
-      const envelope = Math.min(1, Math.abs(error) / (rampSettings.rampMaxStepDeg * 2));
-      const easedOutput = limitedOutput * Math.max(0.15, envelope);
+      // Symmetrische Envelope: Reduziert sowohl beim Start als auch beim Stoppen
+      // Berechne Fortschritt: 0 = Start, 1 = Ziel erreicht
+      let envelope = 1.0;
+      if (initialErrorRef.current !== null && initialErrorRef.current > 0.1) {
+        const progress = 1.0 - (absError / initialErrorRef.current);
+        // Symmetrische lineare Funktion: langsam am Anfang, schnell in der Mitte, langsam am Ende
+        // V-förmig: steigt linear von 0.2 auf 1.0 in der ersten Hälfte, fällt linear von 1.0 auf 0.2 in der zweiten Hälfte
+        const minEnvelope = 0.2; // Minimum für sanften Start/Stopp
+        const maxEnvelope = 1.0;  // Maximum für volle Geschwindigkeit in der Mitte
+        
+        if (progress < 0.5) {
+          // Erste Hälfte: linear von minEnvelope auf maxEnvelope
+          envelope = minEnvelope + (progress * 2) * (maxEnvelope - minEnvelope);
+        } else {
+          // Zweite Hälfte: linear von maxEnvelope auf minEnvelope
+          envelope = maxEnvelope - ((progress - 0.5) * 2) * (maxEnvelope - minEnvelope);
+        }
+      }
 
+      const easedOutput = limitedOutput * envelope;
       return { step: easedOutput, nextIntegral };
     };
 
@@ -1173,14 +1200,18 @@ class RotorService {
 
       let nextAz = hasAz ? status.azimuth : null;
       if (!azDone && hasAz && typeof status.azimuth === 'number') {
-        const { step, nextIntegral } = computeEasedStep(azError, azIntegral);
+        const azInitialErrorRef = { current: azInitialError };
+        const { step, nextIntegral } = computeEasedStep(azError, azIntegral, azInitialErrorRef);
+        azInitialError = azInitialErrorRef.current;
         azIntegral = nextIntegral;
         nextAz = clamp(status.azimuth + step, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
       }
 
       let nextEl = hasEl ? status.elevation : null;
       if (!elDone && hasEl && typeof status.elevation === 'number') {
-        const { step, nextIntegral } = computeEasedStep(elError, elIntegral);
+        const elInitialErrorRef = { current: elInitialError };
+        const { step, nextIntegral } = computeEasedStep(elError, elIntegral, elInitialErrorRef);
+        elInitialError = elInitialErrorRef.current;
         elIntegral = nextIntegral;
         nextEl = clamp(status.elevation + step, this.softLimits.elevationMin, this.softLimits.elevationMax);
       }
