@@ -49,3 +49,29 @@ test('SimulationSerialConnection clamps azimuth targets to 450° soft limit', ()
 
   assert.strictEqual(target, 450);
 });
+
+test('planAzimuthTarget prefers CW wrap when crossing 0° in 360° mode', () => {
+  const rotor = new RotorService();
+  rotor.maxAzimuthRange = 360;
+  rotor.softLimits.azimuthMax = 360;
+  rotor.currentStatus = { azimuth: 359 };
+
+  const plan = rotor.planAzimuthTarget(1);
+
+  assert.strictEqual(plan.direction, 'CW');
+  assert.strictEqual(plan.usesWrap, true);
+  assert.strictEqual(plan.commandValue, 1);
+});
+
+test('planAzimuthTarget reports wrap usage for targets over 360° in 450° mode', () => {
+  const rotor = new RotorService();
+  rotor.maxAzimuthRange = 450;
+  rotor.softLimits.azimuthMax = 450;
+  rotor.currentStatus = { azimuth: 10 };
+
+  const plan = rotor.planAzimuthTarget(380);
+
+  assert.strictEqual(plan.calibrated, 380);
+  assert.strictEqual(plan.direction, 'CCW');
+  assert.strictEqual(plan.usesWrap, true);
+});

@@ -65,6 +65,44 @@ function shortestAngularDelta(target, current, range) {
   return delta;
 }
 
+function computeAzimuthRoute({ current, target, range, min, max }) {
+  const clampedCurrent = clamp(current, min, max);
+  const clampedTarget = clamp(target, min, max);
+
+  const targetCandidates = generateAzimuthCandidates(clampedTarget, min, max, range);
+  const currentCandidates = generateAzimuthCandidates(clampedCurrent, min, max, range);
+
+  let bestTarget = clampedTarget;
+  let bestDelta = shortestAngularDelta(clampedTarget, clampedCurrent, range);
+  let bestDistance = Math.abs(bestDelta);
+  let bestWrap = Math.abs(bestDelta) !== Math.abs(clampedTarget - clampedCurrent) || clampedTarget >= 360;
+
+  targetCandidates.forEach((candidate) => {
+    currentCandidates.forEach((currentCandidate) => {
+      const normalizedDelta = shortestAngularDelta(candidate, currentCandidate, range);
+      const distance = Math.abs(normalizedDelta);
+      const wrapUsed =
+        Math.abs(normalizedDelta) !== Math.abs(candidate - currentCandidate) ||
+        candidate >= 360 ||
+        currentCandidate >= 360;
+
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestTarget = candidate;
+        bestDelta = normalizedDelta;
+        bestWrap = wrapUsed;
+      }
+    });
+  });
+
+  return {
+    target: bestTarget,
+    delta: bestDelta,
+    direction: bestDelta > 0 ? 'CW' : bestDelta < 0 ? 'CCW' : 'HOLD',
+    usesWrap: bestWrap
+  };
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1392,78 +1430,20 @@ class RotorService {
     const clampedTarget = clamp(target, this.softLimits.azimuthMin, effectiveMax);
     const current = typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : clampedTarget;
 
-    // Bei 450°-Modus: Berücksichtige auch Wege über 360° hinaus
-    // Beispiel: Von 340° zu 20° → 40° im Uhrzeigersinn (340→360→20), nicht 320° gegen den Uhrzeigersinn
-    let bestTarget = clampedTarget;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    
-    if (range === 450) {
-      // Bei 450°-Modus: Prüfe direkten Weg und Weg über 360° hinaus
-      // Beispiel: Von 340° zu 20° → 40° im Uhrzeigersinn (340→360→20), nicht 320° gegen den Uhrzeigersinn
-      const candidates = [clampedTarget];
-      
-      // Wenn Ziel < 360°: Prüfe auch Ziel + 360° (für Wege über 360° hinaus)
-      if (clampedTarget < 360) {
-        const candidateAbove = clampedTarget + 360;
-        if (candidateAbove <= effectiveMax) {
-          candidates.push(candidateAbove);
-        }
-      }
-      // Wenn Ziel >= 360°: Prüfe auch Ziel - 360° (für Wege unter 360°)
-      if (clampedTarget >= 360) {
-        candidates.push(clampedTarget - 360);
-      }
-      
-      candidates.forEach((candidate) => {
-        // Berechne kürzesten Weg (berücksichtige beide Richtungen im 450°-Bereich)
-        let distance;
-        if (candidate >= current) {
-          // Vorwärts: direkt oder über 450° hinaus
-          const forward = candidate - current;
-          const backward = current + (450 - candidate);
-          distance = Math.min(forward, backward);
-        } else {
-          // Rückwärts: direkt oder über 0° hinaus
-          const backward = current - candidate;
-          const forward = (450 - current) + candidate;
-          distance = Math.min(forward, backward);
-        }
-        
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestTarget = candidate;
-        }
-      });
-    } else {
-      // Bei 360°-Modus: Verwende die ursprüngliche Logik mit Candidates
-      const targetCandidates = generateAzimuthCandidates(
-        clampedTarget,
-        this.softLimits.azimuthMin,
-        this.softLimits.azimuthMax,
-        range
-      );
-      const currentCandidates = generateAzimuthCandidates(
-        current,
-        this.softLimits.azimuthMin,
-        this.softLimits.azimuthMax,
-        range
-      );
+    const route = computeAzimuthRoute({
+      current,
+      target: clampedTarget,
+      range,
+      min: this.softLimits.azimuthMin,
+      max: effectiveMax
+    });
 
-      targetCandidates.forEach((candidate) => {
-        currentCandidates.forEach((currentCandidate) => {
-          const distance = Math.abs(candidate - currentCandidate);
-          if (distance < bestDistance) {
-            bestDistance = distance;
-            bestTarget = candidate;
-          }
-        });
-      });
-    }
-
-    const rawCommand = bestTarget - this.azimuthOffset;
+    const rawCommand = route.target - this.azimuthOffset;
     return {
-      calibrated: bestTarget,
-      commandValue: wrapAzimuth(rawCommand, range)
+      calibrated: route.target,
+      commandValue: wrapAzimuth(rawCommand, range),
+      direction: route.direction,
+      usesWrap: route.usesWrap
     };
   }
 
@@ -1518,6 +1498,7 @@ if (typeof module !== 'undefined' && module.exports) {
     shortestAngularDelta,
     wrapAzimuth,
     clamp,
-    generateAzimuthCandidates
+    generateAzimuthCandidates,
+    computeAzimuthRoute
   };
 }
