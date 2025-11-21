@@ -250,14 +250,18 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   onGotoAzimuth: async (azimuth) => {
     if (!connected) {
       logAction('Azimut-Befehl verworfen, nicht verbunden', { azimuth });
+      controls.showRouteHint(null);
       return;
     }
     if (!validateTargets({ az: azimuth })) {
       logAction('Azimut-Befehl verworfen, Ziel ausserhalb Limits', { azimuth });
+      controls.showRouteHint(null);
       return;
     }
     logAction('Azimut-Befehl senden', { azimuth });
     try {
+      const plan = rotor.planAzimuthTarget(azimuth);
+      controls.showRouteHint(plan);
       await rotor.setAzimuth(azimuth);
     } catch (error) {
       reportError(error);
@@ -266,14 +270,18 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   onGotoAzimuthElevation: async (azimuth, elevation) => {
     if (!connected) {
       logAction('Azimut/Elevation-Befehl verworfen, nicht verbunden', { azimuth, elevation });
+      controls.showRouteHint(null);
       return;
     }
     if (!validateTargets({ az: azimuth, el: elevation })) {
       logAction('Azimut/Elevation-Befehl verworfen, Ziel ausserhalb Limits', { azimuth, elevation });
+      controls.showRouteHint(null);
       return;
     }
     logAction('Azimut/Elevation-Befehl senden', { azimuth, elevation });
     try {
+      const plan = rotor.planAzimuthTarget(azimuth);
+      controls.showRouteHint(plan);
       await rotor.setAzEl({ az: azimuth, el: elevation });
     } catch (error) {
       reportError(error);
@@ -908,6 +916,9 @@ function setConnectionState(state) {
   connected = state;
   logAction('Verbindungsstatus gesetzt', { connected: state });
   controls.setEnabled(state);
+  if (!state) {
+    controls.showRouteHint(null);
+  }
   connectBtn.disabled = state;
   disconnectBtn.disabled = !state;
   

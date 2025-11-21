@@ -151,6 +151,16 @@ button:active {
   line-height: 1.4;
 }
 
+.route-hint {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(67, 217, 173, 0.08);
+  color: #43d9ad;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .hidden {
   display: none !important;
 }

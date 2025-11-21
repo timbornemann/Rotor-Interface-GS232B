@@ -10,6 +10,7 @@ class Controls {
     this.azSpeedInput = root.querySelector('#azSpeedInput');
     this.elSpeedRange = root.querySelector('#elSpeedRange');
     this.elSpeedInput = root.querySelector('#elSpeedInput');
+    this.routeHint = root.querySelector('#routeHint');
 
     this.buttons = Array.from(root.querySelectorAll('[data-command]'));
     this.bindEvents();
@@ -106,5 +107,31 @@ class Controls {
       azimuthSpeedDegPerSec: az,
       elevationSpeedDegPerSec: el
     });
+  }
+
+  showRouteHint(routeInfo) {
+    if (!this.routeHint) {
+      return;
+    }
+    if (!routeInfo) {
+      this.routeHint.textContent = '';
+      this.routeHint.classList.add('hidden');
+      return;
+    }
+
+    const directionLabel =
+      routeInfo.direction === 'CW'
+        ? 'CW (im Uhrzeigersinn)'
+        : routeInfo.direction === 'CCW'
+          ? 'CCW (gegen Uhrzeigersinn)'
+          : 'Keine Bewegung nötig';
+    const wrapLabel = routeInfo.usesWrap ? 'mit 450°-Wrap' : 'ohne Wrap';
+
+    if (routeInfo.direction === 'HOLD') {
+      this.routeHint.textContent = `Route: ${directionLabel}`;
+    } else {
+      this.routeHint.textContent = `Route: ${directionLabel}, ${wrapLabel}`;
+    }
+    this.routeHint.classList.remove('hidden');
   }
 }
