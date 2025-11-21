@@ -527,12 +527,20 @@ Alle Fehlerantworten haben folgendes Format:
 
 ### cURL
 
-#### Kommando senden (mit Header)
+#### Variablen setzen (für alle Beispiele)
 
 ```bash
-curl -X POST http://localhost:8081/api/commands \
+API_BASE="http://localhost:8081"
+API_KEY="rotor-secret-key"
+```
+
+#### Legacy Endpunkte
+
+**Kommando senden (mit Header):**
+```bash
+curl -X POST "${API_BASE}/api/commands" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: rotor-secret-key" \
+  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "C2",
     "meta": {
@@ -541,68 +549,175 @@ curl -X POST http://localhost:8081/api/commands \
   }'
 ```
 
-#### Kommando senden (mit Query-Parameter)
-
+**Kommando senden (mit Query-Parameter):**
 ```bash
-curl -X POST "http://localhost:8081/api/commands?key=rotor-secret-key" \
+curl -X POST "${API_BASE}/api/commands?key=${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
-    "command": "M180"
+    "command": "M180",
+    "meta": {
+      "source": "curl_script"
+    }
   }'
 ```
 
-#### Alle Kommandos abrufen
-
+**Alle Kommandos abrufen (mit Header):**
 ```bash
-curl -X GET http://localhost:8081/api/commands \
-  -H "X-API-Key: rotor-secret-key"
+curl -X GET "${API_BASE}/api/commands" \
+  -H "X-API-Key: ${API_KEY}"
 ```
 
-#### Alle Kommandos abrufen (mit Query-Parameter)
-
+**Alle Kommandos abrufen (mit Query-Parameter):**
 ```bash
-curl -X GET "http://localhost:8081/api/commands?key=rotor-secret-key"
+curl -X GET "${API_BASE}/api/commands?key=${API_KEY}"
 ```
 
-#### Rotor über Server steuern
+#### Rotor-Steuerung - Vollständiger Workflow
 
-**Verfügbare Ports auflisten:**
+**1. Verfügbare Ports auflisten:**
 ```bash
-curl -X GET http://localhost:8081/api/rotor/ports \
-  -H "X-API-Key: rotor-secret-key"
+curl -X GET "${API_BASE}/api/rotor/ports" \
+  -H "X-API-Key: ${API_KEY}"
 ```
 
-**Verbindung herstellen:**
+**Alternative mit Query-Parameter:**
 ```bash
-curl -X POST http://localhost:8081/api/rotor/connect \
+curl -X GET "${API_BASE}/api/rotor/ports?key=${API_KEY}"
+```
+
+**2. Verbindung zu einem Port herstellen:**
+```bash
+curl -X POST "${API_BASE}/api/rotor/connect" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: rotor-secret-key" \
+  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "port": "COM3",
     "baudRate": 9600
   }'
 ```
 
-**Status abrufen:**
+**Alternative mit Query-Parameter:**
 ```bash
-curl -X GET http://localhost:8081/api/rotor/status \
-  -H "X-API-Key: rotor-secret-key"
+curl -X POST "${API_BASE}/api/rotor/connect?key=${API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "port": "COM3",
+    "baudRate": 9600
+  }'
 ```
 
-**Befehl senden:**
+**3. Aktuellen Status abrufen:**
 ```bash
-curl -X POST http://localhost:8081/api/rotor/command \
+curl -X GET "${API_BASE}/api/rotor/status" \
+  -H "X-API-Key: ${API_KEY}"
+```
+
+**4. Befehle an den Rotor senden:**
+
+**Status abfragen:**
+```bash
+curl -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: rotor-secret-key" \
+  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "C2"
   }'
 ```
 
-**Verbindung trennen:**
+**Azimut auf 180° setzen:**
 ```bash
-curl -X POST http://localhost:8081/api/rotor/disconnect \
-  -H "X-API-Key: rotor-secret-key"
+curl -X POST "${API_BASE}/api/rotor/command" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{
+    "command": "M180"
+  }'
+```
+
+**Azimut und Elevation setzen:**
+```bash
+curl -X POST "${API_BASE}/api/rotor/command" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{
+    "command": "W180 045"
+  }'
+```
+
+**Azimut nach rechts drehen:**
+```bash
+curl -X POST "${API_BASE}/api/rotor/command" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{
+    "command": "R"
+  }'
+```
+
+**Azimut stoppen:**
+```bash
+curl -X POST "${API_BASE}/api/rotor/command" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{
+    "command": "A"
+  }'
+```
+
+**Alles stoppen:**
+```bash
+curl -X POST "${API_BASE}/api/rotor/command" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{
+    "command": "S"
+  }'
+```
+
+**5. Verbindung trennen:**
+```bash
+curl -X POST "${API_BASE}/api/rotor/disconnect" \
+  -H "X-API-Key: ${API_KEY}"
+```
+
+#### Vollständiges Beispiel-Script
+
+```bash
+#!/bin/bash
+# Vollständiges Beispiel: Rotor steuern
+
+API_BASE="http://localhost:8081"
+API_KEY="rotor-secret-key"
+
+echo "=== Verfügbare Ports ==="
+curl -s -X GET "${API_BASE}/api/rotor/ports" \
+  -H "X-API-Key: ${API_KEY}" | jq '.'
+
+echo -e "\n=== Verbindung herstellen ==="
+curl -s -X POST "${API_BASE}/api/rotor/connect" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{"port": "COM3", "baudRate": 9600}' | jq '.'
+
+echo -e "\n=== Status abrufen ==="
+curl -s -X GET "${API_BASE}/api/rotor/status" \
+  -H "X-API-Key: ${API_KEY}" | jq '.'
+
+echo -e "\n=== Status abfragen (C2) ==="
+curl -s -X POST "${API_BASE}/api/rotor/command" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${API_KEY}" \
+  -d '{"command": "C2"}' | jq '.'
+
+sleep 1
+
+echo -e "\n=== Status erneut abrufen ==="
+curl -s -X GET "${API_BASE}/api/rotor/status" \
+  -H "X-API-Key: ${API_KEY}" | jq '.'
+
+echo -e "\n=== Verbindung trennen ==="
+curl -s -X POST "${API_BASE}/api/rotor/disconnect" \
+  -H "X-API-Key: ${API_KEY}" | jq '.'
 ```
 
 ---
@@ -647,20 +762,23 @@ if response.status_code == 200:
         print(f"  - {cmd['command']} ({cmd['received_at']})")
 ```
 
-#### Klasse für einfache Nutzung
+#### Vollständige API-Klasse mit allen Funktionen
 
 ```python
 import requests
 from typing import Dict, List, Optional
 
 class RotorAPI:
+    """Vollständige API-Klasse für Rotor Interface GS232B."""
+    
     def __init__(self, base_url: str = "http://localhost:8081", api_key: str = "rotor-secret-key"):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
         self.headers = {"X-API-Key": api_key}
     
+    # Legacy Endpunkte
     def send_command(self, command: str, meta: Optional[Dict] = None) -> Dict:
-        """Sendet einen Rotor-Befehl."""
+        """Sendet einen Rotor-Befehl (Legacy-Endpunkt)."""
         payload = {
             "command": command,
             "meta": meta or {}
@@ -674,7 +792,7 @@ class RotorAPI:
         return response.json()
     
     def get_commands(self) -> List[Dict]:
-        """Ruft alle gespeicherten Kommandos ab."""
+        """Ruft alle gespeicherten Kommandos ab (Legacy-Endpunkt)."""
         response = requests.get(
             f"{self.base_url}/api/commands",
             headers=self.headers
@@ -686,56 +804,205 @@ class RotorAPI:
         """Ruft das letzte gesendete Kommando ab."""
         commands = self.get_commands()
         return commands[-1] if commands else None
+    
+    # Rotor-Steuerung Endpunkte
+    def list_ports(self) -> List[Dict]:
+        """Listet alle verfügbaren COM-Ports auf dem Server auf."""
+        response = requests.get(
+            f"{self.base_url}/api/rotor/ports",
+            headers=self.headers
+        )
+        response.raise_for_status()
+        return response.json()["ports"]
+    
+    def connect(self, port: str, baud_rate: int = 9600) -> Dict:
+        """Stellt eine Verbindung zu einem COM-Port her."""
+        payload = {
+            "port": port,
+            "baudRate": baud_rate
+        }
+        response = requests.post(
+            f"{self.base_url}/api/rotor/connect",
+            json=payload,
+            headers=self.headers
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    def disconnect(self) -> Dict:
+        """Trennt die aktuelle Verbindung zum COM-Port."""
+        response = requests.post(
+            f"{self.base_url}/api/rotor/disconnect",
+            headers=self.headers
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    def send_rotor_command(self, command: str) -> Dict:
+        """Sendet einen Befehl direkt an den Rotor-Controller."""
+        payload = {"command": command}
+        response = requests.post(
+            f"{self.base_url}/api/rotor/command",
+            json=payload,
+            headers=self.headers
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    def get_status(self) -> Dict:
+        """Ruft den aktuellen Status des Rotor-Controllers ab."""
+        response = requests.get(
+            f"{self.base_url}/api/rotor/status",
+            headers=self.headers
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    def is_connected(self) -> bool:
+        """Prüft, ob eine Verbindung zum Rotor besteht."""
+        status = self.get_status()
+        return status.get("connected", False)
+    
+    def get_current_position(self) -> Optional[Dict]:
+        """Ruft die aktuelle Position (Azimut/Elevation) ab."""
+        status = self.get_status()
+        if status.get("connected") and "status" in status:
+            return {
+                "azimuth": status["status"].get("azimuth"),
+                "elevation": status["status"].get("elevation"),
+                "azimuthRaw": status["status"].get("azimuthRaw"),
+                "elevationRaw": status["status"].get("elevationRaw")
+            }
+        return None
 
-# Verwendung
+# Verwendung - Legacy Endpunkte
 api = RotorAPI()
 
-# Status abfragen
-api.send_command("C2")
+# Status abfragen (Legacy)
+api.send_command("C2", meta={"source": "python_script"})
 
-# Azimut auf 180° setzen
+# Azimut auf 180° setzen (Legacy)
 api.send_command("M180", meta={"source": "tracking_script"})
 
 # Alle Kommandos anzeigen
 for cmd in api.get_commands():
     print(f"{cmd['received_at']}: {cmd['command']}")
+
+# Verwendung - Rotor-Steuerung
+print("\n=== Verfügbare Ports ===")
+ports = api.list_ports()
+for port in ports:
+    print(f"  - {port['path']}: {port['friendlyName']}")
+
+if ports:
+    print("\n=== Verbindung herstellen ===")
+    result = api.connect("COM3", baud_rate=9600)
+    print(f"Verbindung: {result}")
+    
+    print("\n=== Status abrufen ===")
+    status = api.get_status()
+    print(f"Verbunden: {status.get('connected')}")
+    if status.get('connected'):
+        print(f"Port: {status.get('port')}")
+        print(f"Baudrate: {status.get('baudRate')}")
+    
+    print("\n=== Befehle senden ===")
+    api.send_rotor_command("C2")  # Status abfragen
+    
+    import time
+    time.sleep(1)  # Warten auf Antwort
+    
+    position = api.get_current_position()
+    if position:
+        print(f"Aktuelle Position: Az={position['azimuth']}°, El={position['elevation']}°")
+    
+    api.send_rotor_command("M180")  # Azimut auf 180° setzen
+    api.send_rotor_command("W180 045")  # Azimut 180°, Elevation 45°
+    api.send_rotor_command("R")  # Azimut nach rechts
+    api.send_rotor_command("A")  # Azimut stoppen
+    api.send_rotor_command("S")  # Alles stoppen
+    
+    print("\n=== Verbindung trennen ===")
+    result = api.disconnect()
+    print(f"Getrennt: {result}")
 ```
 
-#### Rotor über Server steuern
+#### Einfache Beispiele ohne Klasse
 
+**Verfügbare Ports auflisten:**
 ```python
 import requests
 
 API_BASE = "http://localhost:8081"
 API_KEY = "rotor-secret-key"
 
-# Verfügbare Ports auflisten
 response = requests.get(
     f"{API_BASE}/api/rotor/ports",
     headers={"X-API-Key": API_KEY}
 )
 ports = response.json()["ports"]
-print("Verfügbare Ports:", [p["path"] for p in ports])
+print("Verfügbare Ports:")
+for port in ports:
+    print(f"  - {port['path']}: {port['friendlyName']}")
+```
 
-# Verbindung herstellen
+**Verbindung herstellen:**
+```python
 response = requests.post(
     f"{API_BASE}/api/rotor/connect",
     json={"port": "COM3", "baudRate": 9600},
     headers={"X-API-Key": API_KEY}
 )
-print("Verbindung:", response.json())
+if response.status_code == 200:
+    print("Verbindung hergestellt:", response.json())
+else:
+    print(f"Fehler: {response.status_code} - {response.json()}")
+```
 
-# Status abrufen
+**Status abrufen:**
+```python
 response = requests.get(
     f"{API_BASE}/api/rotor/status",
     headers={"X-API-Key": API_KEY}
 )
 status = response.json()
-if status["connected"]:
-    print(f"Status: {status['status']}")
+if status.get("connected"):
+    print(f"Verbunden: {status['port']} @ {status['baudRate']} baud")
+    if "status" in status:
+        pos = status["status"]
+        print(f"Position: Az={pos.get('azimuth')}°, El={pos.get('elevation')}°")
+else:
+    print("Nicht verbunden")
+```
 
-# Befehle senden
-commands = ["C2", "M180", "C2"]
+**Befehle senden:**
+```python
+# Status abfragen
+response = requests.post(
+    f"{API_BASE}/api/rotor/command",
+    json={"command": "C2"},
+    headers={"X-API-Key": API_KEY}
+)
+print("Status abgefragt:", response.json())
+
+# Azimut auf 180° setzen
+response = requests.post(
+    f"{API_BASE}/api/rotor/command",
+    json={"command": "M180"},
+    headers={"X-API-Key": API_KEY}
+)
+print("Azimut gesetzt:", response.json())
+
+# Azimut und Elevation setzen
+response = requests.post(
+    f"{API_BASE}/api/rotor/command",
+    json={"command": "W180 045"},
+    headers={"X-API-Key": API_KEY}
+)
+print("Position gesetzt:", response.json())
+
+# Bewegungsbefehle
+commands = ["R", "A", "U", "E", "S"]  # Rechts, Azimut-Stopp, Hoch, Elevation-Stopp, Alles-Stopp
 for cmd in commands:
     response = requests.post(
         f"{API_BASE}/api/rotor/command",
@@ -743,13 +1010,114 @@ for cmd in commands:
         headers={"X-API-Key": API_KEY}
     )
     print(f"Befehl {cmd} gesendet: {response.json()}")
+```
 
-# Verbindung trennen
+**Verbindung trennen:**
+```python
 response = requests.post(
     f"{API_BASE}/api/rotor/disconnect",
     headers={"X-API-Key": API_KEY}
 )
-print("Getrennt:", response.json())
+print("Verbindung getrennt:", response.json())
+```
+
+#### Vollständiges Beispiel-Script
+
+```python
+#!/usr/bin/env python3
+"""Vollständiges Beispiel: Rotor über API steuern."""
+
+import requests
+import time
+
+API_BASE = "http://localhost:8081"
+API_KEY = "rotor-secret-key"
+HEADERS = {"X-API-Key": API_KEY}
+
+def main():
+    print("=== Verfügbare Ports ===")
+    response = requests.get(f"{API_BASE}/api/rotor/ports", headers=HEADERS)
+    if response.status_code == 200:
+        ports = response.json()["ports"]
+        for port in ports:
+            print(f"  - {port['path']}: {port['friendlyName']}")
+        
+        if not ports:
+            print("  Keine Ports verfügbar")
+            return
+        
+        # Verwende ersten verfügbaren Port
+        selected_port = ports[0]["path"]
+        print(f"\n=== Verbindung zu {selected_port} herstellen ===")
+        
+        response = requests.post(
+            f"{API_BASE}/api/rotor/connect",
+            json={"port": selected_port, "baudRate": 9600},
+            headers=HEADERS
+        )
+        
+        if response.status_code == 200:
+            print(f"  Erfolg: {response.json()}")
+            
+            print("\n=== Status abrufen ===")
+            response = requests.get(f"{API_BASE}/api/rotor/status", headers=HEADERS)
+            if response.status_code == 200:
+                status = response.json()
+                print(f"  Verbunden: {status.get('connected')}")
+                if status.get('connected'):
+                    print(f"  Port: {status.get('port')}")
+                    print(f"  Baudrate: {status.get('baudRate')}")
+            
+            print("\n=== Befehle senden ===")
+            
+            # Status abfragen
+            print("  Sende C2 (Status abfragen)...")
+            response = requests.post(
+                f"{API_BASE}/api/rotor/command",
+                json={"command": "C2"},
+                headers=HEADERS
+            )
+            print(f"  Antwort: {response.json()}")
+            
+            time.sleep(1)  # Warten auf Antwort
+            
+            # Status erneut abrufen
+            response = requests.get(f"{API_BASE}/api/rotor/status", headers=HEADERS)
+            if response.status_code == 200:
+                status = response.json()
+                if status.get("connected") and "status" in status:
+                    pos = status["status"]
+                    print(f"  Aktuelle Position: Az={pos.get('azimuth')}°, El={pos.get('elevation')}°")
+            
+            # Azimut auf 180° setzen
+            print("\n  Sende M180 (Azimut auf 180°)...")
+            response = requests.post(
+                f"{API_BASE}/api/rotor/command",
+                json={"command": "M180"},
+                headers=HEADERS
+            )
+            print(f"  Antwort: {response.json()}")
+            
+            time.sleep(2)  # Warten auf Bewegung
+            
+            # Status erneut abrufen
+            response = requests.get(f"{API_BASE}/api/rotor/status", headers=HEADERS)
+            if response.status_code == 200:
+                status = response.json()
+                if status.get("connected") and "status" in status:
+                    pos = status["status"]
+                    print(f"  Neue Position: Az={pos.get('azimuth')}°, El={pos.get('elevation')}°")
+            
+            print("\n=== Verbindung trennen ===")
+            response = requests.post(f"{API_BASE}/api/rotor/disconnect", headers=HEADERS)
+            print(f"  {response.json()}")
+        else:
+            print(f"  Fehler: {response.status_code} - {response.json()}")
+    else:
+        print(f"Fehler beim Abrufen der Ports: {response.status_code}")
+
+if __name__ == "__main__":
+    main()
 ```
 
 ---
