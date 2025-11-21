@@ -7,8 +7,15 @@ Diese Dokumentation beschreibt die REST-API des Rotor Interface GS232B Servers. 
 - [Übersicht](#übersicht)
 - [Authentifizierung](#authentifizierung)
 - [Endpunkte](#endpunkte)
-  - [POST /api/commands](#post-apicommands)
-  - [GET /api/commands](#get-apicommands)
+  - [Legacy Endpunkte](#legacy-endpunkte)
+    - [POST /api/commands](#post-apicommands)
+    - [GET /api/commands](#get-apicommands)
+  - [Rotor-Steuerung](#rotor-steuerung)
+    - [GET /api/rotor/ports](#get-apirotorports)
+    - [POST /api/rotor/connect](#post-apirotorconnect)
+    - [POST /api/rotor/disconnect](#post-apirotordisconnect)
+    - [POST /api/rotor/command](#post-apirotorcommand)
+    - [GET /api/rotor/status](#get-apirotorstatus)
 - [Fehlerbehandlung](#fehlerbehandlung)
 - [Beispiele](#beispiele)
   - [cURL](#curl)
@@ -84,7 +91,11 @@ Content-Type: application/json
 
 ## Endpunkte
 
-### POST /api/commands
+### Legacy Endpunkte
+
+Die folgenden Endpunkte sind für die Kompatibilität vorhanden, werden aber für neue Implementierungen nicht empfohlen.
+
+#### POST /api/commands
 
 Sendet einen Rotor-Befehl an den Server. Der Befehl wird im internen Log gespeichert.
 
@@ -185,7 +196,7 @@ Tritt auf, wenn der Endpunkt nicht existiert.
 
 ---
 
-### GET /api/commands
+#### GET /api/commands
 
 Ruft alle bisher gesendeten Kommandos aus dem internen Log ab.
 
@@ -240,6 +251,250 @@ Ruft alle bisher gesendeten Kommandos aus dem internen Log ab.
 Tritt auf, wenn der API-Key fehlt oder ungültig ist.
 
 **Hinweis:** Das Log wird im Speicher gehalten und geht beim Neustart des Servers verloren.
+
+---
+
+### Rotor-Steuerung
+
+Die folgenden Endpunkte ermöglichen die direkte Steuerung des Rotor-Controllers über COM-Ports, die am Server-Rechner angeschlossen sind. Dies ist besonders nützlich, wenn die Web-Anwendung von einem anderen Rechner aus aufgerufen wird.
+
+#### GET /api/rotor/ports
+
+Listet alle verfügbaren COM-Ports auf dem Server-Rechner auf.
+
+##### Request
+
+**URL:** `/api/rotor/ports`
+
+**Method:** `GET`
+
+**Headers:**
+- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
+
+##### Response
+
+**Status Code:** `200 OK`
+
+**Body (JSON):**
+```json
+{
+  "ports": [
+    {
+      "path": "COM3",
+      "friendlyName": "COM3 - USB Serial Port",
+      "description": "USB Serial Port",
+      "hwid": "USB VID:PID=1234:5678"
+    }
+  ]
+}
+```
+
+**Response-Felder:**
+- `ports` (array): Liste aller verfügbaren COM-Ports
+  - `path` (string): Port-Name (z.B. "COM3" oder "/dev/ttyUSB0")
+  - `friendlyName` (string): Anzeigename
+  - `description` (string): Port-Beschreibung
+  - `hwid` (string): Hardware-ID
+
+**Hinweis:** Erfordert installiertes `pyserial`. Wenn nicht installiert, wird ein leeres Array zurückgegeben.
+
+---
+
+#### POST /api/rotor/connect
+
+Stellt eine Verbindung zu einem COM-Port her.
+
+##### Request
+
+**URL:** `/api/rotor/connect`
+
+**Method:** `POST`
+
+**Headers:**
+- `Content-Type: application/json` (erforderlich)
+- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
+
+**Body (JSON):**
+```json
+{
+  "port": "COM3",
+  "baudRate": 9600
+}
+```
+
+**Body-Felder:**
+- `port` (string, erforderlich): COM-Port-Name (z.B. "COM3", "/dev/ttyUSB0")
+- `baudRate` (number, optional): Baudrate (Standard: 9600)
+
+##### Response
+
+**Status Code:** `200 OK` (bei Erfolg)
+
+**Body (JSON):**
+```json
+{
+  "status": "ok",
+  "port": "COM3",
+  "baudRate": 9600
+}
+```
+
+##### Fehlerantworten
+
+**400 Bad Request:**
+```json
+{
+  "error": "port must be a non-empty string"
+}
+```
+oder
+```json
+{
+  "error": "Failed to connect to COM3: [serial error]"
+}
+```
+
+**Hinweis:** Nur eine Verbindung kann gleichzeitig aktiv sein. Eine bestehende Verbindung wird automatisch getrennt.
+
+---
+
+#### POST /api/rotor/disconnect
+
+Trennt die aktuelle Verbindung zum COM-Port.
+
+##### Request
+
+**URL:** `/api/rotor/disconnect`
+
+**Method:** `POST`
+
+**Headers:**
+- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
+
+##### Response
+
+**Status Code:** `200 OK`
+
+**Body (JSON):**
+```json
+{
+  "status": "ok"
+}
+```
+
+---
+
+#### POST /api/rotor/command
+
+Sendet einen Befehl an den Rotor-Controller.
+
+##### Request
+
+**URL:** `/api/rotor/command`
+
+**Method:** `POST`
+
+**Headers:**
+- `Content-Type: application/json` (erforderlich)
+- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
+
+**Body (JSON):**
+```json
+{
+  "command": "C2"
+}
+```
+
+**Body-Felder:**
+- `command` (string, erforderlich): GS-232B Befehl (z.B. "C2", "M180", "R")
+
+##### Response
+
+**Status Code:** `200 OK`
+
+**Body (JSON):**
+```json
+{
+  "status": "ok"
+}
+```
+
+##### Fehlerantworten
+
+**400 Bad Request:**
+```json
+{
+  "error": "not connected"
+}
+```
+Tritt auf, wenn keine Verbindung zum COM-Port besteht.
+
+**400 Bad Request:**
+```json
+{
+  "error": "command must be a non-empty string"
+}
+```
+Tritt auf, wenn `command` fehlt oder leer ist.
+
+**Hinweis:** Der Befehl wird automatisch mit `\r` (Carriage Return) abgeschlossen, falls nicht bereits vorhanden.
+
+---
+
+#### GET /api/rotor/status
+
+Ruft den aktuellen Status des Rotor-Controllers ab.
+
+##### Request
+
+**URL:** `/api/rotor/status`
+
+**Method:** `GET`
+
+**Headers:**
+- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
+
+##### Response
+
+**Status Code:** `200 OK`
+
+**Body (JSON) - Verbunden:**
+```json
+{
+  "connected": true,
+  "port": "COM3",
+  "baudRate": 9600,
+  "status": {
+    "raw": "AZ=123 EL=045",
+    "timestamp": 1705320000000,
+    "azimuthRaw": 123,
+    "azimuth": 123,
+    "elevationRaw": 45,
+    "elevation": 45
+  }
+}
+```
+
+**Body (JSON) - Nicht verbunden:**
+```json
+{
+  "connected": false
+}
+```
+
+**Response-Felder:**
+- `connected` (boolean): Ob eine Verbindung besteht
+- `port` (string, optional): COM-Port-Name (nur wenn verbunden)
+- `baudRate` (number, optional): Baudrate (nur wenn verbunden)
+- `status` (object, optional): Aktueller Status (nur wenn verbunden)
+  - `raw` (string): Rohe Antwort vom Rotor
+  - `timestamp` (number): Zeitstempel in Millisekunden
+  - `azimuthRaw` (number, optional): Roher Azimut-Wert
+  - `azimuth` (number, optional): Kalibrierter Azimut-Wert
+  - `elevationRaw` (number, optional): Roher Elevation-Wert
+  - `elevation` (number, optional): Kalibrierter Elevation-Wert
+
+**Hinweis:** Der Status wird kontinuierlich aktualisiert, wenn Daten vom Rotor empfangen werden. Die Web-Anwendung pollt diesen Endpunkt automatisch alle 500ms.
 
 ---
 
@@ -307,6 +562,47 @@ curl -X GET http://localhost:8081/api/commands \
 
 ```bash
 curl -X GET "http://localhost:8081/api/commands?key=rotor-secret-key"
+```
+
+#### Rotor über Server steuern
+
+**Verfügbare Ports auflisten:**
+```bash
+curl -X GET http://localhost:8081/api/rotor/ports \
+  -H "X-API-Key: rotor-secret-key"
+```
+
+**Verbindung herstellen:**
+```bash
+curl -X POST http://localhost:8081/api/rotor/connect \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: rotor-secret-key" \
+  -d '{
+    "port": "COM3",
+    "baudRate": 9600
+  }'
+```
+
+**Status abrufen:**
+```bash
+curl -X GET http://localhost:8081/api/rotor/status \
+  -H "X-API-Key: rotor-secret-key"
+```
+
+**Befehl senden:**
+```bash
+curl -X POST http://localhost:8081/api/rotor/command \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: rotor-secret-key" \
+  -d '{
+    "command": "C2"
+  }'
+```
+
+**Verbindung trennen:**
+```bash
+curl -X POST http://localhost:8081/api/rotor/disconnect \
+  -H "X-API-Key: rotor-secret-key"
 ```
 
 ---
@@ -403,6 +699,57 @@ api.send_command("M180", meta={"source": "tracking_script"})
 # Alle Kommandos anzeigen
 for cmd in api.get_commands():
     print(f"{cmd['received_at']}: {cmd['command']}")
+```
+
+#### Rotor über Server steuern
+
+```python
+import requests
+
+API_BASE = "http://localhost:8081"
+API_KEY = "rotor-secret-key"
+
+# Verfügbare Ports auflisten
+response = requests.get(
+    f"{API_BASE}/api/rotor/ports",
+    headers={"X-API-Key": API_KEY}
+)
+ports = response.json()["ports"]
+print("Verfügbare Ports:", [p["path"] for p in ports])
+
+# Verbindung herstellen
+response = requests.post(
+    f"{API_BASE}/api/rotor/connect",
+    json={"port": "COM3", "baudRate": 9600},
+    headers={"X-API-Key": API_KEY}
+)
+print("Verbindung:", response.json())
+
+# Status abrufen
+response = requests.get(
+    f"{API_BASE}/api/rotor/status",
+    headers={"X-API-Key": API_KEY}
+)
+status = response.json()
+if status["connected"]:
+    print(f"Status: {status['status']}")
+
+# Befehle senden
+commands = ["C2", "M180", "C2"]
+for cmd in commands:
+    response = requests.post(
+        f"{API_BASE}/api/rotor/command",
+        json={"command": cmd},
+        headers={"X-API-Key": API_KEY}
+    )
+    print(f"Befehl {cmd} gesendet: {response.json()}")
+
+# Verbindung trennen
+response = requests.post(
+    f"{API_BASE}/api/rotor/disconnect",
+    headers={"X-API-Key": API_KEY}
+)
+print("Getrennt:", response.json())
 ```
 
 ---
@@ -611,11 +958,35 @@ python python_server.py --port 9000 --key mein-geheimer-schlüssel
 start_server.bat
 ```
 
+### Abhängigkeiten
+
+Für COM-Port-Funktionalität ist `pyserial` erforderlich:
+
+```bash
+pip install -r requirements.txt
+```
+
+oder
+
+```bash
+pip install pyserial
+```
+
 ### Standardwerte
 
 - **Port:** 8081
 - **API-Key:** `rotor-secret-key`
 - **Host:** `0.0.0.0` (alle Interfaces)
+
+### Netzwerk-Zugriff
+
+Der Server läuft standardmäßig auf `0.0.0.0`, was bedeutet, dass er von anderen Rechnern im Netzwerk erreichbar ist. Um die Web-Anwendung von einem anderen Rechner aus zu nutzen:
+
+1. Starte den Server auf dem Rechner, an dem der COM-Port angeschlossen ist
+2. Öffne die Web-Anwendung von einem anderen Rechner: `http://<SERVER-IP>:8081`
+3. Die Anwendung erkennt automatisch, dass Web Serial nicht verfügbar ist und verwendet den Server-Modus
+4. Wähle einen COM-Port aus der Liste (markiert mit `[Server]`)
+5. Die Steuerung erfolgt über die API-Endpunkte
 
 ---
 

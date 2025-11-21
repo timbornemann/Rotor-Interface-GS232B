@@ -319,6 +319,13 @@ async function refreshPorts() {
         option.dataset.simulated = 'true';
         option.textContent = 'Simulierter Rotor';
       }
+      if (port.serverPort) {
+        option.dataset.serverPort = 'true';
+        // Markiere Server-Ports visuell
+        if (!port.simulated) {
+          option.textContent = `[Server] ${port.friendlyName || port.path}`;
+        }
+      }
       portSelect.appendChild(option);
     });
 
@@ -350,17 +357,22 @@ async function handleConnect() {
     return;
   }
 
+  // Prüfe, ob es ein Server-Port ist (nicht simuliert und nicht Web Serial)
+  const isServerPort = selectedOption?.dataset.serverPort === 'true' || 
+                       (!simulation && !rotor.supportsWebSerial() && path !== SIMULATED_PORT_ID);
+  const useServer = isServerPort || (!simulation && !rotor.supportsWebSerial());
+
   try {
-    logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode });
+    logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, useServer });
     applyLimitsToRotor();
     applyOffsetsToRotor();
-    await rotor.connect({ path, baudRate, simulation });
+    await rotor.connect({ path, baudRate, simulation, useServer });
     await rotor.setMode(azimuthMode);
     rotor.startPolling(pollingIntervalMs);
     connected = true;
     config = configStore.save({ baudRate, pollingIntervalMs, simulation, portPath: path, azimuthMode });
     setConnectionState(true);
-    logAction('Verbindung hergestellt', { path, baudRate, pollingIntervalMs, simulation, azimuthMode });
+    logAction('Verbindung hergestellt', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, useServer });
   } catch (error) {
     reportError(error);
     setConnectionState(false);

@@ -361,6 +361,141 @@ class SimulationSerialConnection extends SerialConnection {
   }
 }
 
+class ServerConnection extends SerialConnection {
+  constructor(apiBase, apiKey) {
+    super();
+    this.apiBase = apiBase || (window.location.origin);
+    this.apiKey = apiKey || 'rotor-secret-key';
+    this.isConnected = false;
+    this.statusPollTimer = null;
+  }
+
+  async open(options) {
+    const port = options?.port;
+    const baudRate = options?.baudRate || 9600;
+    
+    if (!port) {
+      throw new Error('Port ist erforderlich für Server-Verbindung');
+    }
+
+    try {
+      const response = await fetch(`${this.apiBase}/api/rotor/connect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey
+        },
+        body: JSON.stringify({ port, baudRate })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+
+      this.isConnected = true;
+      console.log('[RotorService][Server] Verbunden', { port, baudRate });
+      
+      // Starte Status-Polling
+      this.startStatusPolling();
+    } catch (error) {
+      console.error('[RotorService][Server] Verbindungsfehler', error);
+      throw error;
+    }
+  }
+
+  async close() {
+    this.isConnected = false;
+    if (this.statusPollTimer) {
+      clearInterval(this.statusPollTimer);
+      this.statusPollTimer = null;
+    }
+
+    try {
+      const response = await fetch(`${this.apiBase}/api/rotor/disconnect`, {
+        method: 'POST',
+        headers: {
+          'X-API-Key': this.apiKey
+        }
+      });
+
+      if (!response.ok) {
+        console.warn('[RotorService][Server] Fehler beim Trennen', response.status);
+      }
+    } catch (error) {
+      console.error('[RotorService][Server] Fehler beim Trennen', error);
+    }
+
+    console.log('[RotorService][Server] Verbindung getrennt');
+  }
+
+  isOpen() {
+    return this.isConnected;
+  }
+
+  async writeCommand(command) {
+    if (!this.isConnected) {
+      throw new Error('Nicht mit Server verbunden');
+    }
+
+    try {
+      const response = await fetch(`${this.apiBase}/api/rotor/command`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.apiKey
+        },
+        body: JSON.stringify({ command })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+
+      console.log('[RotorService][Server] Befehl gesendet', { command });
+    } catch (error) {
+      console.error('[RotorService][Server] Fehler beim Senden', error);
+      throw error;
+    }
+  }
+
+  startStatusPolling() {
+    if (this.statusPollTimer) {
+      clearInterval(this.statusPollTimer);
+    }
+
+    const pollStatus = async () => {
+      if (!this.isConnected) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${this.apiBase}/api/rotor/status`, {
+          headers: {
+            'X-API-Key': this.apiKey
+          }
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+        if (data.connected && data.status) {
+          this.emitData(data.status.raw || '');
+        }
+      } catch (error) {
+        console.error('[RotorService][Server] Status-Polling-Fehler', error);
+      }
+    };
+
+    // Sofort abfragen, dann alle 500ms
+    pollStatus();
+    this.statusPollTimer = setInterval(pollStatus, 500);
+  }
+}
+
 class WebSerialConnection extends SerialConnection {
   constructor(port) {
     super();
@@ -484,6 +619,9 @@ class RotorService {
   constructor() {
     this.serial = null;
     this.simulationMode = true;
+    this.connectionMode = 'local'; // 'local', 'server', 'simulation'
+    this.apiBase = window.location.origin;
+    this.apiKey = 'rotor-secret-key';
     this.maxAzimuthRange = 360;
     this.azimuthOffset = 0;
     this.elevationOffset = 0;
@@ -520,6 +658,31 @@ class RotorService {
 
   async listPorts() {
     const ports = [];
+    
+    // Server-Ports abrufen, wenn wir im Server-Modus sind oder wenn Web Serial nicht verfügbar ist
+    try {
+      const response = await fetch(`${this.apiBase}/api/rotor/ports`, {
+        headers: {
+          'X-API-Key': this.apiKey
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        data.ports.forEach((port) => {
+          ports.push({
+            path: port.path,
+            friendlyName: port.friendlyName || port.path,
+            simulated: false,
+            serverPort: true
+          });
+        });
+      }
+    } catch (error) {
+      console.warn('[RotorService] Konnte Server-Ports nicht abrufen', error);
+    }
+    
+    // Web Serial Ports (nur wenn verfügbar)
     if (supportsWebSerial()) {
       const grantedPorts = await navigator.serial.getPorts();
       grantedPorts.forEach((port) => {
@@ -528,15 +691,18 @@ class RotorService {
         ports.push({
           path: id,
           friendlyName: formatPortLabel(port, id),
-          simulated: false
+          simulated: false,
+          serverPort: false
         });
       });
     }
+    
     console.log('[RotorService] Gefundene Ports', { ports: ports.map((port) => ({ ...port })) });
     ports.push({
       path: SIMULATED_PORT_ID,
       friendlyName: 'Simulierter Rotor',
-      simulated: true
+      simulated: true,
+      serverPort: false
     });
     return ports;
   }
@@ -556,33 +722,45 @@ class RotorService {
 
   async connect(config) {
     const useSimulation =
-      Boolean(config.simulation) || config.path === SIMULATED_PORT_ID || !supportsWebSerial();
+      Boolean(config.simulation) || config.path === SIMULATED_PORT_ID;
+    const useServer = Boolean(config.useServer) || (config.path && !useSimulation && !supportsWebSerial());
 
-    console.log('[RotorService] Verbindungsaufbau gestartet', { config, useSimulation });
+    console.log('[RotorService] Verbindungsaufbau gestartet', { config, useSimulation, useServer });
     await this.disconnect();
     this.maxAzimuthRange = 360;
     this.currentStatus = null;
 
     if (useSimulation) {
       this.simulationMode = true;
+      this.connectionMode = 'simulation';
       this.serial = new SimulationSerialConnection();
+    } else if (useServer) {
+      this.simulationMode = false;
+      this.connectionMode = 'server';
+      this.serial = new ServerConnection(this.apiBase, this.apiKey);
     } else {
       const port = this.portRegistry.get(config.path);
       if (!port) {
         throw new Error('Der ausgewaehlte Port ist nicht mehr verfügbar. Bitte Zugriff erneut erlauben.');
       }
       this.simulationMode = false;
+      this.connectionMode = 'local';
       this.serial = new WebSerialConnection(port);
     }
 
     this.serial.onData((line) => this.handleSerialLine(line));
     this.serial.onError((error) => this.emitError(error));
 
-    await this.serial.open({ baudRate: config.baudRate });
+    if (useServer) {
+      await this.serial.open({ port: config.path, baudRate: config.baudRate });
+    } else {
+      await this.serial.open({ baudRate: config.baudRate });
+    }
+    
     this.applySoftLimitConfig();
     this.applyCalibrationOffsets();
     await this.applySpeedSettings();
-    console.log('[RotorService] Verbindung hergestellt', { mode: this.simulationMode ? 'Simulation' : 'WebSerial' });
+    console.log('[RotorService] Verbindung hergestellt', { mode: this.connectionMode });
   }
 
   async disconnect() {

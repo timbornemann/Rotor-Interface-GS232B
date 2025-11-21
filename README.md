@@ -43,13 +43,17 @@ python -m http.server 4173
 ```
 Öffne dann: `http://localhost:4173`
 
-**Option 1b: Mit integriertem Auth-Server**
+**Option 1b: Mit integriertem Auth-Server (empfohlen für Netzwerk-Zugriff)**
 ```bash
+# Abhängigkeiten installieren
+pip install -r requirements.txt
+
+# Server starten
 python python_server.py --port 8081 --key rotor-secret-key
 ```
-Öffne dann: `http://localhost:8081` (Standard-Key: `rotor-secret-key`).
-Der Server liefert die UI aus `src/renderer` und stellt eine einfache API
-zur Verfügung.
+Öffne dann: `http://localhost:8081` (lokal) oder `http://<SERVER-IP>:8081` (vom Netzwerk).
+
+Der Server liefert die UI aus `src/renderer` und stellt eine API zur Verfügung. Wenn die Anwendung von einem anderen Rechner aus aufgerufen wird, wird automatisch der Server-Modus verwendet, um auf COM-Ports am Server-Rechner zuzugreifen.
 
 **Option 2: Mit PHP (falls installiert)**
 ```bash
@@ -74,9 +78,30 @@ npm run serve
 - API:
   - `POST /api/commands` – JSON `{ "command": "R1", "meta": { ... } }` speichern.
   - `GET /api/commands` – alle bisher eingegangenen Kommandos abrufen.
+  - `GET /api/rotor/ports` – verfügbare COM-Ports auflisten.
+  - `POST /api/rotor/connect` – Verbindung zu einem COM-Port herstellen.
+  - `POST /api/rotor/disconnect` – Verbindung trennen.
+  - `POST /api/rotor/command` – Befehl an den Rotor senden.
+  - `GET /api/rotor/status` – aktuellen Status abrufen.
 
 Der Server läuft auf `0.0.0.0` und nutzt standardmäßig Port `8081`. Der API-Key
 kann per `--key` überschrieben oder für lokale Tests hartcodiert bleiben.
+
+**Wichtig:** Für COM-Port-Funktionalität ist `pyserial` erforderlich:
+```bash
+pip install -r requirements.txt
+```
+
+### Netzwerk-Zugriff (Remote-Steuerung)
+
+Wenn die Web-Anwendung von einem anderen Rechner aus aufgerufen wird (z.B. `http://<SERVER-IP>:8081`), erkennt die Anwendung automatisch, dass Web Serial nicht verfügbar ist und verwendet den **Server-Modus**. In diesem Modus:
+
+- Die COM-Ports werden vom Server verwaltet (nicht vom Browser)
+- Alle Befehle werden über die API gesendet
+- Der Status wird über die API abgerufen
+- Server-Ports werden in der Port-Liste mit `[Server]` markiert
+
+Dies ermöglicht es, den Rotor von jedem Rechner im Netzwerk aus zu steuern, solange der Server auf dem Rechner läuft, an dem der COM-Port angeschlossen ist.
 
 ## Arbeiten mit Web Serial
 
