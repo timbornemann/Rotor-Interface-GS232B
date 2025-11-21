@@ -389,8 +389,37 @@ class ServerConnection extends SerialConnection {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || `HTTP ${response.status}`);
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+          
+          // Verbessere Fehlermeldungen für häufige Probleme
+          if (errorMessage.includes('PermissionError') || errorMessage.includes('Zugriff verweigert')) {
+            errorMessage = `Port kann nicht geöffnet werden: Zugriff verweigert.\n\n` +
+                          `Mögliche Ursachen:\n` +
+                          `- Port wird bereits von einem anderen Programm verwendet\n` +
+                          `- Server hat keine Berechtigung für diesen Port\n` +
+                          `- Port existiert nicht mehr\n\n` +
+                          `Original-Fehler: ${error.error || errorMessage}`;
+          } else if (errorMessage.includes('could not open port')) {
+            errorMessage = `Port kann nicht geöffnet werden.\n\n` +
+                          `Bitte prüfen Sie auf dem Server-PC:\n` +
+                          `- Wird der Port von einem anderen Programm verwendet?\n` +
+                          `- Existiert der Port noch?\n` +
+                          `- Hat der Server die nötigen Berechtigungen?\n\n` +
+                          `Original-Fehler: ${error.error || errorMessage}`;
+          }
+        } catch (parseError) {
+          // Wenn JSON-Parsing fehlschlägt, verwende Status-Text
+          try {
+            const errorText = await response.text();
+            errorMessage = errorText || errorMessage;
+          } catch (textError) {
+            // Ignoriere Text-Parsing-Fehler
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       this.isConnected = true;
