@@ -118,8 +118,19 @@ function updateSpeedInputsFromConfig() {
 }
 
 function updateRampInputsFromConfig() {
-  // Ramp inputs are now in settings modal, so this function is kept for compatibility
-  // but doesn't need to do anything
+  const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');
+  const settingsRampKpInput = document.getElementById('settingsRampKpInput');
+  const settingsRampKiInput = document.getElementById('settingsRampKiInput');
+  const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
+  const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
+  const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
+
+  if (settingsRampEnabledToggle) settingsRampEnabledToggle.checked = Boolean(config.rampEnabled);
+  if (settingsRampKpInput) settingsRampKpInput.value = config.rampKp ?? 0.4;
+  if (settingsRampKiInput) settingsRampKiInput.value = config.rampKi ?? 0.05;
+  if (settingsRampSampleInput) settingsRampSampleInput.value = config.rampSampleTimeMs ?? 400;
+  if (settingsRampMaxStepInput) settingsRampMaxStepInput.value = config.rampMaxStepDeg ?? 8;
+  if (settingsRampToleranceInput) settingsRampToleranceInput.value = config.rampToleranceDeg ?? 1.5;
 }
 
 function syncGotoInputBounds() {
@@ -715,14 +726,23 @@ async function handleSpeedChange(speedSettings) {
 }
 
 function readRampInputs() {
-  // Read from config instead of UI inputs (which are now in settings modal)
+  const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');
+  const settingsRampKpInput = document.getElementById('settingsRampKpInput');
+  const settingsRampKiInput = document.getElementById('settingsRampKiInput');
+  const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
+  const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
+  const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
+
   return {
-    rampEnabled: Boolean(config.rampEnabled),
-    rampKp: Number(config.rampKp || 0.4),
-    rampKi: Number(config.rampKi || 0.05),
-    rampSampleTimeMs: Number(config.rampSampleTimeMs || 400),
-    rampMaxStepDeg: Number(config.rampMaxStepDeg || 8),
-    rampToleranceDeg: Number(config.rampToleranceDeg || 1.5)
+    rampEnabled: settingsRampEnabledToggle ? settingsRampEnabledToggle.checked : Boolean(config.rampEnabled),
+    rampKp: settingsRampKpInput ? Number(settingsRampKpInput.value) || 0.4 : Number(config.rampKp || 0.4),
+    rampKi: settingsRampKiInput ? Number(settingsRampKiInput.value) || 0.05 : Number(config.rampKi || 0.05),
+    rampSampleTimeMs:
+      settingsRampSampleInput ? Number(settingsRampSampleInput.value) || 400 : Number(config.rampSampleTimeMs || 400),
+    rampMaxStepDeg:
+      settingsRampMaxStepInput ? Number(settingsRampMaxStepInput.value) || 8 : Number(config.rampMaxStepDeg || 8),
+    rampToleranceDeg:
+      settingsRampToleranceInput ? Number(settingsRampToleranceInput.value) || 1.5 : Number(config.rampToleranceDeg || 1.5)
   };
 }
 
