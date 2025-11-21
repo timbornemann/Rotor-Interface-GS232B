@@ -226,19 +226,6 @@ async function init() {
   rotor.setRampSettings(getRampConfigFromState());
   await rotor.setSpeed(getSpeedConfigFromState());
 
-  // Web Serial Warnung nur im lokalen Modus anzeigen
-  function updateSerialSupportNotice() {
-    if (!serialSupportNotice) return;
-    const isLocalMode = connectionModeSelect.value === 'local';
-    const supportsWebSerial = rotor.supportsWebSerial();
-    
-    if (!supportsWebSerial && isLocalMode) {
-      serialSupportNotice.classList.remove('hidden');
-    } else {
-      serialSupportNotice.classList.add('hidden');
-    }
-  }
-  
   updateSerialSupportNotice();
   
   // Warnung aktualisieren wenn Modus wechselt
@@ -328,6 +315,18 @@ async function init() {
       void handleSendSerialCommand(cmd);
     });
   });
+}
+
+function updateSerialSupportNotice() {
+  if (!serialSupportNotice) return;
+  const isLocalMode = connectionModeSelect.value === 'local';
+  const supportsWebSerial = rotor.supportsWebSerial();
+  
+  if (!supportsWebSerial && isLocalMode) {
+    serialSupportNotice.classList.remove('hidden');
+  } else {
+    serialSupportNotice.classList.add('hidden');
+  }
 }
 
 function updatePortButtons() {
