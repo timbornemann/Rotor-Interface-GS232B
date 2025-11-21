@@ -927,7 +927,9 @@ class RotorService {
     // Für Befehle mit Leerzeichen (wie "W123 045") trim nur am Anfang/Ende, nicht in der Mitte
     const trimmed = command.trim();
     const upperCased = trimmed.toUpperCase();
-    await this.serial.writeCommand(upperCased);
+    // GS-232B-Protokoll erfordert ein abschließendes Carriage Return
+    const commandWithCr = upperCased.endsWith('\r') ? upperCased : `${upperCased}\r`;
+    await this.serial.writeCommand(commandWithCr);
     // Kleine Verzögerung, damit der Controller Zeit hat, den Befehl zu verarbeiten
     await delay(10);
   }
