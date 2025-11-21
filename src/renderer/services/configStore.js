@@ -28,6 +28,9 @@ const defaultConfig = {
   azimuthDisplayOffset: 0 // Azimut-Korrektur für Anzeige (Grad)
 };
 
+// IniHandler will be loaded separately
+let iniHandler = null;
+
 class ConfigStore {
   sanitizeNumber(value, min, max, fallback) {
     const num = Number(value);
@@ -93,7 +96,25 @@ class ConfigStore {
     return sanitized;
   }
 
-  load() {
+  async load() {
+    try {
+      // Try to load from INI file first
+      if (typeof IniHandler !== 'undefined') {
+        if (!iniHandler) {
+          iniHandler = new IniHandler();
+        }
+        const iniConfig = await iniHandler.load();
+        if (iniConfig) {
+          const flattened = iniHandler.iniToConfig(iniConfig);
+          console.log('[ConfigStore] Loaded from INI file', flattened);
+          return this.sanitizeConfig({ ...defaultConfig, ...flattened });
+        }
+      }
+    } catch (error) {
+      console.warn('[ConfigStore] Could not load from INI file, falling back to localStorage', error);
+    }
+
+    // Fallback to localStorage
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) {
@@ -107,8 +128,39 @@ class ConfigStore {
     }
   }
 
-  save(partial) {
-    const merged = { ...this.load(), ...partial };
+  loadSync() {
+    // Synchronous version for backwards compatibility
+    // Only loads from localStorage (INI is loaded asynchronously)
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        return { ...defaultConfig };
+      }
+      const parsed = JSON.parse(raw);
+      return this.sanitizeConfig({ ...defaultConfig, ...parsed });
+    } catch (error) {
+      console.warn('Konnte Konfiguration nicht laden', error);
+      return { ...defaultConfig };
+    }
+  }
+
+  async save(partial) {
+    const current = this.loadSync();
+    const merged = { ...current, ...partial };
+    const sanitized = this.sanitizeConfig(merged);
+    
+    // Save to localStorage only
+    // INI file is read-only and should be edited manually
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+    console.log('[ConfigStore] Saved to localStorage (INI file is read-only)');
+    
+    return sanitized;
+  }
+
+  saveSync(partial) {
+    // Synchronous version for backwards compatibility
+    const current = this.loadSync();
+    const merged = { ...current, ...partial };
     const sanitized = this.sanitizeConfig(merged);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
     return sanitized;

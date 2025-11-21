@@ -10,31 +10,13 @@
   <body>
       <header class="top-bar">
         <div class="connection-group">
+          <button id="settingsBtn" class="secondary" type="button" title="Einstellungen">⚙️</button>
           <label>
             Port
             <select id="portSelect"></select>
           </label>
           <button id="requestPortBtn" class="secondary" type="button">Port hinzufuegen</button>
           <button id="refreshPortsBtn" class="secondary" type="button" style="display: none;">Ports aktualisieren</button>
-          <label>
-            Baudrate
-            <input id="baudInput" type="number" min="1200" max="115200" step="100" value="9600" />
-          </label>
-          <label>
-            Polling (ms)
-            <input id="pollingInput" type="number" min="250" max="5000" step="250" value="1000" />
-          </label>
-          <label class="checkbox">
-            <input id="simulationToggle" type="checkbox" />
-            Simulation
-          </label>
-          <label>
-            Verbindungsmodus
-            <select id="connectionModeSelect">
-              <option value="local">Lokal (Web Serial)</option>
-              <option value="server">Server (API)</option>
-            </select>
-          </label>
           <button id="connectBtn" class="primary">Verbinden</button>
           <button id="disconnectBtn" disabled>Trennen</button>
         </div>
@@ -91,14 +73,7 @@
         <div class="card-header">
           <h2>Radaransicht</h2>
         </div>
-        <div class="map-controls">
-          <div class="map-coordinate-inputs">
-            <label>
-              Koordinaten (Latitude, Longitude)
-              <input id="mapCoordinatesInput" type="text" placeholder="z.B. 51.85911538185561, 11.422282899767954" />
-            </label>
-            <button id="loadMapBtn" class="primary">Karte laden</button>
-          </div>
+          <div class="map-controls">
           <div class="map-options">
             <label class="checkbox">
               <input id="satelliteMapToggle" type="checkbox" />
@@ -110,20 +85,6 @@
               <span id="zoomLevel" class="zoom-level">Zoom: 15</span>
             </div>
           </div>
-          <div class="cone-settings">
-            <label>
-              Kegel-Winkel (Grad)
-              <input id="coneAngleInput" type="number" min="1" max="90" step="1" value="10" />
-            </label>
-            <label>
-              Kegel-Länge (Meter)
-              <input id="coneLengthInput" type="number" min="0" max="100000" step="10" value="1000" />
-            </label>
-            <label>
-              Azimut-Korrektur (Grad)
-              <input id="azimuthDisplayOffsetInput" type="number" min="-180" max="180" step="0.1" value="0" />
-            </label>
-          </div>
         </div>
         <div class="canvas-wrapper">
           <canvas id="mapCanvas"></canvas>
@@ -134,15 +95,6 @@
         <section class="card controls-card">
           <div class="card-header">
             <h2>Rotorsteuerung</h2>
-            <div class="mode-switch">
-              <label>
-                Modus
-                <select id="modeSelect">
-                  <option value="360">360 deg</option>
-                  <option value="450">450 deg</option>
-                </select>
-              </label>
-            </div>
           </div>
 
           <div class="control-grid" id="controlGrid">
@@ -155,54 +107,6 @@
             <button data-command="S" class="danger">Alles Stopp</button>
           </div>
 
-          <div class="speed-controls">
-            <div class="speed-control">
-              <div class="speed-label">Azimut-Geschwindigkeit (deg/s)</div>
-              <div class="speed-inputs">
-                <input id="azSpeedRange" type="range" min="0.5" max="20" step="0.5" value="4" />
-                <input id="azSpeedInput" type="number" min="0.5" max="20" step="0.5" value="4" />
-              </div>
-            </div>
-            <div class="speed-control">
-              <div class="speed-label">Elevations-Geschwindigkeit (deg/s)</div>
-              <div class="speed-inputs">
-                <input id="elSpeedRange" type="range" min="0.5" max="20" step="0.5" value="2" />
-                <input id="elSpeedInput" type="number" min="0.5" max="20" step="0.5" value="2" />
-              </div>
-            </div>
-          </div>
-
-          <div class="ramp-controls">
-            <div class="ramp-header">
-              <h3>Softstart/Softstop (PI)</h3>
-              <label class="checkbox">
-                <input id="rampEnabledToggle" type="checkbox" />
-                Aktivieren
-              </label>
-            </div>
-            <div class="ramp-grid">
-              <label>
-                Kp
-                <input id="rampKpInput" type="number" min="0" max="5" step="0.01" value="0.4" />
-              </label>
-              <label>
-                Ki
-                <input id="rampKiInput" type="number" min="0" max="5" step="0.01" value="0.05" />
-              </label>
-              <label>
-                Abtastzeit (ms)
-                <input id="rampSampleInput" type="number" min="100" max="2000" step="50" value="400" />
-              </label>
-              <label>
-                Max. Schritt (deg)
-                <input id="rampMaxStepInput" type="number" min="0.1" max="45" step="0.1" value="8" />
-              </label>
-              <label>
-                Toleranz (deg)
-                <input id="rampToleranceInput" type="number" min="0.1" max="10" step="0.1" value="1.5" />
-              </label>
-            </div>
-          </div>
 
           <div class="goto-form">
             <label>
@@ -314,7 +218,158 @@
       </div>
     </main>
 
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Einstellungen</h2>
+          <button id="closeSettingsBtn" class="modal-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-tabs">
+            <button class="tab-button active" data-tab="connection">Verbindung</button>
+            <button class="tab-button" data-tab="coordinates">Koordinaten</button>
+            <button class="tab-button" data-tab="cone">Kegel</button>
+            <button class="tab-button" data-tab="speed">Geschwindigkeit</button>
+            <button class="tab-button" data-tab="ramp">Softstart/Softstop</button>
+            <button class="tab-button" data-tab="mode">Modus</button>
+          </div>
+          
+          <div class="tab-content active" id="tab-connection">
+            <div class="settings-group">
+              <label>
+                Port
+                <select id="settingsPortSelect"></select>
+              </label>
+              <button id="settingsRequestPortBtn" class="secondary" type="button">Port hinzufügen</button>
+              <button id="settingsRefreshPortsBtn" class="secondary" type="button">Ports aktualisieren</button>
+              <label>
+                Baudrate
+                <input id="settingsBaudInput" type="number" min="1200" max="115200" step="100" value="9600" />
+              </label>
+              <label>
+                Polling (ms)
+                <input id="settingsPollingInput" type="number" min="250" max="5000" step="250" value="1000" />
+              </label>
+              <label class="checkbox">
+                <input id="settingsSimulationToggle" type="checkbox" />
+                Simulation
+              </label>
+              <label>
+                Verbindungsmodus
+                <select id="settingsConnectionModeSelect">
+                  <option value="local">Lokal (Web Serial)</option>
+                  <option value="server">Server (API)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          
+          <div class="tab-content" id="tab-coordinates">
+            <div class="settings-group">
+              <label>
+                Koordinaten (Latitude, Longitude)
+                <input id="settingsMapCoordinatesInput" type="text" placeholder="z.B. 51.85911538185561, 11.422282899767954" />
+              </label>
+              <button id="settingsLoadMapBtn" class="primary" type="button">Karte laden</button>
+              <label class="checkbox">
+                <input id="settingsSatelliteMapToggle" type="checkbox" />
+                Satellitenkarte anzeigen
+              </label>
+            </div>
+          </div>
+          
+          <div class="tab-content" id="tab-cone">
+            <div class="settings-group">
+              <label>
+                Kegel-Winkel (Grad)
+                <input id="settingsConeAngleInput" type="number" min="1" max="90" step="1" value="10" />
+              </label>
+              <label>
+                Kegel-Länge (Meter)
+                <input id="settingsConeLengthInput" type="number" min="0" max="100000" step="10" value="1000" />
+              </label>
+              <label>
+                Azimut-Korrektur (Grad)
+                <input id="settingsAzimuthDisplayOffsetInput" type="number" min="-180" max="180" step="0.1" value="0" />
+              </label>
+            </div>
+          </div>
+          
+          <div class="tab-content" id="tab-speed">
+            <div class="settings-group">
+              <label>
+                Azimut-Geschwindigkeit (deg/s)
+                <div class="speed-inputs">
+                  <input id="settingsAzSpeedRange" type="range" min="0.5" max="20" step="0.5" value="4" />
+                  <input id="settingsAzSpeedInput" type="number" min="0.5" max="20" step="0.5" value="4" />
+                </div>
+              </label>
+              <label>
+                Elevations-Geschwindigkeit (deg/s)
+                <div class="speed-inputs">
+                  <input id="settingsElSpeedRange" type="range" min="0.5" max="20" step="0.5" value="2" />
+                  <input id="settingsElSpeedInput" type="number" min="0.5" max="20" step="0.5" value="2" />
+                </div>
+              </label>
+            </div>
+          </div>
+          
+          <div class="tab-content" id="tab-ramp">
+            <div class="settings-group">
+              <div class="ramp-header">
+                <h3>Softstart/Softstop (PI)</h3>
+                <label class="checkbox">
+                  <input id="settingsRampEnabledToggle" type="checkbox" />
+                  Aktivieren
+                </label>
+              </div>
+              <div class="ramp-grid">
+                <label>
+                  Kp
+                  <input id="settingsRampKpInput" type="number" min="0" max="5" step="0.01" value="0.4" />
+                </label>
+                <label>
+                  Ki
+                  <input id="settingsRampKiInput" type="number" min="0" max="5" step="0.01" value="0.05" />
+                </label>
+                <label>
+                  Abtastzeit (ms)
+                  <input id="settingsRampSampleInput" type="number" min="100" max="2000" step="50" value="400" />
+                </label>
+                <label>
+                  Max. Schritt (deg)
+                  <input id="settingsRampMaxStepInput" type="number" min="0.1" max="45" step="0.1" value="8" />
+                </label>
+                <label>
+                  Toleranz (deg)
+                  <input id="settingsRampToleranceInput" type="number" min="0.1" max="10" step="0.1" value="1.5" />
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          <div class="tab-content" id="tab-mode">
+            <div class="settings-group">
+              <label>
+                Azimut-Modus
+                <select id="settingsModeSelect">
+                  <option value="360">360 deg</option>
+                  <option value="450">450 deg</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="settingsSaveBtn" class="primary" type="button">Speichern</button>
+          <button id="settingsCancelBtn" class="secondary" type="button">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Services zuerst -->
+    <script src="./services/iniHandler.js"></script>
     <script src="./services/configStore.js"></script>
     <script src="./services/rotorService.js"></script>
     <!-- UI-Komponenten -->
@@ -323,6 +378,7 @@
     <script src="./ui/mapView.js"></script>
     <script src="./ui/historyLog.js"></script>
     <script src="./ui/controls.js"></script>
+    <script src="./ui/settingsModal.js"></script>
     <!-- Hauptlogik zuletzt -->
     <script src="./main.js"></script>
   </body>
