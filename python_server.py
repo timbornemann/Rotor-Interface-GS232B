@@ -208,8 +208,7 @@ class RotorHandler(SimpleHTTPRequestHandler):
 
     server_version = "RotorHTTP/0.1"
 
-    def __init__(self, *args: Any, directory: str | None = None, api_key: str, **kwargs: Any) -> None:
-        self.api_key = api_key
+    def __init__(self, *args: Any, directory: str | None = None, **kwargs: Any) -> None:
         super().__init__(*args, directory=directory or str(SERVER_ROOT), **kwargs)
 
     # --- helpers ---------------------------------------------------------
@@ -220,18 +219,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
-
-    def _authorized(self) -> bool:
-        parsed = urlparse(self.path)
-        query_key = parse_qs(parsed.query).get("key", [None])[0]
-        header_key = self.headers.get("X-API-Key")
-        return query_key == self.api_key or header_key == self.api_key
-
-    def _require_auth(self) -> bool:
-        if self._authorized():
-            return True
-        self._send_json({"error": "unauthorized"}, HTTPStatus.UNAUTHORIZED)
-        return False
 
     def _read_json_body(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length", 0))
@@ -247,7 +234,7 @@ class RotorHandler(SimpleHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
     def do_GET(self) -> None:
@@ -256,8 +243,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
         
         # Legacy endpoint
         if parsed.path == "/api/commands":
-            if not self._require_auth():
-                return
             with COMMAND_LOCK:
                 commands = list(COMMAND_LOG)
             self._send_json({"commands": commands})
@@ -265,15 +250,11 @@ class RotorHandler(SimpleHTTPRequestHandler):
         
         # New rotor API endpoints
         if parsed.path == "/api/rotor/ports":
-            if not self._require_auth():
-                return
             ports = list_available_ports()
             self._send_json({"ports": ports})
             return
         
         if parsed.path == "/api/rotor/status":
-            if not self._require_auth():
-                return
             with ROTOR_LOCK:
                 if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
                     status = ROTOR_CONNECTION.get_status()
@@ -295,9 +276,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
         
         # Legacy endpoint
         if parsed.path == "/api/commands":
-            if not self._require_auth():
-                return
-
             payload = self._read_json_body()
             command = payload.get("command")
             meta = payload.get("meta", {})
@@ -317,9 +295,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
         
         # New rotor API endpoints
         if parsed.path == "/api/rotor/connect":
-            if not self._require_auth():
-                return
-            
             payload = self._read_json_body()
             port = payload.get("port")
             baud_rate = payload.get("baudRate", 9600)
@@ -339,9 +314,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
             return
         
         if parsed.path == "/api/rotor/disconnect":
-            if not self._require_auth():
-                return
-            
             try:
                 with ROTOR_LOCK:
                     if ROTOR_CONNECTION:
@@ -353,8 +325,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
             return
         
         if parsed.path == "/api/rotor/command":
-            if not self._require_auth():
-                return
             
             payload = self._read_json_body()
             command = payload.get("command")
@@ -393,19 +363,17 @@ class RotorHandler(SimpleHTTPRequestHandler):
         print(message)
 
 
-def run_server(port: int, api_key: str) -> None:
-    handler = lambda *args, **kwargs: RotorHandler(*args, api_key=api_key, **kwargs)  # type: ignore[call-arg]
+def run_server(port: int) -> None:
+    handler = lambda *args, **kwargs: RotorHandler(*args, **kwargs)  # type: ignore[call-arg]
     with ThreadingHTTPServer(("0.0.0.0", port), handler) as httpd:
         print(f"Serving Rotor UI from {SERVER_ROOT} at http://localhost:{port}")
-        print("API endpoints:")
+        print("API endpoints (no authentication required):")
         print("  - /api/commands (legacy)")
         print("  - /api/rotor/ports - List available COM ports")
         print("  - /api/rotor/connect - Connect to a COM port")
         print("  - /api/rotor/disconnect - Disconnect from COM port")
         print("  - /api/rotor/command - Send command to rotor")
         print("  - /api/rotor/status - Get current status")
-        print("Use X-API-Key header or ?key=... for authentication")
-        print(f"Configured API key: {api_key}")
         if not SERIAL_AVAILABLE:
             print("WARNING: COM port functionality disabled (pyserial not installed)")
         try:
@@ -418,16 +386,11 @@ def run_server(port: int, api_key: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Serve the Rotor UI with a tiny authenticated API")
+    parser = argparse.ArgumentParser(description="Serve the Rotor UI with a minimal API (no authentication)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Port for the HTTP server (default: 8081)")
-    parser.add_argument(
-        "--key",
-        default=DEFAULT_API_KEY,
-        help="API key for authentication (default is a hard-coded demo key)",
-    )
     args = parser.parse_args()
 
-    run_server(port=args.port, api_key=args.key)
+    run_server(port=args.port)
 
 
 if __name__ == "__main__":

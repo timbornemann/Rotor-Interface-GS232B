@@ -5,7 +5,6 @@ Diese Dokumentation beschreibt die REST-API des Rotor Interface GS232B Servers. 
 ## Inhaltsverzeichnis
 
 - [Übersicht](#übersicht)
-- [Authentifizierung](#authentifizierung)
 - [Endpunkte](#endpunkte)
   - [Legacy Endpunkte](#legacy-endpunkte)
     - [POST /api/commands](#post-apicommands)
@@ -36,56 +35,9 @@ Diese Dokumentation beschreibt die REST-API des Rotor Interface GS232B Servers. 
 
 **CORS:** Unterstützt (Access-Control-Allow-Origin: *)
 
-Die API verwendet JSON für alle Anfragen und Antworten. Alle Endpunkte erfordern eine Authentifizierung über einen API-Key.
+**Authentifizierung:** Keine erforderlich - alle Endpunkte sind öffentlich zugänglich.
 
----
-
-## Authentifizierung
-
-Alle API-Anfragen müssen mit einem gültigen API-Key authentifiziert werden. Der Standard-API-Key ist `rotor-secret-key` (konfigurierbar beim Serverstart).
-
-### Authentifizierungsmethoden
-
-Es gibt zwei Möglichkeiten, den API-Key zu übermitteln:
-
-#### 1. HTTP Header (empfohlen)
-
-```
-X-API-Key: rotor-secret-key
-```
-
-#### 2. Query Parameter
-
-```
-?key=rotor-secret-key
-```
-
-### Beispiel mit Header
-
-```http
-POST /api/commands HTTP/1.1
-Host: localhost:8081
-Content-Type: application/json
-X-API-Key: rotor-secret-key
-
-{
-  "command": "C2",
-  "meta": {}
-}
-```
-
-### Beispiel mit Query Parameter
-
-```http
-POST /api/commands?key=rotor-secret-key HTTP/1.1
-Host: localhost:8081
-Content-Type: application/json
-
-{
-  "command": "C2",
-  "meta": {}
-}
-```
+Die API verwendet JSON für alle Anfragen und Antworten. Alle Endpunkte können ohne Authentifizierung verwendet werden.
 
 ---
 
@@ -107,10 +59,6 @@ Sendet einen Rotor-Befehl an den Server. Der Befehl wird im internen Log gespeic
 
 **Headers:**
 - `Content-Type: application/json` (erforderlich)
-- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
-
-**Query Parameter (optional):**
-- `key` - API-Key (Alternative zum Header)
 
 **Body (JSON):**
 ```json
@@ -157,13 +105,6 @@ Sendet einen Rotor-Befehl an den Server. Der Befehl wird im internen Log gespeic
 ```
 Tritt auf, wenn `command` fehlt, kein String ist oder leer ist.
 
-**401 Unauthorized:**
-```json
-{
-  "error": "unauthorized"
-}
-```
-Tritt auf, wenn der API-Key fehlt oder ungültig ist.
 
 **404 Not Found:**
 ```json
@@ -206,11 +147,6 @@ Ruft alle bisher gesendeten Kommandos aus dem internen Log ab.
 
 **Method:** `GET`
 
-**Headers:**
-- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
-
-**Query Parameter (optional):**
-- `key` - API-Key (Alternative zum Header)
 
 #### Response
 
@@ -242,13 +178,6 @@ Ruft alle bisher gesendeten Kommandos aus dem internen Log ab.
 
 #### Fehlerantworten
 
-**401 Unauthorized:**
-```json
-{
-  "error": "unauthorized"
-}
-```
-Tritt auf, wenn der API-Key fehlt oder ungültig ist.
 
 **Hinweis:** Das Log wird im Speicher gehalten und geht beim Neustart des Servers verloren.
 
@@ -268,8 +197,6 @@ Listet alle verfügbaren COM-Ports auf dem Server-Rechner auf.
 
 **Method:** `GET`
 
-**Headers:**
-- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
 
 ##### Response
 
@@ -312,7 +239,6 @@ Stellt eine Verbindung zu einem COM-Port her.
 
 **Headers:**
 - `Content-Type: application/json` (erforderlich)
-- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
 
 **Body (JSON):**
 ```json
@@ -368,8 +294,6 @@ Trennt die aktuelle Verbindung zum COM-Port.
 
 **Method:** `POST`
 
-**Headers:**
-- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
 
 ##### Response
 
@@ -396,7 +320,6 @@ Sendet einen Befehl an den Rotor-Controller.
 
 **Headers:**
 - `Content-Type: application/json` (erforderlich)
-- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
 
 **Body (JSON):**
 ```json
@@ -451,8 +374,6 @@ Ruft den aktuellen Status des Rotor-Controllers ab.
 
 **Method:** `GET`
 
-**Headers:**
-- `X-API-Key: <API_KEY>` (erforderlich, alternativ als Query-Parameter)
 
 ##### Response
 
@@ -507,7 +428,6 @@ Ruft den aktuellen Status des Rotor-Controllers ab.
 | 200 | OK | Anfrage erfolgreich (GET) |
 | 201 | Created | Kommando erfolgreich gespeichert (POST) |
 | 400 | Bad Request | Ungültige Anfrage (z.B. fehlendes oder leeres `command`) |
-| 401 | Unauthorized | API-Key fehlt oder ist ungültig |
 | 404 | Not Found | Endpunkt existiert nicht |
 | 500 | Internal Server Error | Serverfehler (selten) |
 
@@ -531,16 +451,14 @@ Alle Fehlerantworten haben folgendes Format:
 
 ```bash
 API_BASE="http://localhost:8081"
-API_KEY="rotor-secret-key"
 ```
 
 #### Legacy Endpunkte
 
-**Kommando senden (mit Header):**
+**Kommando senden:**
 ```bash
 curl -X POST "${API_BASE}/api/commands" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "C2",
     "meta": {
@@ -549,56 +467,21 @@ curl -X POST "${API_BASE}/api/commands" \
   }'
 ```
 
-**Kommando senden (mit Query-Parameter):**
+**Alle Kommandos abrufen:**
 ```bash
-curl -X POST "${API_BASE}/api/commands?key=${API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "command": "M180",
-    "meta": {
-      "source": "curl_script"
-    }
-  }'
-```
-
-**Alle Kommandos abrufen (mit Header):**
-```bash
-curl -X GET "${API_BASE}/api/commands" \
-  -H "X-API-Key: ${API_KEY}"
-```
-
-**Alle Kommandos abrufen (mit Query-Parameter):**
-```bash
-curl -X GET "${API_BASE}/api/commands?key=${API_KEY}"
+curl -X GET "${API_BASE}/api/commands"
 ```
 
 #### Rotor-Steuerung - Vollständiger Workflow
 
 **1. Verfügbare Ports auflisten:**
 ```bash
-curl -X GET "${API_BASE}/api/rotor/ports" \
-  -H "X-API-Key: ${API_KEY}"
-```
-
-**Alternative mit Query-Parameter:**
-```bash
-curl -X GET "${API_BASE}/api/rotor/ports?key=${API_KEY}"
+curl -X GET "${API_BASE}/api/rotor/ports"
 ```
 
 **2. Verbindung zu einem Port herstellen:**
 ```bash
 curl -X POST "${API_BASE}/api/rotor/connect" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
-  -d '{
-    "port": "COM3",
-    "baudRate": 9600
-  }'
-```
-
-**Alternative mit Query-Parameter:**
-```bash
-curl -X POST "${API_BASE}/api/rotor/connect?key=${API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "port": "COM3",
@@ -608,8 +491,7 @@ curl -X POST "${API_BASE}/api/rotor/connect?key=${API_KEY}" \
 
 **3. Aktuellen Status abrufen:**
 ```bash
-curl -X GET "${API_BASE}/api/rotor/status" \
-  -H "X-API-Key: ${API_KEY}"
+curl -X GET "${API_BASE}/api/rotor/status"
 ```
 
 **4. Befehle an den Rotor senden:**
@@ -618,7 +500,6 @@ curl -X GET "${API_BASE}/api/rotor/status" \
 ```bash
 curl -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "C2"
   }'
@@ -628,7 +509,6 @@ curl -X POST "${API_BASE}/api/rotor/command" \
 ```bash
 curl -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "M180"
   }'
@@ -638,7 +518,6 @@ curl -X POST "${API_BASE}/api/rotor/command" \
 ```bash
 curl -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "W180 045"
   }'
@@ -648,7 +527,6 @@ curl -X POST "${API_BASE}/api/rotor/command" \
 ```bash
 curl -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "R"
   }'
@@ -658,7 +536,6 @@ curl -X POST "${API_BASE}/api/rotor/command" \
 ```bash
 curl -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "A"
   }'
@@ -668,7 +545,6 @@ curl -X POST "${API_BASE}/api/rotor/command" \
 ```bash
 curl -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{
     "command": "S"
   }'
@@ -676,8 +552,7 @@ curl -X POST "${API_BASE}/api/rotor/command" \
 
 **5. Verbindung trennen:**
 ```bash
-curl -X POST "${API_BASE}/api/rotor/disconnect" \
-  -H "X-API-Key: ${API_KEY}"
+curl -X POST "${API_BASE}/api/rotor/disconnect"
 ```
 
 #### Vollständiges Beispiel-Script
@@ -690,34 +565,28 @@ API_BASE="http://localhost:8081"
 API_KEY="rotor-secret-key"
 
 echo "=== Verfügbare Ports ==="
-curl -s -X GET "${API_BASE}/api/rotor/ports" \
-  -H "X-API-Key: ${API_KEY}" | jq '.'
+curl -s -X GET "${API_BASE}/api/rotor/ports" | jq '.'
 
 echo -e "\n=== Verbindung herstellen ==="
 curl -s -X POST "${API_BASE}/api/rotor/connect" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{"port": "COM3", "baudRate": 9600}' | jq '.'
 
 echo -e "\n=== Status abrufen ==="
-curl -s -X GET "${API_BASE}/api/rotor/status" \
-  -H "X-API-Key: ${API_KEY}" | jq '.'
+curl -s -X GET "${API_BASE}/api/rotor/status" | jq '.'
 
 echo -e "\n=== Status abfragen (C2) ==="
 curl -s -X POST "${API_BASE}/api/rotor/command" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: ${API_KEY}" \
   -d '{"command": "C2"}' | jq '.'
 
 sleep 1
 
 echo -e "\n=== Status erneut abrufen ==="
-curl -s -X GET "${API_BASE}/api/rotor/status" \
-  -H "X-API-Key: ${API_KEY}" | jq '.'
+curl -s -X GET "${API_BASE}/api/rotor/status" | jq '.'
 
 echo -e "\n=== Verbindung trennen ==="
-curl -s -X POST "${API_BASE}/api/rotor/disconnect" \
-  -H "X-API-Key: ${API_KEY}" | jq '.'
+curl -s -X POST "${API_BASE}/api/rotor/disconnect" | jq '.'
 ```
 
 ---
@@ -730,7 +599,6 @@ curl -s -X POST "${API_BASE}/api/rotor/disconnect" \
 import requests
 
 API_BASE = "http://localhost:8081"
-API_KEY = "rotor-secret-key"
 
 # Kommando senden
 response = requests.post(
@@ -738,8 +606,7 @@ response = requests.post(
     json={
         "command": "C2",
         "meta": {"source": "python_script"}
-    },
-    headers={"X-API-Key": API_KEY}
+    }
 )
 
 if response.status_code == 201:
@@ -750,10 +617,7 @@ else:
     print(f"Fehler: {response.status_code} - {response.json()}")
 
 # Alle Kommandos abrufen
-response = requests.get(
-    f"{API_BASE}/api/commands",
-    headers={"X-API-Key": API_KEY}
-)
+response = requests.get(f"{API_BASE}/api/commands")
 
 if response.status_code == 200:
     data = response.json()
@@ -771,10 +635,9 @@ from typing import Dict, List, Optional
 class RotorAPI:
     """Vollständige API-Klasse für Rotor Interface GS232B."""
     
-    def __init__(self, base_url: str = "http://localhost:8081", api_key: str = "rotor-secret-key"):
+    def __init__(self, base_url: str = "http://localhost:8081"):
         self.base_url = base_url.rstrip('/')
-        self.api_key = api_key
-        self.headers = {"X-API-Key": api_key}
+        self.headers = {}
     
     # Legacy Endpunkte
     def send_command(self, command: str, meta: Optional[Dict] = None) -> Dict:
@@ -785,18 +648,14 @@ class RotorAPI:
         }
         response = requests.post(
             f"{self.base_url}/api/commands",
-            json=payload,
-            headers=self.headers
+            json=payload
         )
         response.raise_for_status()
         return response.json()
     
     def get_commands(self) -> List[Dict]:
         """Ruft alle gespeicherten Kommandos ab (Legacy-Endpunkt)."""
-        response = requests.get(
-            f"{self.base_url}/api/commands",
-            headers=self.headers
-        )
+        response = requests.get(f"{self.base_url}/api/commands")
         response.raise_for_status()
         return response.json()["commands"]
     
@@ -808,10 +667,7 @@ class RotorAPI:
     # Rotor-Steuerung Endpunkte
     def list_ports(self) -> List[Dict]:
         """Listet alle verfügbaren COM-Ports auf dem Server auf."""
-        response = requests.get(
-            f"{self.base_url}/api/rotor/ports",
-            headers=self.headers
-        )
+        response = requests.get(f"{self.base_url}/api/rotor/ports")
         response.raise_for_status()
         return response.json()["ports"]
     
@@ -823,18 +679,14 @@ class RotorAPI:
         }
         response = requests.post(
             f"{self.base_url}/api/rotor/connect",
-            json=payload,
-            headers=self.headers
+            json=payload
         )
         response.raise_for_status()
         return response.json()
     
     def disconnect(self) -> Dict:
         """Trennt die aktuelle Verbindung zum COM-Port."""
-        response = requests.post(
-            f"{self.base_url}/api/rotor/disconnect",
-            headers=self.headers
-        )
+        response = requests.post(f"{self.base_url}/api/rotor/disconnect")
         response.raise_for_status()
         return response.json()
     
@@ -843,18 +695,14 @@ class RotorAPI:
         payload = {"command": command}
         response = requests.post(
             f"{self.base_url}/api/rotor/command",
-            json=payload,
-            headers=self.headers
+            json=payload
         )
         response.raise_for_status()
         return response.json()
     
     def get_status(self) -> Dict:
         """Ruft den aktuellen Status des Rotor-Controllers ab."""
-        response = requests.get(
-            f"{self.base_url}/api/rotor/status",
-            headers=self.headers
-        )
+        response = requests.get(f"{self.base_url}/api/rotor/status")
         response.raise_for_status()
         return response.json()
     
@@ -934,12 +782,8 @@ if ports:
 import requests
 
 API_BASE = "http://localhost:8081"
-API_KEY = "rotor-secret-key"
 
-response = requests.get(
-    f"{API_BASE}/api/rotor/ports",
-    headers={"X-API-Key": API_KEY}
-)
+response = requests.get(f"{API_BASE}/api/rotor/ports")
 ports = response.json()["ports"]
 print("Verfügbare Ports:")
 for port in ports:
@@ -950,8 +794,7 @@ for port in ports:
 ```python
 response = requests.post(
     f"{API_BASE}/api/rotor/connect",
-    json={"port": "COM3", "baudRate": 9600},
-    headers={"X-API-Key": API_KEY}
+    json={"port": "COM3", "baudRate": 9600}
 )
 if response.status_code == 200:
     print("Verbindung hergestellt:", response.json())
@@ -961,10 +804,7 @@ else:
 
 **Status abrufen:**
 ```python
-response = requests.get(
-    f"{API_BASE}/api/rotor/status",
-    headers={"X-API-Key": API_KEY}
-)
+response = requests.get(f"{API_BASE}/api/rotor/status")
 status = response.json()
 if status.get("connected"):
     print(f"Verbunden: {status['port']} @ {status['baudRate']} baud")
@@ -1006,18 +846,14 @@ commands = ["R", "A", "U", "E", "S"]  # Rechts, Azimut-Stopp, Hoch, Elevation-St
 for cmd in commands:
     response = requests.post(
         f"{API_BASE}/api/rotor/command",
-        json={"command": cmd},
-        headers={"X-API-Key": API_KEY}
+        json={"command": cmd}
     )
     print(f"Befehl {cmd} gesendet: {response.json()}")
 ```
 
 **Verbindung trennen:**
 ```python
-response = requests.post(
-    f"{API_BASE}/api/rotor/disconnect",
-    headers={"X-API-Key": API_KEY}
-)
+response = requests.post(f"{API_BASE}/api/rotor/disconnect")
 print("Verbindung getrennt:", response.json())
 ```
 
@@ -1128,15 +964,13 @@ if __name__ == "__main__":
 
 ```javascript
 const API_BASE = 'http://localhost:8081';
-const API_KEY = 'rotor-secret-key';
 
 // Kommando senden
 async function sendCommand(command, meta = {}) {
   const response = await fetch(`${API_BASE}/api/commands`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': API_KEY
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       command: command,
@@ -1153,11 +987,7 @@ async function sendCommand(command, meta = {}) {
 
 // Alle Kommandos abrufen
 async function getCommands() {
-  const response = await fetch(`${API_BASE}/api/commands`, {
-    headers: {
-      'X-API-Key': API_KEY
-    }
-  });
+  const response = await fetch(`${API_BASE}/api/commands`);
   
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${await response.text()}`);
@@ -1189,13 +1019,9 @@ async function getCommands() {
 const axios = require('axios');
 
 const API_BASE = 'http://localhost:8081';
-const API_KEY = 'rotor-secret-key';
 
 const api = axios.create({
-  baseURL: API_BASE,
-  headers: {
-    'X-API-Key': API_KEY
-  }
+  baseURL: API_BASE
 });
 
 // Kommando senden
@@ -1227,7 +1053,6 @@ sendCommand('M180', { source: 'axios_example' })
 
 ```powershell
 $apiBase = "http://localhost:8081"
-$apiKey = "rotor-secret-key"
 
 $body = @{
     command = "C2"
@@ -1238,7 +1063,6 @@ $body = @{
 
 $headers = @{
     "Content-Type" = "application/json"
-    "X-API-Key" = $apiKey
 }
 
 $response = Invoke-RestMethod -Uri "$apiBase/api/commands" `
@@ -1254,11 +1078,6 @@ Write-Host "Zeitstempel: $($response.entry.received_at)"
 
 ```powershell
 $apiBase = "http://localhost:8081"
-$apiKey = "rotor-secret-key"
-
-$headers = @{
-    "X-API-Key" = $apiKey
-}
 
 $response = Invoke-RestMethod -Uri "$apiBase/api/commands" `
     -Method Get `
@@ -1311,15 +1130,6 @@ python python_server.py
 python python_server.py --port 9000
 ```
 
-**Mit benutzerdefiniertem API-Key:**
-```bash
-python python_server.py --key mein-geheimer-schlüssel
-```
-
-**Beide Optionen:**
-```bash
-python python_server.py --port 9000 --key mein-geheimer-schlüssel
-```
 
 **Mit Batch-Datei (Windows):**
 ```batch
@@ -1343,8 +1153,8 @@ pip install pyserial
 ### Standardwerte
 
 - **Port:** 8081
-- **API-Key:** `rotor-secret-key`
 - **Host:** `0.0.0.0` (alle Interfaces)
+- **Authentifizierung:** Keine (alle Endpunkte öffentlich)
 
 ### Netzwerk-Zugriff
 
@@ -1360,7 +1170,7 @@ Der Server läuft standardmäßig auf `0.0.0.0`, was bedeutet, dass er von ander
 
 ## Best Practices
 
-1. **API-Key sicher aufbewahren:** Verwenden Sie einen starken API-Key in Produktionsumgebungen
+1. **Sicherheit:** Die API ist ohne Authentifizierung - verwenden Sie sie nur in vertrauenswürdigen Netzwerken
 2. **Metadaten nutzen:** Verwenden Sie das `meta`-Feld, um zusätzliche Informationen zu speichern (z.B. Quelle, Benutzer, Priorität)
 3. **Fehlerbehandlung:** Prüfen Sie immer den HTTP-Status-Code und behandeln Sie Fehler entsprechend
 4. **Rate Limiting:** Vermeiden Sie zu viele Anfragen in kurzer Zeit (empfohlen: max. 10 Anfragen/Sekunde)
@@ -1381,6 +1191,5 @@ Der Server läuft standardmäßig auf `0.0.0.0`, was bedeutet, dass er von ander
 Bei Fragen oder Problemen:
 - Prüfen Sie die Server-Logs in der Konsole
 - Stellen Sie sicher, dass der Server läuft (`http://localhost:8081`)
-- Überprüfen Sie den API-Key
 - Siehe auch: `GS232B_Befehle.md` für Rotor-Befehle
 

@@ -362,10 +362,9 @@ class SimulationSerialConnection extends SerialConnection {
 }
 
 class ServerConnection extends SerialConnection {
-  constructor(apiBase, apiKey) {
+  constructor(apiBase) {
     super();
     this.apiBase = apiBase || (window.location.origin);
-    this.apiKey = apiKey || 'rotor-secret-key';
     this.isConnected = false;
     this.statusPollTimer = null;
   }
@@ -382,8 +381,7 @@ class ServerConnection extends SerialConnection {
       const response = await fetch(`${this.apiBase}/api/rotor/connect`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': this.apiKey
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ port, baudRate })
       });
@@ -444,7 +442,7 @@ class ServerConnection extends SerialConnection {
       const response = await fetch(`${this.apiBase}/api/rotor/disconnect`, {
         method: 'POST',
         headers: {
-          'X-API-Key': this.apiKey
+          'Content-Type': 'application/json'
         }
       });
 
@@ -471,8 +469,7 @@ class ServerConnection extends SerialConnection {
       const response = await fetch(`${this.apiBase}/api/rotor/command`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': this.apiKey
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ command })
       });
@@ -502,7 +499,7 @@ class ServerConnection extends SerialConnection {
       try {
         const response = await fetch(`${this.apiBase}/api/rotor/status`, {
           headers: {
-            'X-API-Key': this.apiKey
+            'Content-Type': 'application/json'
           }
         });
 
@@ -696,7 +693,6 @@ class RotorService {
     this.simulationMode = true;
     this.connectionMode = 'local'; // 'local', 'server', 'simulation'
     this.apiBase = window.location.origin;
-    this.apiKey = 'rotor-secret-key';
     this.maxAzimuthRange = 360;
     this.azimuthOffset = 0;
     this.elevationOffset = 0;
@@ -742,19 +738,17 @@ class RotorService {
       // Server-Ports abrufen (nur wenn über http/https)
       console.log('[RotorService] Starte Server-Ports Abfrage', { 
         apiBase: this.apiBase, 
-        apiKey: this.apiKey ? 'gesetzt' : 'nicht gesetzt',
         url: `${this.apiBase}/api/rotor/ports`,
         protocol: window.location.protocol
       });
       
       try {
-        const response = await fetch(`${this.apiBase}/api/rotor/ports?key=${encodeURIComponent(this.apiKey)}`, {
-          method: 'GET',
-          headers: {
-            'X-API-Key': this.apiKey,
-            'Content-Type': 'application/json'
-          }
-        });
+      const response = await fetch(`${this.apiBase}/api/rotor/ports`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
         
         console.log('[RotorService] Server-Antwort erhalten', { 
           status: response.status, 
@@ -858,7 +852,7 @@ class RotorService {
     } else if (useServer) {
       this.simulationMode = false;
       this.connectionMode = 'server';
-      this.serial = new ServerConnection(this.apiBase, this.apiKey);
+      this.serial = new ServerConnection(this.apiBase);
     } else {
       const port = this.portRegistry.get(config.path);
       if (!port) {
