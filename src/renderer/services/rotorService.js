@@ -862,6 +862,9 @@ class RotorService {
       rampIntegralLimit: 50
     };
     this.activeRamp = null;
+    this.activeManualRamp = null; // Für manuelle Steuerung (R/L/U/D)
+    this.manualStopPosition = null; // Position beim Stoppen für Rückkehr
+    this.manualDirection = null; // Aktuelle Bewegungsrichtung ('R', 'L', 'U', 'D')
     this.pollingTimer = null;
     this.currentStatus = null;
     this.statusListeners = new Set();
@@ -1040,6 +1043,7 @@ class RotorService {
   async disconnect() {
     this.stopPolling();
     this.cancelActiveRamp();
+    this.cancelActiveManualRamp();
     if (this.serial) {
       try {
         await this.serial.close();
@@ -1049,10 +1053,30 @@ class RotorService {
     }
     console.log('[RotorService] Verbindung geschlossen');
     this.serial = null;
+    this.manualStopPosition = null;
+    this.manualDirection = null;
   }
 
   async control(command) {
     console.log('[RotorService] Steuerbefehl', { command });
+    const normalized = command.trim().toUpperCase();
+    const rampSettings = this.getRampSettings();
+    
+    // Wenn Softstart/Softstop aktiviert ist, verwende Ramp-Funktionen
+    if (rampSettings.rampEnabled) {
+      // Start-Befehle: R, L, U, D
+      if (normalized === 'R' || normalized === 'L' || normalized === 'U' || normalized === 'D') {
+        await this.executeManualRamp(normalized);
+        return;
+      }
+      // Stopp-Befehle: A, E, S
+      if (normalized === 'A' || normalized === 'E' || normalized === 'S') {
+        await this.executeManualStop(normalized);
+        return;
+      }
+    }
+    
+    // Für alle anderen Befehle oder wenn Softstart/Softstop deaktiviert ist
     await this.sendRawCommand(command);
   }
 
@@ -1230,6 +1254,285 @@ class RotorService {
       this.activeRamp.cancelled = true;
       this.activeRamp = null;
     }
+  }
+
+  cancelActiveManualRamp() {
+    if (this.activeManualRamp) {
+      this.activeManualRamp.cancelled = true;
+      this.activeManualRamp = null;
+    }
+  }
+
+  async executeManualRamp(direction) {
+    // direction: 'R' (rechts), 'L' (links), 'U' (hoch), 'D' (runter)
+    if (!this.serial || !this.serial.isOpen()) {
+      throw new Error('Rotor ist nicht verbunden.');
+    }
+    const rampSettings = this.getRampSettings();
+    if (!rampSettings.rampEnabled) {
+      // Wenn Softstart/Softstop deaktiviert, direkten Befehl senden
+      await this.sendRawCommand(direction);
+      return;
+    }
+
+    // Speichere nur die Richtung beim Start, Position wird beim Stoppen gespeichert
+    this.manualDirection = direction; // Speichere aktuelle Richtung
+
+    this.cancelActiveManualRamp();
+    const rampContext = { cancelled: false };
+    this.activeManualRamp = rampContext;
+
+    const isAzimuth = direction === 'R' || direction === 'L';
+    const isElevation = direction === 'U' || direction === 'D';
+    const stepDirection = direction === 'R' || direction === 'U' ? 1 : -1;
+
+    let speedFactor = 0.2; // Start mit 20% Geschwindigkeit
+    let timeSinceStart = 0;
+    const rampUpTimeMs = 2000; // 2 Sekunden zum Aufbauen auf volle Geschwindigkeit
+    const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
+
+    while (!rampContext.cancelled) {
+      const status = this.currentStatus;
+      if (!status) {
+        await this.sendRawCommand(direction);
+        break;
+      }
+
+      // Berechne Geschwindigkeitsfaktor basierend auf Zeit seit Start
+      if (timeSinceStart < rampUpTimeMs) {
+        // Linearer Anstieg von 0.2 auf 1.0 über rampUpTimeMs
+        speedFactor = 0.2 + (timeSinceStart / rampUpTimeMs) * 0.8;
+      } else {
+        speedFactor = 1.0; // Volle Geschwindigkeit
+      }
+
+      // Berechne Schritt basierend auf Geschwindigkeitsfaktor
+      const baseStep = isAzimuth 
+        ? this.speedSettings.azimuthSpeedDegPerSec * dtSeconds
+        : this.speedSettings.elevationSpeedDegPerSec * dtSeconds;
+      const step = baseStep * speedFactor * stepDirection;
+
+      // Berechne neue Position
+      let nextAz = status.azimuth;
+      let nextEl = status.elevation;
+
+      if (isAzimuth && typeof status.azimuth === 'number') {
+        // Berechne neue Position direkt, ohne planAzimuthTarget zu verwenden
+        // um die Richtung beizubehalten
+        nextAz = status.azimuth + step;
+        
+        // Prüfe Limits
+        if (nextAz < this.softLimits.azimuthMin) {
+          if (this.maxAzimuthRange === 450 && nextAz < 0) {
+            // Bei 450°-Modus: Wrap-around erlauben
+            nextAz = wrapAzimuth(nextAz, this.maxAzimuthRange);
+            // Prüfe ob innerhalb der Limits nach Wrap-around
+            if (nextAz < this.softLimits.azimuthMin || nextAz > this.softLimits.azimuthMax) {
+              break;
+            }
+          } else {
+            // Limit erreicht, stoppe
+            break;
+          }
+        } else if (nextAz > this.softLimits.azimuthMax) {
+          if (this.maxAzimuthRange === 450 && nextAz > 450) {
+            // Bei 450°-Modus: Wrap-around erlauben
+            nextAz = wrapAzimuth(nextAz, this.maxAzimuthRange);
+            // Prüfe ob innerhalb der Limits nach Wrap-around
+            if (nextAz < this.softLimits.azimuthMin || nextAz > this.softLimits.azimuthMax) {
+              break;
+            }
+          } else {
+            // Limit erreicht, stoppe
+            break;
+          }
+        }
+        // Stelle sicher, dass wir innerhalb der Limits sind
+        nextAz = clamp(nextAz, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+      } else if (isElevation && typeof status.elevation === 'number') {
+        nextEl = status.elevation + step;
+        // Prüfe Limits
+        if (nextEl < this.softLimits.elevationMin || nextEl > this.softLimits.elevationMax) {
+          // Limit erreicht, stoppe
+          break;
+        }
+        nextEl = clamp(nextEl, this.softLimits.elevationMin, this.softLimits.elevationMax);
+      }
+
+      // Sende Position direkt, wobei wir die Richtung durch die Schritt-Richtung erzwingen
+      // Berechne Raw-Position direkt, um die Richtung beizubehalten
+      if (isAzimuth) {
+        // Berechne Raw-Position direkt
+        const rawAz = nextAz - this.azimuthOffset;
+        
+        // Stelle sicher, dass die Position in die richtige Richtung geht
+        // Wenn wir nach links gehen (CCW), müssen wir sicherstellen, dass die Position
+        // so ist, dass die kürzeste Route nach links ist
+        const currentRawAz = typeof status.azimuthRaw === 'number' 
+          ? status.azimuthRaw 
+          : rawAz;
+        
+        // Berechne Delta in Raw-Koordinaten
+        let rawDelta = rawAz - currentRawAz;
+        
+        // Normalisiere Delta auf -range/2 bis +range/2
+        while (rawDelta > this.maxAzimuthRange / 2) {
+          rawDelta -= this.maxAzimuthRange;
+        }
+        while (rawDelta < -this.maxAzimuthRange / 2) {
+          rawDelta += this.maxAzimuthRange;
+        }
+        
+        // Wenn die berechnete Richtung nicht mit der gewünschten Richtung übereinstimmt,
+        // passe die Position an
+        if ((stepDirection > 0 && rawDelta < 0) || (stepDirection < 0 && rawDelta > 0)) {
+          // Richtung stimmt nicht überein, passe Position an
+          if (stepDirection > 0) {
+            // Nach rechts, aber Delta ist negativ -> addiere range
+            rawAz += this.maxAzimuthRange;
+          } else {
+            // Nach links, aber Delta ist positiv -> subtrahiere range
+            rawAz -= this.maxAzimuthRange;
+          }
+        }
+        
+        // Wende Wrap-around an
+        const wrappedRawAz = wrapAzimuth(rawAz, this.maxAzimuthRange);
+        const azValue = Math.round(wrappedRawAz).toString().padStart(3, '0');
+        await this.sendRawCommand(`M${azValue}`);
+      } else {
+        const elPlan = this.planElevationTarget(nextEl);
+        // Für Elevation verwenden wir die normale Planung
+        const currentAzRaw = typeof this.currentStatus?.azimuthRaw === 'number'
+          ? Math.round(this.currentStatus.azimuthRaw).toString().padStart(3, '0')
+          : '000';
+        const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
+        await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+      }
+
+      timeSinceStart += rampSettings.rampSampleTimeMs;
+      await delay(rampSettings.rampSampleTimeMs);
+    }
+
+    if (this.activeManualRamp === rampContext) {
+      this.activeManualRamp = null;
+    }
+  }
+
+  async executeManualStop(stopCommand) {
+    // stopCommand: 'A' (Azimut stoppen), 'E' (Elevation stoppen), 'S' (alles stoppen)
+    if (!this.serial || !this.serial.isOpen()) {
+      throw new Error('Rotor ist nicht verbunden.');
+    }
+    const rampSettings = this.getRampSettings();
+    
+    // Stoppe aktive manuelle Bewegung
+    this.cancelActiveManualRamp();
+
+    // Speichere aktuelle Position als Stopp-Position BEIM STOPPEN
+    const stopPosition = this.currentStatus ? {
+      az: this.currentStatus.azimuth,
+      el: this.currentStatus.elevation
+    } : null;
+
+    if (!rampSettings.rampEnabled) {
+      // Wenn Softstart/Softstop deaktiviert, direkten Stopp-Befehl senden
+      await this.sendRawCommand(stopCommand);
+      this.manualDirection = null;
+      this.manualStopPosition = null;
+      return;
+    }
+
+    if (!stopPosition || !this.manualDirection) {
+      // Keine Position oder Richtung verfügbar, direkter Stopp
+      await this.sendRawCommand(stopCommand);
+      this.manualDirection = null;
+      this.manualStopPosition = null;
+      return;
+    }
+
+    // Phase 1: Sanftes Stoppen mit reduzierter Geschwindigkeit und Nachlaufen
+    let speedFactor = 1.0;
+    const rampDownTimeMs = 1000; // 1 Sekunde zum Abbremsen
+    let timeSinceStop = 0;
+    const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
+    const maxOvershootDeg = 2.0; // Maximales Nachlaufen in Grad
+
+    while (timeSinceStop < rampDownTimeMs) {
+      const status = this.currentStatus;
+      if (!status) break;
+
+      // Reduziere Geschwindigkeit linear
+      speedFactor = 1.0 - (timeSinceStop / rampDownTimeMs);
+
+      // Berechne Schritt basierend auf reduzierter Geschwindigkeit
+      const baseAzStep = this.speedSettings.azimuthSpeedDegPerSec * dtSeconds * speedFactor;
+      const baseElStep = this.speedSettings.elevationSpeedDegPerSec * dtSeconds * speedFactor;
+
+      // Bewege weiter in aktuelle Richtung mit reduzierter Geschwindigkeit (Nachlaufen)
+      let nextAz = status.azimuth;
+      let nextEl = status.elevation;
+
+      if (stopCommand === 'A' || stopCommand === 'S') {
+        // Azimut stoppen - bewege noch etwas weiter in aktuelle Richtung
+        if (this.manualDirection === 'R' || this.manualDirection === 'L') {
+          const stepDirection = this.manualDirection === 'R' ? 1 : -1;
+          const step = Math.min(baseAzStep, maxOvershootDeg);
+          nextAz = status.azimuth + stepDirection * step;
+          // Prüfe Limits
+          if (nextAz < this.softLimits.azimuthMin || nextAz > this.softLimits.azimuthMax) {
+            // Limit erreicht, stoppe Nachlaufen
+            break;
+          }
+        }
+      }
+
+      if (stopCommand === 'E' || stopCommand === 'S') {
+        // Elevation stoppen - bewege noch etwas weiter in aktuelle Richtung
+        if (this.manualDirection === 'U' || this.manualDirection === 'D') {
+          const stepDirection = this.manualDirection === 'U' ? 1 : -1;
+          const step = Math.min(baseElStep, maxOvershootDeg);
+          nextEl = status.elevation + stepDirection * step;
+          // Prüfe Limits
+          if (nextEl < this.softLimits.elevationMin || nextEl > this.softLimits.elevationMax) {
+            // Limit erreicht, stoppe Nachlaufen
+            break;
+          }
+        }
+      }
+
+      await this.sendPlannedTarget(nextAz, nextEl);
+      timeSinceStop += rampSettings.rampSampleTimeMs;
+      await delay(rampSettings.rampSampleTimeMs);
+    }
+
+    // Phase 2: Warte auf Schwingungen (500ms)
+    await delay(500);
+
+    // Phase 3: Zurück zur ursprünglichen Stopp-Position
+    if (this.currentStatus) {
+      const currentAz = this.currentStatus.azimuth;
+      const currentEl = this.currentStatus.elevation;
+      const azError = stopCommand === 'A' || stopCommand === 'S' 
+        ? shortestAngularDelta(stopPosition.az, currentAz, this.maxAzimuthRange)
+        : 0;
+      const elError = stopCommand === 'E' || stopCommand === 'S'
+        ? stopPosition.el - currentEl
+        : 0;
+
+      if (Math.abs(azError) > 0.5 || Math.abs(elError) > 0.5) {
+        // Verwende executeRamp für sanfte Rückkehr
+        await this.executeRamp({
+          az: stopCommand === 'A' || stopCommand === 'S' ? stopPosition.az : null,
+          el: stopCommand === 'E' || stopCommand === 'S' ? stopPosition.el : null
+        });
+      }
+    }
+
+    // Sende finalen Stopp-Befehl
+    await this.sendRawCommand(stopCommand);
+    this.manualDirection = null;
+    this.manualStopPosition = null;
   }
 
   async sendPlannedTarget(azimuth, elevation) {
