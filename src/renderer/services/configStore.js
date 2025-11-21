@@ -22,7 +22,9 @@ const defaultConfig = {
   rampToleranceDeg: 1.5,
   mapLatitude: null,
   mapLongitude: null,
-  satelliteMapEnabled: false
+  satelliteMapEnabled: false,
+  coneAngle: 10, // Kegel-Winkel in Grad
+  coneLength: 1000 // Kegel-Länge in Metern
 };
 
 class ConfigStore {

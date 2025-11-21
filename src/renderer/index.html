@@ -110,6 +110,16 @@
               <span id="zoomLevel" class="zoom-level">Zoom: 15</span>
             </div>
           </div>
+          <div class="cone-settings">
+            <label>
+              Kegel-Winkel (Grad)
+              <input id="coneAngleInput" type="number" min="1" max="90" step="1" value="10" />
+            </label>
+            <label>
+              Kegel-Länge (Meter)
+              <input id="coneLengthInput" type="number" min="0" max="100000" step="10" value="1000" />
+            </label>
+          </div>
         </div>
         <div class="canvas-wrapper">
           <canvas id="mapCanvas"></canvas>

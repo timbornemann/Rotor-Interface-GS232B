@@ -15,6 +15,7 @@ Diese Dokumentation beschreibt die REST-API des Rotor Interface GS232B Servers. 
     - [POST /api/rotor/disconnect](#post-apirotordisconnect)
     - [POST /api/rotor/command](#post-apirotorcommand)
     - [GET /api/rotor/status](#get-apirotorstatus)
+    - [GET /api/rotor/position](#get-apirotorposition)
 - [Fehlerbehandlung](#fehlerbehandlung)
 - [Beispiele](#beispiele)
   - [cURL](#curl)
@@ -419,6 +420,76 @@ Ruft den aktuellen Status des Rotor-Controllers ab.
 
 ---
 
+#### GET /api/rotor/position
+
+Ruft die aktuelle Position (C2-Status) mit Kegel-Einstellungen ab. Dieser Endpunkt ist speziell für die Visualisierung mit Kegel-Darstellung gedacht.
+
+##### Request
+
+**URL:** `/api/rotor/position`
+
+**Method:** `GET`
+
+**Query Parameter (optional):**
+- `coneAngle` (number): Kegel-Winkel in Grad (Standard: 10)
+- `coneLength` (number): Kegel-Länge in Metern (Standard: 1000)
+
+##### Response
+
+**Status Code:** `200 OK`
+
+**Body (JSON) - Verbunden:**
+```json
+{
+  "connected": true,
+  "port": "COM3",
+  "baudRate": 9600,
+  "position": {
+    "azimuth": 180,
+    "elevation": 45,
+    "azimuthRaw": 180,
+    "elevationRaw": 45,
+    "timestamp": 1705320000000,
+    "raw": "AZ=180 EL=045"
+  },
+  "cone": {
+    "angle": 10,
+    "length": 1000
+  }
+}
+```
+
+**Body (JSON) - Nicht verbunden:**
+```json
+{
+  "connected": false
+}
+```
+
+**Response-Felder:**
+- `connected` (boolean): Ob eine Verbindung besteht
+- `port` (string, optional): COM-Port-Name (nur wenn verbunden)
+- `baudRate` (number, optional): Baudrate (nur wenn verbunden)
+- `position` (object, optional): Aktuelle Position (nur wenn verbunden)
+  - `azimuth` (number, optional): Kalibrierter Azimut-Wert
+  - `elevation` (number, optional): Kalibrierter Elevation-Wert
+  - `azimuthRaw` (number, optional): Roher Azimut-Wert
+  - `elevationRaw` (number, optional): Roher Elevation-Wert
+  - `timestamp` (number): Zeitstempel in Millisekunden
+  - `raw` (string): Rohe Antwort vom Rotor (C2-Status)
+- `cone` (object): Kegel-Einstellungen
+  - `angle` (number): Kegel-Winkel in Grad
+  - `length` (number): Kegel-Länge in Metern
+
+**Hinweis:** Die Kegel-Einstellungen können als Query-Parameter übergeben werden. Wenn nicht angegeben, werden Standardwerte verwendet (10° Winkel, 1000m Länge).
+
+**Beispiel mit Query-Parametern:**
+```
+GET /api/rotor/position?coneAngle=15&coneLength=2000
+```
+
+---
+
 ## Fehlerbehandlung
 
 ### HTTP Status Codes
@@ -492,6 +563,16 @@ curl -X POST "${API_BASE}/api/rotor/connect" \
 **3. Aktuellen Status abrufen:**
 ```bash
 curl -X GET "${API_BASE}/api/rotor/status"
+```
+
+**Position mit Kegel-Einstellungen abrufen:**
+```bash
+curl -X GET "${API_BASE}/api/rotor/position"
+```
+
+**Position mit benutzerdefinierten Kegel-Einstellungen:**
+```bash
+curl -X GET "${API_BASE}/api/rotor/position?coneAngle=15&coneLength=2000"
 ```
 
 **4. Befehle an den Rotor senden:**
@@ -722,6 +803,21 @@ class RotorAPI:
                 "elevationRaw": status["status"].get("elevationRaw")
             }
         return None
+    
+    def get_position(self, cone_angle: Optional[float] = None, cone_length: Optional[float] = None) -> Dict:
+        """Ruft die aktuelle Position mit Kegel-Einstellungen ab."""
+        url = f"{self.base_url}/api/rotor/position"
+        if cone_angle is not None or cone_length is not None:
+            params = []
+            if cone_angle is not None:
+                params.append(f"coneAngle={cone_angle}")
+            if cone_length is not None:
+                params.append(f"coneLength={cone_length}")
+            if params:
+                url += "?" + "&".join(params)
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
 
 # Verwendung - Legacy Endpunkte
 api = RotorAPI()

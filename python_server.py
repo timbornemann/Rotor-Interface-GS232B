@@ -267,6 +267,56 @@ class RotorHandler(SimpleHTTPRequestHandler):
                 else:
                     self._send_json({"connected": False})
             return
+        
+        if parsed.path == "/api/rotor/position":
+            # Neuer Endpunkt: Gibt Positionen (C2-Status) mit Kegel-Einstellungen zurück
+            with ROTOR_LOCK:
+                if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
+                    status = ROTOR_CONNECTION.get_status()
+                    
+                    # Parse Query-Parameter für Kegel-Einstellungen (optional)
+                    query_params = parse_qs(parsed.query)
+                    try:
+                        cone_angle = float(query_params.get("coneAngle", [10])[0]) if query_params.get("coneAngle") else 10
+                    except (ValueError, IndexError):
+                        cone_angle = 10
+                    try:
+                        cone_length = float(query_params.get("coneLength", [100])[0]) if query_params.get("coneLength") else 100
+                    except (ValueError, IndexError):
+                        cone_length = 100
+                    
+                    if status:
+                        self._send_json({
+                            "connected": True,
+                            "port": ROTOR_CONNECTION.port,
+                            "baudRate": ROTOR_CONNECTION.baud_rate,
+                            "position": {
+                                "azimuth": status.get("azimuth"),
+                                "elevation": status.get("elevation"),
+                                "azimuthRaw": status.get("azimuthRaw"),
+                                "elevationRaw": status.get("elevationRaw"),
+                                "timestamp": status.get("timestamp"),
+                                "raw": status.get("raw")
+                            },
+                            "cone": {
+                                "angle": cone_angle,
+                                "length": cone_length
+                            }
+                        })
+                    else:
+                        self._send_json({
+                            "connected": True,
+                            "port": ROTOR_CONNECTION.port,
+                            "baudRate": ROTOR_CONNECTION.baud_rate,
+                            "position": None,
+                            "cone": {
+                                "angle": cone_angle,
+                                "length": cone_length
+                            }
+                        })
+                else:
+                    self._send_json({"connected": False})
+            return
 
         super().do_GET()
 
@@ -374,6 +424,7 @@ def run_server(port: int) -> None:
         print("  - /api/rotor/disconnect - Disconnect from COM port")
         print("  - /api/rotor/command - Send command to rotor")
         print("  - /api/rotor/status - Get current status")
+        print("  - /api/rotor/position - Get position with cone settings (C2 status)")
         if not SERIAL_AVAILABLE:
             print("WARNING: COM port functionality disabled (pyserial not installed)")
         try:

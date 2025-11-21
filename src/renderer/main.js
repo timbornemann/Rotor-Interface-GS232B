@@ -47,6 +47,8 @@ const serialCommandInput = document.getElementById('serialCommandInput');
 const sendSerialCommandBtn = document.getElementById('sendSerialCommandBtn');
 const commandHistoryList = document.getElementById('commandHistoryList');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+const coneAngleInput = document.getElementById('coneAngleInput');
+const coneLengthInput = document.getElementById('coneLengthInput');
 
 function logAction(message, details = {}) {
   console.log('[UI]', message, details);
@@ -202,11 +204,14 @@ async function init() {
   simulationToggle.checked = config.simulation;
   connectionModeSelect.value = config.connectionMode || 'local';
   modeSelect.value = config.azimuthMode.toString();
+  if (coneAngleInput) coneAngleInput.value = (config.coneAngle || 10).toString();
+  if (coneLengthInput) coneLengthInput.value = (config.coneLength || 1000).toString();
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
   updateModeLabel();
   updateConnectionModeUI();
+  updateConeSettings();
   controls.setEnabled(false);
   disconnectBtn.disabled = true;
 
@@ -280,6 +285,14 @@ async function init() {
   zoomInBtn.addEventListener('click', () => mapView.setZoom(mapView.zoomLevel + 1));
   zoomOutBtn.addEventListener('click', () => mapView.setZoom(mapView.zoomLevel - 1));
   
+  // Kegel-Einstellungen Event-Handler
+  if (coneAngleInput) {
+    coneAngleInput.addEventListener('change', () => handleConeSettingsChange());
+  }
+  if (coneLengthInput) {
+    coneLengthInput.addEventListener('change', () => handleConeSettingsChange());
+  }
+  
   // Enter-Taste im Koordinatenfeld
   mapCoordinatesInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
@@ -289,6 +302,10 @@ async function init() {
   
   // Initialisiere Zoom-Anzeige
   mapView.updateZoomDisplay();
+  
+  // Kegel-Einstellungen Event-Handler
+  coneAngleInput.addEventListener('change', () => handleConeSettingsChange());
+  coneLengthInput.addEventListener('change', () => handleConeSettingsChange());
 
   // Serielles Tool Event-Handler
   if (sendSerialCommandBtn) {
@@ -739,6 +756,22 @@ function handleStatus(status) {
 function updateModeLabel() {
   modeStatus.textContent = `Modus: ${modeSelect.value}deg`;
   logAction('Modus-Label aktualisiert', { label: modeStatus.textContent });
+}
+
+function updateConeSettings() {
+  if (!coneAngleInput || !coneLengthInput) return;
+  const coneAngle = Number(coneAngleInput.value) || 10;
+  const coneLength = Number(coneLengthInput.value) || 1000;
+  mapView.setConeSettings(coneAngle, coneLength);
+}
+
+function handleConeSettingsChange() {
+  if (!coneAngleInput || !coneLengthInput) return;
+  const coneAngle = Number(coneAngleInput.value) || 10;
+  const coneLength = Number(coneLengthInput.value) || 1000;
+  config = configStore.save({ coneAngle, coneLength });
+  updateConeSettings();
+  logAction('Kegel-Einstellungen geändert', { coneAngle, coneLength: `${coneLength}m` });
 }
 
 function updateConnectionModeUI() {

@@ -18,6 +18,8 @@ class MapView {
     this.tileCache = new Map();
     this.lastAzimuth = 0;
     this.lastElevation = 0;
+    this.coneAngle = 10; // Kegel-Winkel in Grad
+    this.coneLength = 1000; // Kegel-Länge in Metern
     
     // Initialisiere Canvas-Größe
     this.resizeCanvas();
@@ -26,6 +28,36 @@ class MapView {
     this.setupZoomHandlers();
     this.setupResizeHandler();
     this.drawBase();
+  }
+
+  setConeSettings(angle, length) {
+    this.coneAngle = Math.max(1, Math.min(90, angle || 10));
+    this.coneLength = Math.max(0, length || 1000); // Länge in Metern
+    // Aktualisiere die Anzeige
+    this.update(this.lastAzimuth, this.lastElevation);
+  }
+
+  // Berechne Meter pro Pixel basierend auf Zoom-Level und Breitengrad
+  getMetersPerPixel() {
+    if (this.latitude === null) {
+      // Fallback: Verwende Standard-Wert wenn keine Koordinaten gesetzt
+      return this.getMetersPerPixelForZoom(this.zoomLevel, 51.0); // ~Mitte Deutschland
+    }
+    return this.getMetersPerPixelForZoom(this.zoomLevel, this.latitude);
+  }
+
+  getMetersPerPixelForZoom(zoom, latitude) {
+    // Formel für Web Mercator: Meter pro Pixel = (156543.03392 * cos(lat)) / (2^zoom)
+    // Quelle: https://wiki.openstreetmap.org/wiki/Zoom_levels
+    const latRad = (latitude * Math.PI) / 180;
+    const metersPerPixel = (156543.03392 * Math.cos(latRad)) / Math.pow(2, zoom);
+    return metersPerPixel;
+  }
+
+  // Konvertiere Meter in Pixel basierend auf aktueller Karten-Skalierung
+  metersToPixels(meters) {
+    const metersPerPixel = this.getMetersPerPixel();
+    return meters / metersPerPixel;
   }
 
   resizeCanvas() {
@@ -426,18 +458,73 @@ class MapView {
     ctx.translate(this.centerX, this.centerY);
 
     const rad = ((azimuth - 90) * Math.PI) / 180;
-    const length = this.radius * (0.4 + 0.6 * Math.min(elevation, 90) / 90);
-
+    
+    // Berechne Länge in Pixeln basierend auf Metern und aktueller Skalierung
+    let lengthInPixels;
+    if (this.satelliteMapEnabled && this.latitude !== null) {
+      // Wenn Karte aktiv: Verwende exakte Skalierung basierend auf Zoom-Level
+      lengthInPixels = this.metersToPixels(this.coneLength);
+    } else {
+      // Wenn keine Karte: Verwende relative Skalierung basierend auf Radius
+      // Fallback: 1 Meter = 1 Pixel bei Zoom 15, skaliert mit Radius
+      const baseMetersPerPixel = this.getMetersPerPixelForZoom(15, 51.0); // Standard
+      const currentMetersPerPixel = this.getMetersPerPixelForZoom(this.zoomLevel, 51.0);
+      const scaleFactor = baseMetersPerPixel / currentMetersPerPixel;
+      lengthInPixels = (this.coneLength / baseMetersPerPixel) * scaleFactor;
+      
+      // Begrenze auf maximalen Radius (mit Elevation-Berücksichtigung)
+      const maxLength = this.radius * (0.4 + 0.6 * Math.min(elevation, 90) / 90);
+      if (lengthInPixels > maxLength) {
+        lengthInPixels = maxLength;
+      }
+    }
+    
+    // Kegel-Winkel in Radiant
+    const coneAngleRad = (this.coneAngle * Math.PI) / 180;
+    
+    // Berechne Kegel-Spitze (am Ende der Länge)
+    const tipX = Math.cos(rad) * lengthInPixels;
+    const tipY = Math.sin(rad) * lengthInPixels;
+    
+    // Berechne linke und rechte Kante des Kegels
+    const leftRad = rad - coneAngleRad / 2;
+    const rightRad = rad + coneAngleRad / 2;
+    const leftX = Math.cos(leftRad) * lengthInPixels;
+    const leftY = Math.sin(leftRad) * lengthInPixels;
+    const rightX = Math.cos(rightRad) * lengthInPixels;
+    const rightY = Math.sin(rightRad) * lengthInPixels;
+    
+    // Zeichne Kegel (als gefülltes Dreieck)
+    ctx.fillStyle = 'rgba(47, 212, 255, 0.3)'; // Transparentes Blau
+    ctx.beginPath();
+    ctx.moveTo(0, 0); // Spitze am Zentrum
+    ctx.lineTo(leftX, leftY); // Linke Kante
+    ctx.lineTo(rightX, rightY); // Rechte Kante
+    ctx.closePath();
+    ctx.fill();
+    
+    // Zeichne Kegel-Outline
     ctx.strokeStyle = '#2fd4ff';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(Math.cos(rad) * length, Math.sin(rad) * length);
+    ctx.lineTo(leftX, leftY); // Linke Kante
+    ctx.lineTo(rightX, rightY); // Rechte Kante
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Zeichne Mittelstrich (vom Zentrum zur Spitze)
+    ctx.strokeStyle = '#2fd4ff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(tipX, tipY);
     ctx.stroke();
 
+    // Zeichne Spitze (Kreis)
     ctx.fillStyle = '#ffb347';
     ctx.beginPath();
-    ctx.arc(Math.cos(rad) * length, Math.sin(rad) * length, 6, 0, Math.PI * 2);
+    ctx.arc(tipX, tipY, 6, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
