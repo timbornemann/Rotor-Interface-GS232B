@@ -660,6 +660,12 @@ class RotorService {
     const ports = [];
     
     // Server-Ports abrufen (immer versuchen, falls Server verfügbar ist)
+    console.log('[RotorService] Starte Server-Ports Abfrage', { 
+      apiBase: this.apiBase, 
+      apiKey: this.apiKey ? 'gesetzt' : 'nicht gesetzt',
+      url: `${this.apiBase}/api/rotor/ports`
+    });
+    
     try {
       const response = await fetch(`${this.apiBase}/api/rotor/ports?key=${encodeURIComponent(this.apiKey)}`, {
         method: 'GET',
@@ -669,30 +675,45 @@ class RotorService {
         }
       });
       
+      console.log('[RotorService] Server-Antwort erhalten', { 
+        status: response.status, 
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('[RotorService] Server-Antwort Daten:', data);
+        
         if (data.ports && Array.isArray(data.ports)) {
+          console.log('[RotorService] Verarbeite Server-Ports', { count: data.ports.length, ports: data.ports });
           data.ports.forEach((port) => {
-            ports.push({
+            const portEntry = {
               path: port.path,
               friendlyName: port.friendlyName || port.path,
               simulated: false,
               serverPort: true
-            });
+            };
+            console.log('[RotorService] Füge Server-Port hinzu:', portEntry);
+            ports.push(portEntry);
           });
-          console.log('[RotorService] Server-Ports erfolgreich abgerufen', { count: data.ports.length });
+          console.log('[RotorService] Server-Ports erfolgreich abgerufen', { count: data.ports.length, totalPorts: ports.length });
+        } else {
+          console.warn('[RotorService] Keine Ports in Antwort oder falsches Format', { data });
         }
       } else {
         const errorText = await response.text();
-        console.warn('[RotorService] Server-Ports Anfrage fehlgeschlagen', { 
+        console.error('[RotorService] Server-Ports Anfrage fehlgeschlagen', { 
           status: response.status, 
           statusText: response.statusText,
           error: errorText 
         });
       }
     } catch (error) {
-      console.warn('[RotorService] Konnte Server-Ports nicht abrufen', { 
+      console.error('[RotorService] Konnte Server-Ports nicht abrufen', { 
         error: error.message,
+        errorStack: error.stack,
         apiBase: this.apiBase,
         apiKey: this.apiKey ? 'gesetzt' : 'nicht gesetzt'
       });
