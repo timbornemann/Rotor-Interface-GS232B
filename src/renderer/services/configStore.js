@@ -25,7 +25,8 @@ const defaultConfig = {
   satelliteMapEnabled: false,
   coneAngle: 10, // Kegel-Winkel in Grad
   coneLength: 1000, // Kegel-Länge in Metern
-  azimuthDisplayOffset: 0 // Azimut-Korrektur für Anzeige (Grad)
+  azimuthDisplayOffset: 0, // Azimut-Korrektur für Anzeige (Grad)
+  elevationDisplayEnabled: true // Elevation-Anzeige aktiviert/deaktiviert
 };
 
 // IniHandler will be loaded separately

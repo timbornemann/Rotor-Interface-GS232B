@@ -3,8 +3,29 @@ class Elevation {
     this.root = root;
     this.indicator = this.root.querySelector('#elevationIndicator');
     this.scale = this.root.querySelector('#elevationScale');
+    this.svg = this.root.querySelector('#elevationSvg');
+    this.logo = this.root.querySelector('#elevationLogo');
     this.currentValue = 0;
+    this.displayEnabled = true;
     this.initScale();
+    this.updateDisplay();
+  }
+
+  setDisplayEnabled(enabled) {
+    this.displayEnabled = enabled;
+    this.updateDisplay();
+  }
+
+  updateDisplay() {
+    if (this.svg && this.logo) {
+      if (this.displayEnabled) {
+        this.svg.classList.remove('hidden');
+        this.logo.classList.add('hidden');
+      } else {
+        this.svg.classList.add('hidden');
+        this.logo.classList.remove('hidden');
+      }
+    }
   }
 
   initScale() {
@@ -64,6 +85,10 @@ class Elevation {
   }
 
   update(elevation) {
+    if (!this.displayEnabled) {
+      return;
+    }
+    
     if (!this.indicator || typeof elevation !== 'number' || Number.isNaN(elevation)) {
       return;
     }

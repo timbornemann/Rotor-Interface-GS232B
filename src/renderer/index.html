@@ -20,6 +20,7 @@
           <button id="connectBtn" class="primary">Verbinden</button>
           <button id="disconnectBtn" disabled>Trennen</button>
         </div>
+        <div class="app-title">RotorControl GS-232B</div>
         <div class="status-line">
           <span id="connectionStatus" class="status-chip disconnected">Getrennt</span>
           <span id="modeStatus">Modus: 360deg</span>
@@ -34,38 +35,41 @@
       <section class="card compass-card">
         <div class="card-header">
           <h2>Kompass</h2>
+        </div>
+        <div class="compass-container">
+          <div id="compassRoot" class="compass">
+            <svg viewBox="0 0 200 200" class="compass-svg">
+              <circle cx="100" cy="100" r="90" class="compass-outline" />
+              <text x="100" y="20" text-anchor="middle">N</text>
+              <text x="180" y="105" text-anchor="middle">E</text>
+              <text x="100" y="190" text-anchor="middle">S</text>
+              <text x="20" y="105" text-anchor="middle">W</text>
+              <g id="compassNeedle" class="needle">
+                <polygon points="100,30 110,100 90,100" />
+                <polygon points="100,170 110,100 90,100" class="needle tail" />
+              </g>
+            </svg>
+          </div>
           <div class="az-values">
-              <div>
-                <span>Azimut</span>
-                <strong id="azValue">--deg</strong>
-              </div>
-              <div>
-                <span>Elevation</span>
-                <strong id="elValue">--deg</strong>
-              </div>
+            <div class="az-value-item">
+              <span>Azimut</span>
+              <strong id="azValue">--deg</strong>
+            </div>
+            <div class="az-value-item">
+              <span>Elevation</span>
+              <strong id="elValue">--deg</strong>
+            </div>
           </div>
         </div>
-        <div id="compassRoot" class="compass">
-          <svg viewBox="0 0 200 200" class="compass-svg">
-            <circle cx="100" cy="100" r="90" class="compass-outline" />
-            <text x="100" y="20" text-anchor="middle">N</text>
-            <text x="180" y="105" text-anchor="middle">E</text>
-            <text x="100" y="190" text-anchor="middle">S</text>
-            <text x="20" y="105" text-anchor="middle">W</text>
-            <g id="compassNeedle" class="needle">
-              <polygon points="100,30 110,100 90,100" />
-              <polygon points="100,170 110,100 90,100" class="needle tail" />
-            </g>
-          </svg>
-        </div>
         <div id="elevationRoot" class="elevation">
-          <svg viewBox="0 0 200 200" class="elevation-svg">
+          <svg viewBox="0 0 200 200" class="elevation-svg" id="elevationSvg">
             <g id="elevationScale"></g>
             <g id="elevationIndicator" class="elevation-indicator">
               <line x1="100" y1="180" x2="100" y2="100" stroke="#2fd4ff" stroke-width="3" />
               <polygon points="100,100 95,110 105,110" fill="#ffb347" />
             </g>
           </svg>
+          <img id="elevationLogo" src="./assets/logo.png" alt="Logo" class="elevation-logo hidden" />
         </div>
       </section>
 
@@ -357,6 +361,10 @@
                   <option value="360">360 deg</option>
                   <option value="450">450 deg</option>
                 </select>
+              </label>
+              <label class="checkbox">
+                <input id="settingsElevationDisplayToggle" type="checkbox" />
+                Elevation-Anzeige aktivieren
               </label>
             </div>
           </div>

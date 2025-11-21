@@ -35,9 +35,11 @@ function generateAzimuthCandidates(value, min, max, range) {
   const candidates = [];
   const base = clamp(value, min, max);
   candidates.push(base);
+  // Bei 450°-Modus: Erlaube auch Werte über 360°, wenn max >= 450
+  const effectiveMax = range === 450 && max >= 450 ? 450 : max;
   const above = base + range;
   const below = base - range;
-  if (above <= max) {
+  if (above <= effectiveMax) {
     candidates.push(above);
   }
   if (below >= min) {
@@ -257,10 +259,18 @@ class SimulationSerialConnection extends SerialConnection {
         break;
       case 'P36':
         this.modeMaxAz = 360;
+        // Bei 360°-Modus: azimuthMax auf 360 begrenzen
+        if (this.azimuthMax > 360) {
+          this.azimuthMax = 360;
+        }
         this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
         break;
       case 'P45':
         this.modeMaxAz = 450;
+        // Bei 450°-Modus: azimuthMax auf 450 erweitern (wenn nicht manuell gesetzt)
+        if (this.azimuthMax <= 360) {
+          this.azimuthMax = 450;
+        }
         this.azimuthRaw = this.constrainRawAzimuth(this.azimuthRaw, this.azimuthRaw);
         break;
       default:
@@ -1066,6 +1076,18 @@ class RotorService {
     this.maxAzimuthRange = mode === 450 ? 450 : 360;
     console.log('[RotorService] Modus setzen', { mode: this.maxAzimuthRange });
     await this.sendRawCommand(mode === 450 ? 'P45' : 'P36');
+    
+    // Bei 450°-Modus: Erweitere Soft-Limits automatisch auf 0-450, wenn sie noch auf 0-360 stehen
+    if (mode === 450 && this.softLimits.azimuthMax <= 360) {
+      this.softLimits.azimuthMax = 450;
+      console.log('[RotorService] Soft-Limits automatisch auf 0-450 erweitert');
+    }
+    // Bei 360°-Modus: Begrenze Soft-Limits auf 0-360, wenn sie darüber liegen
+    else if (mode === 360 && this.softLimits.azimuthMax > 360) {
+      this.softLimits.azimuthMax = 360;
+      console.log('[RotorService] Soft-Limits automatisch auf 0-360 begrenzt');
+    }
+    
     this.applySoftLimitConfig();
   }
 
@@ -1244,33 +1266,78 @@ class RotorService {
 
   planAzimuthTarget(target) {
     const range = this.maxAzimuthRange;
-    const clampedTarget = clamp(target, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+    // Bei 450°-Modus: Erlaube Werte über 360°, wenn sie innerhalb des Bereichs liegen
+    const effectiveMax = range === 450 ? Math.max(this.softLimits.azimuthMax, 450) : this.softLimits.azimuthMax;
+    const clampedTarget = clamp(target, this.softLimits.azimuthMin, effectiveMax);
     const current = typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : clampedTarget;
 
-    const targetCandidates = generateAzimuthCandidates(
-      clampedTarget,
-      this.softLimits.azimuthMin,
-      this.softLimits.azimuthMax,
-      range
-    );
-    const currentCandidates = generateAzimuthCandidates(
-      current,
-      this.softLimits.azimuthMin,
-      this.softLimits.azimuthMax,
-      range
-    );
-
+    // Bei 450°-Modus: Berücksichtige auch Wege über 360° hinaus
+    // Beispiel: Von 340° zu 20° → 40° im Uhrzeigersinn (340→360→20), nicht 320° gegen den Uhrzeigersinn
     let bestTarget = clampedTarget;
     let bestDistance = Number.POSITIVE_INFINITY;
-    targetCandidates.forEach((candidate) => {
-      currentCandidates.forEach((currentCandidate) => {
-        const distance = Math.abs(candidate - currentCandidate);
+    
+    if (range === 450) {
+      // Bei 450°-Modus: Prüfe direkten Weg und Weg über 360° hinaus
+      // Beispiel: Von 340° zu 20° → 40° im Uhrzeigersinn (340→360→20), nicht 320° gegen den Uhrzeigersinn
+      const candidates = [clampedTarget];
+      
+      // Wenn Ziel < 360°: Prüfe auch Ziel + 360° (für Wege über 360° hinaus)
+      if (clampedTarget < 360) {
+        const candidateAbove = clampedTarget + 360;
+        if (candidateAbove <= effectiveMax) {
+          candidates.push(candidateAbove);
+        }
+      }
+      // Wenn Ziel >= 360°: Prüfe auch Ziel - 360° (für Wege unter 360°)
+      if (clampedTarget >= 360) {
+        candidates.push(clampedTarget - 360);
+      }
+      
+      candidates.forEach((candidate) => {
+        // Berechne kürzesten Weg (berücksichtige beide Richtungen im 450°-Bereich)
+        let distance;
+        if (candidate >= current) {
+          // Vorwärts: direkt oder über 450° hinaus
+          const forward = candidate - current;
+          const backward = current + (450 - candidate);
+          distance = Math.min(forward, backward);
+        } else {
+          // Rückwärts: direkt oder über 0° hinaus
+          const backward = current - candidate;
+          const forward = (450 - current) + candidate;
+          distance = Math.min(forward, backward);
+        }
+        
         if (distance < bestDistance) {
           bestDistance = distance;
           bestTarget = candidate;
         }
       });
-    });
+    } else {
+      // Bei 360°-Modus: Verwende die ursprüngliche Logik mit Candidates
+      const targetCandidates = generateAzimuthCandidates(
+        clampedTarget,
+        this.softLimits.azimuthMin,
+        this.softLimits.azimuthMax,
+        range
+      );
+      const currentCandidates = generateAzimuthCandidates(
+        current,
+        this.softLimits.azimuthMin,
+        this.softLimits.azimuthMax,
+        range
+      );
+
+      targetCandidates.forEach((candidate) => {
+        currentCandidates.forEach((currentCandidate) => {
+          const distance = Math.abs(candidate - currentCandidate);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestTarget = candidate;
+          }
+        });
+      });
+    }
 
     const rawCommand = bestTarget - this.azimuthOffset;
     return {

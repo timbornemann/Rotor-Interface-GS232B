@@ -257,7 +257,9 @@ class SettingsModal {
 
     // Mode tab
     const settingsModeSelect = document.getElementById('settingsModeSelect');
+    const settingsElevationDisplayToggle = document.getElementById('settingsElevationDisplayToggle');
     if (settingsModeSelect) settingsModeSelect.value = config.azimuthMode || 360;
+    if (settingsElevationDisplayToggle) settingsElevationDisplayToggle.checked = config.elevationDisplayEnabled !== false;
   }
 
   getConfigFromModal() {
@@ -334,7 +336,9 @@ class SettingsModal {
 
     // Mode tab
     const settingsModeSelect = document.getElementById('settingsModeSelect');
+    const settingsElevationDisplayToggle = document.getElementById('settingsElevationDisplayToggle');
     if (settingsModeSelect) config.azimuthMode = Number(settingsModeSelect.value) || 360;
+    if (settingsElevationDisplayToggle) config.elevationDisplayEnabled = settingsElevationDisplayToggle.checked;
 
     return config;
   }

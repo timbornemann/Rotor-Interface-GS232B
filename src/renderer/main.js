@@ -241,6 +241,11 @@ function updateUIFromConfig() {
   updateConnectionModeUI();
   updateConeSettings();
   
+  // Elevation display
+  if (elevation) {
+    elevation.setDisplayEnabled(config.elevationDisplayEnabled !== false);
+  }
+  
   // Map settings
   if (mapCoordinatesInput && config.mapLatitude !== null && config.mapLatitude !== undefined &&
       config.mapLongitude !== null && config.mapLongitude !== undefined) {
