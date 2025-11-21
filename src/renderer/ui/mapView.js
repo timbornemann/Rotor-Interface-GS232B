@@ -37,6 +37,18 @@ class MapView {
     this.onClickCallback = callback;
   }
 
+  setZoomLimits(minZoom, maxZoom, preferredZoom = this.zoomLevel) {
+    const parsedMin = Number(minZoom);
+    const parsedMax = Number(maxZoom);
+    this.minZoom = Number.isFinite(parsedMin) ? Math.max(0, Math.round(parsedMin)) : this.minZoom;
+    this.maxZoom = Number.isFinite(parsedMax)
+      ? Math.max(this.minZoom, Math.round(Math.min(22, parsedMax)))
+      : Math.max(this.minZoom, this.maxZoom);
+
+    const targetZoom = Number.isFinite(preferredZoom) ? preferredZoom : this.zoomLevel;
+    this.setZoom(targetZoom);
+  }
+
   setConeSettings(angle, length, azimuthOffset = 0) {
     this.coneAngle = Math.max(1, Math.min(90, angle || 10));
     this.coneLength = Math.max(0, length || 1000); // Länge in Metern
