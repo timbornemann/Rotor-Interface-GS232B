@@ -535,6 +535,22 @@ class WebSerialConnection extends SerialConnection {
   }
 
   async open(options) {
+    if (!this.port) {
+      throw new Error('Kein Port-Objekt verfügbar. Bitte Port erneut auswählen.');
+    }
+    
+    // Prüfe, ob Port bereits geöffnet ist
+    if (this.port.readable || this.port.writable) {
+      console.warn('[RotorService][WebSerial] Port scheint bereits geöffnet zu sein, versuche zu schließen');
+      try {
+        await this.port.close();
+        // Kurze Wartezeit, damit der Port vollständig geschlossen wird
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.warn('[RotorService][WebSerial] Fehler beim Schließen des Ports:', error);
+      }
+    }
+    
     const portOptions = {
       baudRate: options?.baudRate ?? 9600,
       dataBits: 8,
@@ -542,10 +558,40 @@ class WebSerialConnection extends SerialConnection {
       parity: 'none',
       bufferSize: 255
     };
-    await this.port.open(portOptions);
-    this.readLoopActive = true;
-    console.log('[RotorService][WebSerial] Port geöffnet', { portOptions });
-    this.startReadLoop();
+    
+    try {
+      console.log('[RotorService][WebSerial] Versuche Port zu öffnen', { 
+        portOptions,
+        portInfo: this.port.getInfo ? this.port.getInfo() : 'keine Info verfügbar'
+      });
+      await this.port.open(portOptions);
+      this.readLoopActive = true;
+      console.log('[RotorService][WebSerial] Port erfolgreich geöffnet', { portOptions });
+      this.startReadLoop();
+    } catch (error) {
+      console.error('[RotorService][WebSerial] Fehler beim Öffnen des Ports', { 
+        error: error.message,
+        errorName: error.name,
+        portOptions
+      });
+      
+      // Verbessere Fehlermeldung
+      let errorMessage = error.message || 'Unbekannter Fehler';
+      if (errorMessage.includes('Failed to open serial port')) {
+        errorMessage = `Port kann nicht geöffnet werden.\n\n` +
+                      `Mögliche Ursachen:\n` +
+                      `- Port wird bereits von einem anderen Programm verwendet\n` +
+                      `- Port wurde entfernt oder existiert nicht mehr\n` +
+                      `- Gerät ist nicht angeschlossen\n` +
+                      `- Browser-Berechtigung wurde widerrufen\n\n` +
+                      `Bitte versuchen Sie:\n` +
+                      `- Port erneut auswählen (Port hinzufügen)\n` +
+                      `- Andere Programme schließen, die den Port verwenden\n` +
+                      `- Gerät neu anschließen\n\n` +
+                      `Original-Fehler: ${error.message}`;
+      }
+      throw new Error(errorMessage);
+    }
   }
 
   async close() {
@@ -816,8 +862,20 @@ class RotorService {
     } else {
       const port = this.portRegistry.get(config.path);
       if (!port) {
-        throw new Error('Der ausgewaehlte Port ist nicht mehr verfügbar. Bitte Zugriff erneut erlauben.');
+        console.error('[RotorService] Port nicht im Registry gefunden', { 
+          path: config.path,
+          registryKeys: Array.from(this.portRegistry.keys())
+        });
+        throw new Error('Der ausgewaehlte Port ist nicht mehr verfügbar.\n\n' +
+                       'Bitte:\n' +
+                       '1. Klicken Sie auf "Port hinzufügen"\n' +
+                       '2. Wählen Sie den Port erneut aus\n' +
+                       '3. Versuchen Sie erneut zu verbinden');
       }
+      console.log('[RotorService] Verwende Web Serial Port', { 
+        path: config.path,
+        portInfo: port.getInfo ? port.getInfo() : 'keine Info verfügbar'
+      });
       this.simulationMode = false;
       this.connectionMode = 'local';
       this.serial = new WebSerialConnection(port);
