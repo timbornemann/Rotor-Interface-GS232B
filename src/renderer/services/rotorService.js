@@ -659,27 +659,43 @@ class RotorService {
   async listPorts() {
     const ports = [];
     
-    // Server-Ports abrufen, wenn wir im Server-Modus sind oder wenn Web Serial nicht verfügbar ist
+    // Server-Ports abrufen (immer versuchen, falls Server verfügbar ist)
     try {
-      const response = await fetch(`${this.apiBase}/api/rotor/ports`, {
+      const response = await fetch(`${this.apiBase}/api/rotor/ports?key=${encodeURIComponent(this.apiKey)}`, {
+        method: 'GET',
         headers: {
-          'X-API-Key': this.apiKey
+          'X-API-Key': this.apiKey,
+          'Content-Type': 'application/json'
         }
       });
       
       if (response.ok) {
         const data = await response.json();
-        data.ports.forEach((port) => {
-          ports.push({
-            path: port.path,
-            friendlyName: port.friendlyName || port.path,
-            simulated: false,
-            serverPort: true
+        if (data.ports && Array.isArray(data.ports)) {
+          data.ports.forEach((port) => {
+            ports.push({
+              path: port.path,
+              friendlyName: port.friendlyName || port.path,
+              simulated: false,
+              serverPort: true
+            });
           });
+          console.log('[RotorService] Server-Ports erfolgreich abgerufen', { count: data.ports.length });
+        }
+      } else {
+        const errorText = await response.text();
+        console.warn('[RotorService] Server-Ports Anfrage fehlgeschlagen', { 
+          status: response.status, 
+          statusText: response.statusText,
+          error: errorText 
         });
       }
     } catch (error) {
-      console.warn('[RotorService] Konnte Server-Ports nicht abrufen', error);
+      console.warn('[RotorService] Konnte Server-Ports nicht abrufen', { 
+        error: error.message,
+        apiBase: this.apiBase,
+        apiKey: this.apiKey ? 'gesetzt' : 'nicht gesetzt'
+      });
     }
     
     // Web Serial Ports (nur wenn verfügbar)

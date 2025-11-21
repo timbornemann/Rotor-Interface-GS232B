@@ -226,9 +226,25 @@ async function init() {
   rotor.setRampSettings(getRampConfigFromState());
   await rotor.setSpeed(getSpeedConfigFromState());
 
-  if (!rotor.supportsWebSerial() && serialSupportNotice) {
-    serialSupportNotice.classList.remove('hidden');
+  // Web Serial Warnung nur im lokalen Modus anzeigen
+  function updateSerialSupportNotice() {
+    if (!serialSupportNotice) return;
+    const isLocalMode = connectionModeSelect.value === 'local';
+    const supportsWebSerial = rotor.supportsWebSerial();
+    
+    if (!supportsWebSerial && isLocalMode) {
+      serialSupportNotice.classList.remove('hidden');
+    } else {
+      serialSupportNotice.classList.add('hidden');
+    }
   }
+  
+  updateSerialSupportNotice();
+  
+  // Warnung aktualisieren wenn Modus wechselt
+  connectionModeSelect.addEventListener('change', () => {
+    updateSerialSupportNotice();
+  });
   if (requestPortBtn) {
     requestPortBtn.addEventListener('click', () => void handleRequestPort());
   }
@@ -345,6 +361,8 @@ async function refreshPorts() {
     const ports = await rotor.listPorts();
     portSelect.innerHTML = '';
     
+    let hasRelevantPorts = false;
+    
     ports.forEach((port) => {
       // Filtere Ports basierend auf Verbindungsmodus
       if (port.simulated || port.path === SIMULATED_PORT_ID) {
@@ -354,6 +372,7 @@ async function refreshPorts() {
         option.textContent = 'Simulierter Rotor';
         option.dataset.simulated = 'true';
         portSelect.appendChild(option);
+        hasRelevantPorts = true;
       } else if (connectionMode === 'server' && port.serverPort) {
         // Server-Modus: nur Server-Ports anzeigen
         const option = document.createElement('option');
@@ -361,14 +380,26 @@ async function refreshPorts() {
         option.textContent = `[Server] ${port.friendlyName || port.path}`;
         option.dataset.serverPort = 'true';
         portSelect.appendChild(option);
+        hasRelevantPorts = true;
       } else if (connectionMode === 'local' && !port.serverPort) {
         // Lokaler Modus: nur lokale Web Serial Ports anzeigen
         const option = document.createElement('option');
         option.value = port.path;
         option.textContent = port.friendlyName || port.path;
         portSelect.appendChild(option);
+        hasRelevantPorts = true;
       }
     });
+
+    // Warnung anzeigen wenn keine Ports gefunden wurden
+    if (!hasRelevantPorts && connectionMode === 'server') {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Keine Ports verfügbar - Server erreichbar?';
+      option.disabled = true;
+      portSelect.appendChild(option);
+      logAction('Keine Server-Ports gefunden - möglicherweise Server nicht erreichbar');
+    }
 
     if (config.portPath && Array.from(portSelect.options).some((opt) => opt.value === config.portPath)) {
       portSelect.value = config.portPath;
@@ -380,7 +411,15 @@ async function refreshPorts() {
     }
     logAction('Portliste aktualisiert', { selected: portSelect.value, connectionMode, options: ports });
   } catch (error) {
+    console.error('[refreshPorts] Fehler beim Aktualisieren der Portliste', error);
     reportError(error);
+    // Zeige Fehlermeldung in der Port-Liste
+    portSelect.innerHTML = '';
+    const errorOption = document.createElement('option');
+    errorOption.value = '';
+    errorOption.textContent = `Fehler: ${error.message || 'Portliste konnte nicht geladen werden'}`;
+    errorOption.disabled = true;
+    portSelect.appendChild(errorOption);
   }
 }
 
@@ -668,6 +707,9 @@ function updateConnectionModeUI() {
   
   // Aktualisiere Button-Status
   updatePortButtons();
+  
+  // Aktualisiere Web Serial Warnung
+  updateSerialSupportNotice();
   
   // Aktualisiere Port-Liste basierend auf Modus
   refreshPorts().catch(reportError);
