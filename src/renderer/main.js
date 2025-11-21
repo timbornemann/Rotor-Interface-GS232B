@@ -59,6 +59,7 @@ const setAzZeroBtn = document.getElementById('setAzZeroBtn');
 const setAzFullBtn = document.getElementById('setAzFullBtn');
 const resetOffsetsBtn = document.getElementById('resetOffsetsBtn');
 const limitWarning = document.getElementById('limitWarning');
+const speedWarning = document.getElementById('speedWarning');
 const serialCommandInput = document.getElementById('serialCommandInput');
 const sendSerialCommandBtn = document.getElementById('sendSerialCommandBtn');
 const commandHistoryList = document.getElementById('commandHistoryList');
@@ -67,6 +68,9 @@ const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 function logAction(message, details = {}) {
   console.log('[UI]', message, details);
 }
+
+const SPEED_MIN = 0.5;
+const SPEED_MAX = 20;
 
 function getSoftLimitConfigFromState() {
   return {
@@ -85,10 +89,38 @@ function getOffsetConfigFromState() {
 }
 
 function getSpeedConfigFromState() {
-  return {
-    azimuthSpeedDegPerSec: Number(config.azimuthSpeedDegPerSec || 0),
-    elevationSpeedDegPerSec: Number(config.elevationSpeedDegPerSec || 0)
+  return sanitizeSpeedSettings(config).sanitized;
+}
+
+function sanitizeSpeedSettings(speedSettings = {}) {
+  const clampToRange = (value) => Math.min(SPEED_MAX, Math.max(SPEED_MIN, value));
+  const sanitized = {
+    azimuthSpeedDegPerSec: clampToRange(Number(config.azimuthSpeedDegPerSec) || SPEED_MIN),
+    elevationSpeedDegPerSec: clampToRange(Number(config.elevationSpeedDegPerSec) || SPEED_MIN)
   };
+  const corrections = [];
+
+  const apply = (value, key, label) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    let numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      corrections.push(`${label} auf ${sanitized[key].toFixed(1)}°/s gesetzt (ungueltiger Wert)`);
+      return;
+    }
+
+    const clamped = clampToRange(numeric);
+    if (clamped !== numeric) {
+      corrections.push(`${label} auf ${clamped.toFixed(1)}°/s begrenzt`);
+    }
+    sanitized[key] = Number(clamped.toFixed(2));
+  };
+
+  apply(speedSettings.azimuthSpeedDegPerSec, 'azimuthSpeedDegPerSec', 'Azimut-Geschwindigkeit');
+  apply(speedSettings.elevationSpeedDegPerSec, 'elevationSpeedDegPerSec', 'Elevation-Geschwindigkeit');
+
+  return { sanitized, corrections };
 }
 
 function getRampConfigFromState() {
@@ -111,10 +143,23 @@ function updateLimitInputsFromConfig() {
 }
 
 function updateSpeedInputsFromConfig() {
+  const { sanitized } = sanitizeSpeedSettings(config);
+  config = { ...config, ...sanitized };
+
   controls.setSpeedValues({
-    azimuthSpeedDegPerSec: config.azimuthSpeedDegPerSec,
-    elevationSpeedDegPerSec: config.elevationSpeedDegPerSec
+    azimuthSpeedDegPerSec: sanitized.azimuthSpeedDegPerSec,
+    elevationSpeedDegPerSec: sanitized.elevationSpeedDegPerSec
   });
+
+  const settingsAzSpeedRange = document.getElementById('settingsAzSpeedRange');
+  const settingsAzSpeedInput = document.getElementById('settingsAzSpeedInput');
+  const settingsElSpeedRange = document.getElementById('settingsElSpeedRange');
+  const settingsElSpeedInput = document.getElementById('settingsElSpeedInput');
+
+  if (settingsAzSpeedRange) settingsAzSpeedRange.value = sanitized.azimuthSpeedDegPerSec;
+  if (settingsAzSpeedInput) settingsAzSpeedInput.value = sanitized.azimuthSpeedDegPerSec;
+  if (settingsElSpeedRange) settingsElSpeedRange.value = sanitized.elevationSpeedDegPerSec;
+  if (settingsElSpeedInput) settingsElSpeedInput.value = sanitized.elevationSpeedDegPerSec;
 }
 
 function updateRampInputsFromConfig() {
@@ -158,6 +203,19 @@ function showLimitWarning(message) {
   } else {
     limitWarning.textContent = '';
     limitWarning.classList.add('hidden');
+  }
+}
+
+function showSpeedWarning(message) {
+  if (!speedWarning) {
+    return;
+  }
+  if (message) {
+    speedWarning.textContent = message;
+    speedWarning.classList.remove('hidden');
+  } else {
+    speedWarning.textContent = '';
+    speedWarning.classList.add('hidden');
   }
 }
 const controls = new Controls(document.querySelector('.controls-card'), {
@@ -382,26 +440,36 @@ async function init() {
       await refreshPorts();
       if (settingsModal) {
         settingsModal.open(config, async (newConfig) => {
-        // Save new config
-        config = await configStore.save(newConfig);
-        updateUIFromConfig();
-        applyLimitsToRotor();
-        applyOffsetsToRotor();
-        rotor.setRampSettings(getRampConfigFromState());
-        await rotor.setSpeed(getSpeedConfigFromState());
-        updateConeSettings();
-        
-        // Update mode if changed
-        const newMode = Number(newConfig.azimuthMode) === 450 ? 450 : 360;
-        if (connected) {
-          try {
-            await rotor.setMode(newMode);
-          } catch (error) {
-            reportError(error);
+          const { sanitized, corrections } = sanitizeSpeedSettings(newConfig);
+          newConfig.azimuthSpeedDegPerSec = sanitized.azimuthSpeedDegPerSec;
+          newConfig.elevationSpeedDegPerSec = sanitized.elevationSpeedDegPerSec;
+          if (corrections.length) {
+            showSpeedWarning(
+              `Geschwindigkeiten wurden auf ${SPEED_MIN}-${SPEED_MAX}°/s begrenzt (${corrections.join('; ')}).`
+            );
+          } else {
+            showSpeedWarning('');
           }
-        }
-        
-        logAction('Einstellungen gespeichert', newConfig);
+          // Save new config
+          config = await configStore.save(newConfig);
+          updateUIFromConfig();
+          applyLimitsToRotor();
+          applyOffsetsToRotor();
+          rotor.setRampSettings(getRampConfigFromState());
+          await rotor.setSpeed(getSpeedConfigFromState());
+          updateConeSettings();
+
+          // Update mode if changed
+          const newMode = Number(newConfig.azimuthMode) === 450 ? 450 : 360;
+          if (connected) {
+            try {
+              await rotor.setMode(newMode);
+            } catch (error) {
+              reportError(error);
+            }
+          }
+
+          logAction('Einstellungen gespeichert', newConfig);
         });
       }
     });
@@ -719,10 +787,16 @@ async function handleResetOffsets() {
 }
 
 async function handleSpeedChange(speedSettings) {
-  config = await configStore.save(speedSettings);
+  const { sanitized, corrections } = sanitizeSpeedSettings(speedSettings);
+  if (corrections.length) {
+    showSpeedWarning(`Geschwindigkeiten wurden auf ${SPEED_MIN}-${SPEED_MAX}°/s begrenzt (${corrections.join('; ')}).`);
+  } else {
+    showSpeedWarning('');
+  }
+  config = await configStore.save(sanitized);
   updateSpeedInputsFromConfig();
-  logAction('Geschwindigkeit angepasst', getSpeedConfigFromState());
-  await rotor.setSpeed(getSpeedConfigFromState());
+  logAction('Geschwindigkeit angepasst', sanitized);
+  await rotor.setSpeed(sanitized);
 }
 
 function readRampInputs() {
