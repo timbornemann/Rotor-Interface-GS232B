@@ -97,7 +97,7 @@ class IniHandler {
       'Ramp': ['rampEnabled', 'rampKp', 'rampKi', 'rampSampleTimeMs', 'rampMaxStepDeg', 'rampToleranceDeg', 'rampKpMin', 'rampKpMax', 'rampKiMin', 'rampKiMax', 'rampSampleTimeMsMin', 'rampSampleTimeMsMax', 'rampMaxStepDegMin', 'rampMaxStepDegMax', 'rampToleranceDegMin', 'rampToleranceDegMax'],
       'Mode': ['azimuthMode', 'simulationAzimuthMode', 'elevationDisplayEnabled'],
       'Limits': ['azimuthMinLimit', 'azimuthMaxLimit', 'elevationMinLimit', 'elevationMaxLimit'],
-      'Calibration': ['azimuthOffset', 'elevationOffset']
+      'Calibration': ['azimuthOffset', 'elevationOffset', 'azimuthScaleFactor', 'elevationScaleFactor']
     };
 
     let ini = '; Rotor Control Configuration\n';

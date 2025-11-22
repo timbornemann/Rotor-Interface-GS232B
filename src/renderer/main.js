@@ -333,6 +333,24 @@ configStore.load().then(loadedConfig => {
 
 init().catch(reportError);
 
+function updateScaleFactorInputsFromConfig() {
+  if (azScaleFactorInput) {
+    azScaleFactorInput.value = config.azimuthScaleFactor ?? 1.0;
+  }
+  if (elScaleFactorInput) {
+    elScaleFactorInput.value = config.elevationScaleFactor ?? 1.0;
+  }
+}
+
+function updateOffsetInputsFromConfig() {
+  if (azOffsetInput) {
+    azOffsetInput.value = config.azimuthOffset ?? 0;
+  }
+  if (elOffsetInput) {
+    elOffsetInput.value = config.elevationOffset ?? 0;
+  }
+}
+
 function updateUIFromConfig() {
   // These elements are now in the settings modal, so only update if they exist
   if (baudInput) baudInput.value = config.baudRate.toString();
