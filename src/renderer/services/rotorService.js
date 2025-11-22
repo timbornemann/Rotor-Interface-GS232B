@@ -844,6 +844,8 @@ class RotorService {
     this.maxAzimuthRange = 360;
     this.azimuthOffset = 0;
     this.elevationOffset = 0;
+    this.azimuthScaleFactor = 1.0; // Skalierungsfaktor für Azimut (z.B. 0.5 wenn Motor doppelt so weit dreht)
+    this.elevationScaleFactor = 1.0; // Skalierungsfaktor für Elevation
     this.softLimits = {
       azimuthMin: 0,
       azimuthMax: 360,
@@ -1628,6 +1630,22 @@ class RotorService {
     this.applyCalibrationOffsets();
   }
 
+  setScaleFactors(factors) {
+    if (!factors) {
+      return;
+    }
+    if (typeof factors.azimuthScaleFactor === 'number') {
+      this.azimuthScaleFactor = clamp(factors.azimuthScaleFactor, 0.1, 2.0);
+    }
+    if (typeof factors.elevationScaleFactor === 'number') {
+      this.elevationScaleFactor = clamp(factors.elevationScaleFactor, 0.1, 2.0);
+    }
+    console.log('[RotorService] Skalierungsfaktoren gesetzt', {
+      azimuthScaleFactor: this.azimuthScaleFactor,
+      elevationScaleFactor: this.elevationScaleFactor
+    });
+  }
+
   startPolling(intervalMs = 1000) {
     this.stopPolling();
     if (!this.serial || !this.serial.isOpen()) {
@@ -1840,11 +1858,15 @@ class RotorService {
   }
 
   normalizeAzimuth(value) {
-    return clamp(value + this.azimuthOffset, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+    // Konvertiere Raw-Wert zu Anzeige-Wert: (raw + offset) * scaleFactor
+    const calibrated = (value + this.azimuthOffset) * this.azimuthScaleFactor;
+    return clamp(calibrated, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
   }
 
   normalizeElevation(value) {
-    return clamp(value + this.elevationOffset, this.softLimits.elevationMin, this.softLimits.elevationMax);
+    // Konvertiere Raw-Wert zu Anzeige-Wert: (raw + offset) * scaleFactor
+    const calibrated = (value + this.elevationOffset) * this.elevationScaleFactor;
+    return clamp(calibrated, this.softLimits.elevationMin, this.softLimits.elevationMax);
   }
 
   planAzimuthTarget(target) {
@@ -1864,14 +1886,16 @@ class RotorService {
 
     // Berechne den Raw-Wert basierend auf der aktuellen Raw-Position und dem Delta
     // Dies stellt sicher, dass der kürzeste Weg gewählt wird
+    // WICHTIG: current ist bereits ein Anzeige-Wert (nach normalizeAzimuth)
+    // Um zu Raw zu konvertieren: raw = (displayed / scaleFactor) - offset
     const currentRaw = typeof this.currentStatus?.azimuthRaw === 'number' 
       ? this.currentStatus.azimuthRaw 
-      : (current - this.azimuthOffset);
+      : ((current / this.azimuthScaleFactor) - this.azimuthOffset);
     
     // Berechne das Delta in Raw-Koordinaten
-    // route.target ist der kalibrierte Zielwert, route.delta ist die kürzeste Änderung
-    // Der Raw-Wert sollte sich um das gleiche Delta ändern (Offset hebt sich auf)
-    const rawDelta = route.delta;
+    // route.target ist der Anzeige-Zielwert, route.delta ist die kürzeste Änderung in Anzeige-Koordinaten
+    // Um zu Raw-Delta zu konvertieren: rawDelta = displayedDelta / scaleFactor
+    const rawDelta = route.delta / this.azimuthScaleFactor;
     
     // Berechne den Ziel-Raw-Wert durch Addition des Deltas zur aktuellen Raw-Position
     // Dies stellt sicher, dass wir den kürzesten Weg nehmen
@@ -1908,7 +1932,8 @@ class RotorService {
 
   planElevationTarget(target) {
     const calibrated = clamp(target, this.softLimits.elevationMin, this.softLimits.elevationMax);
-    const rawCommand = clamp(calibrated - this.elevationOffset, 0, Math.max(this.softLimits.elevationMax, 90));
+    // Konvertiere Anzeige-Wert zu Raw-Wert: raw = (displayed / scaleFactor) - offset
+    const rawCommand = clamp((calibrated / this.elevationScaleFactor) - this.elevationOffset, 0, Math.max(this.softLimits.elevationMax, 90));
     return {
       calibrated,
       commandValue: rawCommand

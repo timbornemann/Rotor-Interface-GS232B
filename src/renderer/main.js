@@ -58,6 +58,11 @@ const applyLimitsBtn = document.getElementById('applyLimitsBtn');
 const setAzZeroBtn = document.getElementById('setAzZeroBtn');
 const setAzFullBtn = document.getElementById('setAzFullBtn');
 const resetOffsetsBtn = document.getElementById('resetOffsetsBtn');
+const azOffsetInput = document.getElementById('azOffsetInput');
+const elOffsetInput = document.getElementById('elOffsetInput');
+const azScaleFactorInput = document.getElementById('azScaleFactorInput');
+const elScaleFactorInput = document.getElementById('elScaleFactorInput');
+const applyScaleFactorsBtn = document.getElementById('applyScaleFactorsBtn');
 const limitWarning = document.getElementById('limitWarning');
 const speedWarning = document.getElementById('speedWarning');
 const serialCommandInput = document.getElementById('serialCommandInput');
@@ -209,6 +214,13 @@ function applyOffsetsToRotor() {
   rotor.setCalibrationOffsets(getOffsetConfigFromState());
 }
 
+function applyScaleFactorsToRotor() {
+  rotor.setScaleFactors({
+    azimuthScaleFactor: config.azimuthScaleFactor ?? 1.0,
+    elevationScaleFactor: config.elevationScaleFactor ?? 1.0
+  });
+}
+
 function showLimitWarning(message) {
   if (!limitWarning) {
     return;
@@ -353,6 +365,8 @@ function updateUIFromConfig() {
     mapView.setCoordinates(config.mapLatitude, config.mapLongitude);
   }
   mapView.setSatelliteMapEnabled(config.satelliteMapEnabled || false);
+  updateOffsetInputsFromConfig();
+  updateScaleFactorInputsFromConfig();
 }
 
 async function init() {
@@ -363,6 +377,7 @@ async function init() {
 
   applyLimitsToRotor();
   applyOffsetsToRotor();
+  applyScaleFactorsToRotor();
   rotor.setRampSettings(getRampConfigFromState());
   await rotor.setSpeed(getSpeedConfigFromState());
 
@@ -482,6 +497,7 @@ async function init() {
           updateUIFromConfig();
           applyLimitsToRotor();
           applyOffsetsToRotor();
+          applyScaleFactorsToRotor();
           rotor.setRampSettings(getRampConfigFromState());
           await rotor.setSpeed(getSpeedConfigFromState());
           updateConeSettings();
@@ -524,6 +540,7 @@ async function init() {
           updateUIFromConfig();
           applyLimitsToRotor();
           applyOffsetsToRotor();
+          applyScaleFactorsToRotor();
           rotor.setRampSettings(getRampConfigFromState());
           await rotor.setSpeed(getSpeedConfigFromState());
           updateConeSettings();
@@ -758,6 +775,7 @@ async function handleConnect() {
     logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
     applyLimitsToRotor();
     applyOffsetsToRotor();
+    applyScaleFactorsToRotor();
     await rotor.connect({ path, baudRate, simulation, useServer, azimuthMode });
     await rotor.setMode(azimuthMode);
     rotor.startPolling(pollingIntervalMs);
@@ -860,9 +878,29 @@ async function handleSetAzReference(targetAzimuth) {
   logAction('Azimut-Referenz gesetzt', { targetAzimuth, newAzOffset });
 }
 
+async function handleApplyScaleFactors() {
+  if (!azScaleFactorInput || !elScaleFactorInput) {
+    return;
+  }
+  const azimuthScaleFactor = Number(azScaleFactorInput.value) || 1.0;
+  const elevationScaleFactor = Number(elScaleFactorInput.value) || 1.0;
+  
+  config = await configStore.save({
+    azimuthScaleFactor: clamp(azimuthScaleFactor, 0.1, 2.0),
+    elevationScaleFactor: clamp(elevationScaleFactor, 0.1, 2.0)
+  });
+  
+  applyScaleFactorsToRotor();
+  logAction('Skalierungsfaktoren gespeichert', {
+    azimuthScaleFactor: config.azimuthScaleFactor,
+    elevationScaleFactor: config.elevationScaleFactor
+  });
+}
+
 async function handleResetOffsets() {
   config = await configStore.save({ azimuthOffset: 0, elevationOffset: 0 });
   applyOffsetsToRotor();
+  updateOffsetInputsFromConfig();
   showLimitWarning('Offsets wurden auf 0° zurueckgesetzt.');
   logAction('Offsets zurueckgesetzt');
 }

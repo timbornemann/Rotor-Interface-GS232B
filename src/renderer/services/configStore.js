@@ -50,7 +50,14 @@ const defaultConfig = {
   coneAngleMax: 90,
   coneLengthMin: 0,
   coneLengthMax: 100000,
-  elevationDisplayEnabled: true // Elevation-Anzeige aktiviert/deaktiviert
+  elevationDisplayEnabled: true, // Elevation-Anzeige aktiviert/deaktiviert
+  // Skalierungsfaktoren für Hardware-Kalibrierung
+  azimuthScaleFactor: 1.0, // Faktor für Azimut (z.B. 0.5 wenn Motor doppelt so weit dreht)
+  elevationScaleFactor: 1.0, // Faktor für Elevation
+  azimuthScaleFactorMin: 0.1,
+  azimuthScaleFactorMax: 2.0,
+  elevationScaleFactorMin: 0.1,
+  elevationScaleFactorMax: 2.0
 };
 
 // IniHandler will be loaded separately
@@ -249,6 +256,20 @@ class ConfigStore {
       sanitized.azimuthDisplayOffsetMin,
       sanitized.azimuthDisplayOffsetMax,
       defaultConfig.azimuthDisplayOffset
+    );
+    
+    // Skalierungsfaktoren
+    sanitized.azimuthScaleFactor = this.sanitizeNumber(
+      config.azimuthScaleFactor,
+      defaultConfig.azimuthScaleFactorMin,
+      defaultConfig.azimuthScaleFactorMax,
+      defaultConfig.azimuthScaleFactor
+    );
+    sanitized.elevationScaleFactor = this.sanitizeNumber(
+      config.elevationScaleFactor,
+      defaultConfig.elevationScaleFactorMin,
+      defaultConfig.elevationScaleFactorMax,
+      defaultConfig.elevationScaleFactor
     );
 
     return sanitized;
