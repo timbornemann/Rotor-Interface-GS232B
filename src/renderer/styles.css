@@ -1053,6 +1053,118 @@ button:active {
   gap: 1rem;
 }
 
+.calibration-wizard {
+  gap: 1.25rem;
+}
+
+.wizard-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.wizard-card h3 {
+  margin: 0;
+}
+
+.wizard-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.wizard-hint {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.offset-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  min-width: 240px;
+}
+
+.offset-summary strong {
+  display: block;
+  font-size: 1.2rem;
+}
+
+.calibration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.calibration-block {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.calibration-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.calibration-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.limit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.limit-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.limit-actions-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.calibration-message {
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 40px;
+}
+
+.calibration-message[data-variant="success"] {
+  border-color: rgba(46, 204, 113, 0.4);
+  color: #2ecc71;
+}
+
+.calibration-message[data-variant="warning"] {
+  border-color: rgba(241, 196, 15, 0.5);
+  color: #f1c40f;
+}
+
+.calibration-message[data-variant="error"] {
+  border-color: rgba(231, 76, 60, 0.5);
+  color: #e74c3c;
+}
+
 @media (max-width: 768px) {
   .top-bar {
     flex-direction: column;

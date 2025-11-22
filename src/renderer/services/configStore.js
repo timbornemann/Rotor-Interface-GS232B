@@ -68,6 +68,43 @@ class ConfigStore {
   sanitizeConfig(config) {
     const sanitized = { ...config };
 
+    sanitized.azimuthMinLimit = this.sanitizeNumber(
+      config.azimuthMinLimit,
+      -360,
+      360,
+      defaultConfig.azimuthMinLimit
+    );
+    sanitized.azimuthMaxLimit = this.sanitizeNumber(
+      config.azimuthMaxLimit,
+      sanitized.azimuthMinLimit,
+      540,
+      defaultConfig.azimuthMaxLimit
+    );
+    sanitized.elevationMinLimit = this.sanitizeNumber(
+      config.elevationMinLimit,
+      -90,
+      90,
+      defaultConfig.elevationMinLimit
+    );
+    sanitized.elevationMaxLimit = this.sanitizeNumber(
+      config.elevationMaxLimit,
+      sanitized.elevationMinLimit,
+      180,
+      defaultConfig.elevationMaxLimit
+    );
+    sanitized.azimuthOffset = this.sanitizeNumber(
+      config.azimuthOffset,
+      -720,
+      720,
+      defaultConfig.azimuthOffset
+    );
+    sanitized.elevationOffset = this.sanitizeNumber(
+      config.elevationOffset,
+      -360,
+      360,
+      defaultConfig.elevationOffset
+    );
+
     // Ranges for speeds
     sanitized.speedMinDegPerSec = this.sanitizeNumber(
       config.speedMinDegPerSec,

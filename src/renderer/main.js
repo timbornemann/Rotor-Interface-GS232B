@@ -298,6 +298,7 @@ let connected = false;
 let unsubscribeStatus = null;
 const unsubscribeError = rotor.onError((error) => reportError(error));
 let settingsModal = null;
+let calibrationWizard = null;
 
 // Initialize settings modal after DOM is ready
 if (document.readyState === 'loading') {
@@ -353,6 +354,40 @@ function updateUIFromConfig() {
     mapView.setCoordinates(config.mapLatitude, config.mapLongitude);
   }
   mapView.setSatelliteMapEnabled(config.satelliteMapEnabled || false);
+
+  if (calibrationWizard) {
+    calibrationWizard.updateConfig(config);
+  } else {
+    ensureCalibrationWizard();
+  }
+}
+
+function ensureCalibrationWizard() {
+  if (!document.getElementById('tab-calibration')) {
+    return;
+  }
+
+  if (!calibrationWizard) {
+    calibrationWizard = new CalibrationWizard({
+      rotor,
+      getConfig: () => config,
+      saveConfig: async (partial) => {
+        config = await configStore.save(partial);
+        return config;
+      },
+      applyLimits: () => {
+        applyLimitsToRotor();
+        updateLimitInputsFromConfig();
+      },
+      applyOffsets: () => applyOffsetsToRotor(),
+      isConnected: () => connected,
+      reportError: (error) => reportError(error),
+      onConfigUpdated: (nextConfig) => {
+        config = nextConfig;
+        updateUIFromConfig();
+      }
+    });
+  }
 }
 
 async function init() {

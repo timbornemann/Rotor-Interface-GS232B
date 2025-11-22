@@ -240,6 +240,7 @@
             <button class="tab-button" data-tab="speed">Geschwindigkeit</button>
             <button class="tab-button" data-tab="ramp">Softstart/Softstop</button>
             <button class="tab-button" data-tab="mode">Modus</button>
+            <button class="tab-button" data-tab="calibration">Kalibrierung</button>
           </div>
           
           <div class="tab-content active" id="tab-connection">
@@ -374,7 +375,7 @@
               </div>
             </div>
           </div>
-          
+
           <div class="tab-content" id="tab-mode">
             <div class="settings-group">
               <label>
@@ -388,6 +389,108 @@
                 <input id="settingsElevationDisplayToggle" type="checkbox" />
                 Elevation-Anzeige aktivieren
               </label>
+            </div>
+          </div>
+
+          <div class="tab-content" id="tab-calibration">
+            <div class="settings-group calibration-wizard">
+              <div class="wizard-card">
+                <div class="wizard-card-header">
+                  <div>
+                    <h3>1. Rotor auf Nord/Horizontal stellen</h3>
+                    <p class="wizard-hint">Bringe den Rotor mechanisch auf physikalisch Nord und Elevation 0°. Lies dann die Rohwerte aus.</p>
+                  </div>
+                  <div class="offset-summary">
+                    <div>
+                      <span class="label">Aktueller Azimut-Offset</span>
+                      <strong id="calibrationOffsetAz">0°</strong>
+                    </div>
+                    <div>
+                      <span class="label">Aktueller Elevations-Offset</span>
+                      <strong id="calibrationOffsetEl">0°</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="calibration-grid">
+                  <div class="calibration-block">
+                    <span class="label">Roh-Azimut</span>
+                    <div class="calibration-value" id="calibrationRawAz">--</div>
+                  </div>
+                  <div class="calibration-block">
+                    <span class="label">Roh-Elevation</span>
+                    <div class="calibration-value" id="calibrationRawEl">--</div>
+                  </div>
+                </div>
+
+                <div class="calibration-actions">
+                  <button id="calibrationReadRawBtn" class="secondary" type="button">Rohwerte einlesen</button>
+                  <button id="calibrationSetOffsetBtn" class="primary" type="button">Offset aus aktueller Position setzen</button>
+                  <button id="calibrationTestBtn" class="secondary" type="button">Kalibrierung testen</button>
+                </div>
+              </div>
+
+              <div class="wizard-card">
+                <div class="wizard-card-header">
+                  <div>
+                    <h3>2. Limits abfahren und dokumentieren</h3>
+                    <p class="wizard-hint">Fahre die mechanischen Maxima ab, notiere die Richtung des Aufbaus und speichere die Limits.</p>
+                  </div>
+                  <div class="offset-summary">
+                    <div>
+                      <span class="label">Azimut-Grenzen</span>
+                      <strong id="calibrationLimitAz">--</strong>
+                    </div>
+                    <div>
+                      <span class="label">Elevation-Grenzen</span>
+                      <strong id="calibrationLimitEl">--</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="limit-grid">
+                  <div class="limit-column">
+                    <h4>Azimut</h4>
+                    <div class="limit-actions-group">
+                      <button id="calibrationGoAzMinBtn" class="secondary" type="button">Zum Minimum fahren</button>
+                      <button id="calibrationGoAzMaxBtn" class="secondary" type="button">Zum Maximum fahren</button>
+                    </div>
+                    <div class="limit-actions-group">
+                      <button id="calibrationSetAzMinBtn" class="primary" type="button">Aktuelle Position als Minimum speichern</button>
+                      <button id="calibrationSetAzMaxBtn" class="primary" type="button">Aktuelle Position als Maximum speichern</button>
+                    </div>
+                    <label>
+                      Richtung am Minimum
+                      <input id="calibrationAzMinDirection" data-note-key="azMin" type="text" placeholder="z.B. zeigt nach Westen" />
+                    </label>
+                    <label>
+                      Richtung am Maximum
+                      <input id="calibrationAzMaxDirection" data-note-key="azMax" type="text" placeholder="z.B. zeigt nach Osten" />
+                    </label>
+                  </div>
+                  <div class="limit-column">
+                    <h4>Elevation</h4>
+                    <div class="limit-actions-group">
+                      <button id="calibrationGoElMinBtn" class="secondary" type="button">Zum Minimum fahren</button>
+                      <button id="calibrationGoElMaxBtn" class="secondary" type="button">Zum Maximum fahren</button>
+                    </div>
+                    <div class="limit-actions-group">
+                      <button id="calibrationSetElMinBtn" class="primary" type="button">Aktuelle Position als Minimum speichern</button>
+                      <button id="calibrationSetElMaxBtn" class="primary" type="button">Aktuelle Position als Maximum speichern</button>
+                    </div>
+                    <label>
+                      Richtung am Minimum
+                      <input id="calibrationElMinDirection" data-note-key="elMin" type="text" placeholder="z.B. Mast zeigt nach Süden" />
+                    </label>
+                    <label>
+                      Richtung am Maximum
+                      <input id="calibrationElMaxDirection" data-note-key="elMax" type="text" placeholder="z.B. Mast zeigt nach Norden" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div id="calibrationMessage" class="calibration-message"></div>
             </div>
           </div>
         </div>
@@ -408,6 +511,7 @@
     <script src="./ui/mapView.js"></script>
     <script src="./ui/historyLog.js"></script>
     <script src="./ui/controls.js"></script>
+    <script src="./ui/settings/calibrationWizard.js"></script>
     <script src="./ui/settingsModal.js"></script>
     <!-- Hauptlogik zuletzt -->
     <script src="./main.js"></script>
