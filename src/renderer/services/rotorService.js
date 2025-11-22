@@ -1092,12 +1092,13 @@ class RotorService {
     const commandWithCr = upperCased.endsWith('\r') ? upperCased : `${upperCased}\r`;
     await this.serial.writeCommand(commandWithCr);
     // Verzögerung basierend auf Befehlstyp:
-    // - Geschwindigkeitsbefehle (S, B): 50ms (wird in applySpeedSettings überschrieben)
-    // - Positionsbefehle (M, W): 50ms (wichtig für Hardware)
+    // - ERC-DUO API-Befehle (sSL1, sSH1, etc.): 100ms (benötigen mehr Zeit)
+    // - Positionsbefehle (M, W): 100ms (wichtig für Hardware)
     // - Andere Befehle: 20ms (Standard)
+    const isERCAPICommand = /^s[A-Z]{2}\d/.test(upperCased); // sSL1, sSH1, etc.
     const isSpeedCommand = /^[SB]\d+/.test(upperCased);
     const isPositionCommand = /^[MW]/.test(upperCased);
-    const delayMs = isSpeedCommand || isPositionCommand ? 50 : 20;
+    const delayMs = isERCAPICommand ? 100 : (isSpeedCommand || isPositionCommand ? 100 : 20);
     await delay(delayMs);
   }
 
@@ -1256,9 +1257,35 @@ class RotorService {
       // ERC-DUO: Geschwindigkeitseinstellungen werden nicht regelmäßig neu gesendet
       // Sie bleiben fest, bis sie explizit geändert werden
       // Soft-Rampen wird durch kleinere Positionsschritte simuliert
-
-      await this.sendPlannedTarget(nextAz, nextEl);
-      await delay(rampSettings.rampSampleTimeMs);
+      
+      // Prüfe ob Schritt groß genug ist (mindestens 0,5° für ERC-DUO)
+      // Zu kleine Schritte werden möglicherweise ignoriert
+      const minStepDeg = 0.5;
+      let shouldSend = false;
+      
+      if (nextAz !== null && hasAz && typeof status.azimuth === 'number') {
+        const azDelta = Math.abs(shortestAngularDelta(nextAz, status.azimuth, this.maxAzimuthRange));
+        if (azDelta >= minStepDeg) {
+          shouldSend = true;
+        }
+      }
+      
+      if (nextEl !== null && hasEl && typeof status.elevation === 'number') {
+        const elDelta = Math.abs(nextEl - status.elevation);
+        if (elDelta >= minStepDeg) {
+          shouldSend = true;
+        }
+      }
+      
+      if (shouldSend) {
+        await this.sendPlannedTarget(nextAz, nextEl);
+        // ERC-DUO benötigt mehr Zeit zum Verarbeiten von Positionsbefehlen
+        // Erhöhe Verzögerung für bessere Kompatibilität
+        await delay(Math.max(rampSettings.rampSampleTimeMs, 200));
+      } else {
+        // Schritt zu klein, warte länger bevor nächster Versuch
+        await delay(rampSettings.rampSampleTimeMs);
+      }
     }
 
     if (this.activeRamp === rampContext) {
@@ -1420,7 +1447,13 @@ class RotorService {
         // Wende Wrap-around an
         const wrappedRawAz = wrapAzimuth(rawAz, this.maxAzimuthRange);
         const azValue = Math.round(wrappedRawAz).toString().padStart(3, '0');
-        await this.sendRawCommand(`M${azValue}`);
+        
+        // Prüfe ob Schritt groß genug ist (mindestens 0,5° für ERC-DUO)
+        const currentAz = typeof status.azimuth === 'number' ? status.azimuth : nextAz;
+        const azDelta = Math.abs(shortestAngularDelta(nextAz, currentAz, this.maxAzimuthRange));
+        if (azDelta >= 0.5) {
+          await this.sendRawCommand(`M${azValue}`);
+        }
       } else {
         const elPlan = this.planElevationTarget(nextEl);
         // Für Elevation verwenden wir die normale Planung
@@ -1428,14 +1461,21 @@ class RotorService {
           ? Math.round(this.currentStatus.azimuthRaw).toString().padStart(3, '0')
           : '000';
         const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
-        await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+        
+        // Prüfe ob Schritt groß genug ist (mindestens 0,5° für ERC-DUO)
+        const currentEl = typeof status.elevation === 'number' ? status.elevation : nextEl;
+        const elDelta = Math.abs(nextEl - currentEl);
+        if (elDelta >= 0.5) {
+          await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+        }
       }
 
       // ERC-DUO: Geschwindigkeitseinstellungen werden nicht regelmäßig neu gesendet
       // Soft-Rampen wird durch Positionsschritte simuliert
+      // Erhöhe Verzögerung für bessere Kompatibilität mit ERC-DUO
 
       timeSinceStart += rampSettings.rampSampleTimeMs;
-      await delay(rampSettings.rampSampleTimeMs);
+      await delay(Math.max(rampSettings.rampSampleTimeMs, 200));
     }
 
     if (this.activeManualRamp === rampContext) {
@@ -1574,28 +1614,64 @@ class RotorService {
     const elPlan =
       typeof elevation === 'number' && !Number.isNaN(elevation) ? this.planElevationTarget(elevation) : null;
 
+    // Prüfe ob Schritte groß genug sind (mindestens 0,5° für ERC-DUO)
+    // Zu kleine Schritte werden möglicherweise ignoriert
+    const minStepDeg = 0.5;
+    let shouldSend = false;
+
     if (azPlan && elPlan) {
-      const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
-      const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
-      console.log('[RotorService] PI-Rampe Schritt (Az+El)', { azimuth, elevation, azPlan, elPlan, azValue, elValue });
-      await this.sendRawCommand(`W${azValue} ${elValue}`);
+      const currentAz = typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : azimuth;
+      const currentEl = typeof this.currentStatus?.elevation === 'number' ? this.currentStatus.elevation : elevation;
+      const azDelta = Math.abs(shortestAngularDelta(azimuth, currentAz, this.maxAzimuthRange));
+      const elDelta = Math.abs(elevation - currentEl);
+      
+      if (azDelta >= minStepDeg || elDelta >= minStepDeg) {
+        shouldSend = true;
+        const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
+        const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
+        console.log('[RotorService] PI-Rampe Schritt (Az+El)', { 
+          azimuth, elevation, azPlan, elPlan, azValue, elValue,
+          azDelta: azDelta.toFixed(2), elDelta: elDelta.toFixed(2)
+        });
+        await this.sendRawCommand(`W${azValue} ${elValue}`);
+      }
       return;
     }
 
     if (azPlan) {
-      const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
-      console.log('[RotorService] PI-Rampe Schritt (Az)', { azimuth, azPlan, azValue });
-      await this.sendRawCommand(`M${azValue}`);
+      const currentAz = typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : azimuth;
+      const azDelta = Math.abs(shortestAngularDelta(azimuth, currentAz, this.maxAzimuthRange));
+      
+      if (azDelta >= minStepDeg) {
+        shouldSend = true;
+        const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
+        console.log('[RotorService] PI-Rampe Schritt (Az)', { 
+          azimuth, azPlan, azValue, azDelta: azDelta.toFixed(2)
+        });
+        await this.sendRawCommand(`M${azValue}`);
+      }
       return;
     }
 
     if (elPlan) {
-      const currentAzRaw = typeof this.currentStatus?.azimuthRaw === 'number'
-        ? Math.round(this.currentStatus.azimuthRaw).toString().padStart(3, '0')
-        : '000';
-      const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
-      console.log('[RotorService] PI-Rampe Schritt (El)', { elevation, elPlan, elValue, currentAzRaw });
-      await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+      const currentEl = typeof this.currentStatus?.elevation === 'number' ? this.currentStatus.elevation : elevation;
+      const elDelta = Math.abs(elevation - currentEl);
+      
+      if (elDelta >= minStepDeg) {
+        shouldSend = true;
+        const currentAzRaw = typeof this.currentStatus?.azimuthRaw === 'number'
+          ? Math.round(this.currentStatus.azimuthRaw).toString().padStart(3, '0')
+          : '000';
+        const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
+        console.log('[RotorService] PI-Rampe Schritt (El)', { 
+          elevation, elPlan, elValue, currentAzRaw, elDelta: elDelta.toFixed(2)
+        });
+        await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+      }
+    }
+    
+    if (!shouldSend) {
+      console.log('[RotorService] Schritt zu klein, überspringe Befehl', { azimuth, elevation });
     }
   }
 
@@ -1776,34 +1852,29 @@ class RotorService {
     // sSA1xxxx = Speed-Angle Azimuth (Umschaltposition in Grad)
     // Analog für Elevation: ...2 statt ...1
     
-    // ERC-DUO Speed-Einstellungen: Die Werte könnten direkt in Grad/Sekunde sein
-    // oder als Stufen (1-4). Basierend auf der Dokumentation scheinen es
-    // 4-stellige Werte zu sein. Wir versuchen beide Ansätze:
-    // 
-    // Option 1: Direkt als Grad/Sekunde (0,5-20 → 0001-0020)
-    // Option 2: Als Stufen (0,5-20 → 1-4 → 0001-0004)
-    //
-    // Basierend auf "1-4 Stufen" in der Dokumentation verwenden wir Stufen:
-    const convertSpeedToStage = (speedDegPerSec) => {
+    // ERC-DUO Speed-Einstellungen: Basierend auf der Dokumentation
+    // Die Werte werden direkt in Grad/Sekunde gesendet (0,5-20 → 0001-0020)
+    // ERC-DUO interpretiert diese Werte intern als Geschwindigkeitsstufen
+    const convertSpeedToERCValue = (speedDegPerSec) => {
       const clamped = Math.max(0.5, Math.min(20, speedDegPerSec));
-      // Lineare Konvertierung: 0,5-20 → 1-4 Stufen
-      // Stufe 1: 0,5-5,5 °/s
-      // Stufe 2: 5,5-10,5 °/s  
-      // Stufe 3: 10,5-15,5 °/s
-      // Stufe 4: 15,5-20 °/s
-      const stage = Math.round(1 + ((clamped - 0.5) / 19.5) * 3);
-      return Math.max(1, Math.min(4, stage));
+      // Konvertiere direkt: 0,5-20 → 1-20 (als 4-stellige Zahl)
+      // ERC-DUO erwartet 4-stellige Werte, daher multiplizieren wir mit 10
+      // 0,5 → 0005, 1,0 → 0010, 2,0 → 0020, etc.
+      // Oder direkt als ganze Zahl: 1 → 0001, 2 → 0002, 20 → 0020
+      // Basierend auf der Dokumentation: Direkt als Grad/Sekunde (gerundet)
+      const rounded = Math.round(clamped);
+      return Math.max(1, Math.min(20, rounded));
     };
     
     const commands = [];
     
     if (typeof this.speedSettings.azimuthSpeedDegPerSec === 'number') {
-      const speedStage = convertSpeedToStage(this.speedSettings.azimuthSpeedDegPerSec);
-      const value = speedStage.toString().padStart(4, '0');
+      const speedValue = convertSpeedToERCValue(this.speedSettings.azimuthSpeedDegPerSec);
+      const value = speedValue.toString().padStart(4, '0');
       
       console.log('[RotorService] Geschwindigkeit Azimuth konvertieren', {
         original: this.speedSettings.azimuthSpeedDegPerSec,
-        stage: speedStage,
+        ercValue: speedValue,
         command: `sSL1${value} / sSH1${value}`
       });
       
@@ -1816,12 +1887,12 @@ class RotorService {
     }
     
     if (typeof this.speedSettings.elevationSpeedDegPerSec === 'number') {
-      const speedStage = convertSpeedToStage(this.speedSettings.elevationSpeedDegPerSec);
-      const value = speedStage.toString().padStart(4, '0');
+      const speedValue = convertSpeedToERCValue(this.speedSettings.elevationSpeedDegPerSec);
+      const value = speedValue.toString().padStart(4, '0');
       
       console.log('[RotorService] Geschwindigkeit Elevation konvertieren', {
         original: this.speedSettings.elevationSpeedDegPerSec,
-        stage: speedStage,
+        ercValue: speedValue,
         command: `sSL2${value} / sSH2${value}`
       });
       
