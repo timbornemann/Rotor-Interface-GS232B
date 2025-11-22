@@ -478,7 +478,9 @@ class SimulationSerialConnection extends SerialConnection {
     let bestDistance = Number.POSITIVE_INFINITY;
     targetCandidates.forEach((candidate) => {
       currentCandidates.forEach((current) => {
-        const distance = Math.abs(candidate - current);
+        // Verwende shortestAngularDelta für korrekte Berechnung der kürzesten Distanz
+        const delta = shortestAngularDelta(candidate, current, this.modeMaxAz);
+        const distance = Math.abs(delta);
         if (distance < bestDistance) {
           bestDistance = distance;
           bestTarget = candidate;
@@ -1860,10 +1862,45 @@ class RotorService {
       max: effectiveMax
     });
 
-    const rawCommand = route.target - this.azimuthOffset;
+    // Berechne den Raw-Wert basierend auf der aktuellen Raw-Position und dem Delta
+    // Dies stellt sicher, dass der kürzeste Weg gewählt wird
+    const currentRaw = typeof this.currentStatus?.azimuthRaw === 'number' 
+      ? this.currentStatus.azimuthRaw 
+      : (current - this.azimuthOffset);
+    
+    // Berechne das Delta in Raw-Koordinaten
+    // route.target ist der kalibrierte Zielwert, route.delta ist die kürzeste Änderung
+    // Der Raw-Wert sollte sich um das gleiche Delta ändern (Offset hebt sich auf)
+    const rawDelta = route.delta;
+    
+    // Berechne den Ziel-Raw-Wert durch Addition des Deltas zur aktuellen Raw-Position
+    // Dies stellt sicher, dass wir den kürzesten Weg nehmen
+    const rawCommand = currentRaw + rawDelta;
+    
+    // Wende Wrap-around an, um sicherzustellen, dass der Wert im gültigen Bereich liegt
+    let wrappedRawCommand = wrapAzimuth(rawCommand, range);
+    
+    // Verifiziere, dass der gewrapte Wert tatsächlich den kürzesten Weg nimmt
+    // Wenn nicht, korrigiere ihn durch Anpassung der "Revolution"
+    const actualDelta = shortestAngularDelta(wrappedRawCommand, currentRaw, range);
+    if (Math.abs(actualDelta - rawDelta) > 0.1) {
+      // Der gewrapte Wert würde nicht den kürzesten Weg nehmen
+      // Korrigiere durch Anpassung der Revolution: wenn rawDelta negativ war, 
+      // aber wrappedRawCommand > currentRaw, dann müssen wir eine Revolution subtrahieren
+      if (rawDelta < 0 && wrappedRawCommand > currentRaw) {
+        // Wir wollten gegen den Uhrzeigersinn gehen, aber der gewrapte Wert ist größer
+        // Subtrahiere eine volle Umdrehung
+        wrappedRawCommand = wrapAzimuth(wrappedRawCommand - range, range);
+      } else if (rawDelta > 0 && wrappedRawCommand < currentRaw) {
+        // Wir wollten im Uhrzeigersinn gehen, aber der gewrapte Wert ist kleiner
+        // Addiere eine volle Umdrehung
+        wrappedRawCommand = wrapAzimuth(wrappedRawCommand + range, range);
+      }
+    }
+    
     return {
       calibrated: route.target,
-      commandValue: wrapAzimuth(rawCommand, range),
+      commandValue: wrappedRawCommand,
       direction: route.direction,
       usesWrap: route.usesWrap
     };
