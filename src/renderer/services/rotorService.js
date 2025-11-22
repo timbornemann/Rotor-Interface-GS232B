@@ -1101,6 +1101,8 @@ class RotorService {
       await this.executeRamp({ az: target });
       return;
     }
+    // Stelle sicher, dass Geschwindigkeitseinstellungen vor Positionsbefehl gesendet werden
+    await this.ensureSpeedSettings();
     const plan = this.planAzimuthTarget(target);
     const value = Math.round(plan.commandValue).toString().padStart(3, '0');
     console.log('[RotorService] Azimut setzen', { target, plan, value });
@@ -1113,6 +1115,8 @@ class RotorService {
       await this.executeRamp({ az, el });
       return;
     }
+    // Stelle sicher, dass Geschwindigkeitseinstellungen vor Positionsbefehl gesendet werden
+    await this.ensureSpeedSettings();
     const azPlan = this.planAzimuthTarget(az);
     const elPlan = this.planElevationTarget(el);
     const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
@@ -1131,6 +1135,9 @@ class RotorService {
     if (!hasAz && !hasEl) {
       return;
     }
+
+    // Stelle sicher, dass Geschwindigkeitseinstellungen vor Ramp-Bewegung gesendet werden
+    await this.ensureSpeedSettings();
 
     // Warte auf ersten Status-Update, falls noch keiner vorhanden ist
     // (maximal 2 Sekunden, dann verwende direkten Befehl als Fallback)
@@ -1158,6 +1165,8 @@ class RotorService {
     let azIntegral = 0;
     let elIntegral = 0;
     const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
+    let lastSpeedUpdate = Date.now();
+    const speedUpdateInterval = 5000; // Geschwindigkeit alle 5 Sekunden neu setzen
 
     // Speichere initiale Fehler für symmetrische Beschleunigung/Verzögerung
     let azInitialError = null;
@@ -1240,6 +1249,14 @@ class RotorService {
         nextEl = clamp(status.elevation + step, this.softLimits.elevationMin, this.softLimits.elevationMax);
       }
 
+      // Stelle sicher, dass Geschwindigkeitseinstellungen regelmäßig neu gesendet werden
+      // (wichtig für echte Hardware, da Geschwindigkeit möglicherweise überschrieben wird)
+      const now = Date.now();
+      if (now - lastSpeedUpdate >= speedUpdateInterval) {
+        await this.ensureSpeedSettings();
+        lastSpeedUpdate = now;
+      }
+
       await this.sendPlannedTarget(nextAz, nextEl);
       await delay(rampSettings.rampSampleTimeMs);
     }
@@ -1270,10 +1287,14 @@ class RotorService {
     }
     const rampSettings = this.getRampSettings();
     if (!rampSettings.rampEnabled) {
-      // Wenn Softstart/Softstop deaktiviert, direkten Befehl senden
+      // Wenn Softstart/Softstop deaktiviert, Geschwindigkeit setzen und direkten Befehl senden
+      await this.ensureSpeedSettings();
       await this.sendRawCommand(direction);
       return;
     }
+
+    // Stelle sicher, dass Geschwindigkeitseinstellungen vor manueller Bewegung gesendet werden
+    await this.ensureSpeedSettings();
 
     // Speichere nur die Richtung beim Start, Position wird beim Stoppen gespeichert
     this.manualDirection = direction; // Speichere aktuelle Richtung
@@ -1290,6 +1311,8 @@ class RotorService {
     let timeSinceStart = 0;
     const rampUpTimeMs = 2000; // 2 Sekunden zum Aufbauen auf volle Geschwindigkeit
     const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
+    let lastSpeedUpdate = Date.now();
+    const speedUpdateInterval = 5000; // Geschwindigkeit alle 5 Sekunden neu setzen
 
     while (!rampContext.cancelled) {
       const status = this.currentStatus;
@@ -1408,6 +1431,13 @@ class RotorService {
           : '000';
         const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
         await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+      }
+
+      // Stelle sicher, dass Geschwindigkeitseinstellungen regelmäßig neu gesendet werden
+      const now = Date.now();
+      if (now - lastSpeedUpdate >= speedUpdateInterval) {
+        await this.ensureSpeedSettings();
+        lastSpeedUpdate = now;
       }
 
       timeSinceStart += rampSettings.rampSampleTimeMs;
@@ -1757,6 +1787,16 @@ class RotorService {
     for (const command of commands) {
       await this.sendRawCommand(command);
     }
+  }
+
+  async ensureSpeedSettings() {
+    // Stelle sicher, dass Geschwindigkeitseinstellungen gesendet werden
+    // Wichtig für echte Hardware, da Geschwindigkeitseinstellungen möglicherweise
+    // bei Positionsbefehlen ignoriert oder überschrieben werden
+    if (this.serial instanceof SimulationSerialConnection) {
+      return; // Simulation verwaltet Geschwindigkeit intern
+    }
+    await this.applySpeedSettings();
   }
 
   normalizeAzimuth(value) {
