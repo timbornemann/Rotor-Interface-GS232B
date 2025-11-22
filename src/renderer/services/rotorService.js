@@ -1761,6 +1761,7 @@ class RotorService {
 
   async applySpeedSettings() {
     if (!this.serial || !this.serial.isOpen()) {
+      console.warn('[RotorService] applySpeedSettings: Serial nicht verbunden');
       return;
     }
     if (this.serial instanceof SimulationSerialConnection) {
@@ -1770,18 +1771,41 @@ class RotorService {
 
     // ERC-DUO verwendet API-Befehle für Geschwindigkeitseinstellungen, nicht GS-232B Sxxx/Bxxx
     // Format: s + 3-Letter-Code + 4-stelliger Wert + <cr>
-    // sSL1xxxx = Low-Speed Azimuth (xxxx = 4-stelliger Wert)
-    // sSH1xxxx = High-Speed Azimuth
-    // sSA1xxxx = Speed-Angle Azimuth (Umschaltposition)
+    // sSL1xxxx = Low-Speed Azimuth (xxxx = 4-stelliger Wert, 1-4 Stufen)
+    // sSH1xxxx = High-Speed Azimuth (1-4 Stufen)
+    // sSA1xxxx = Speed-Angle Azimuth (Umschaltposition in Grad)
     // Analog für Elevation: ...2 statt ...1
+    
+    // ERC-DUO Speed-Einstellungen: Die Werte könnten direkt in Grad/Sekunde sein
+    // oder als Stufen (1-4). Basierend auf der Dokumentation scheinen es
+    // 4-stellige Werte zu sein. Wir versuchen beide Ansätze:
+    // 
+    // Option 1: Direkt als Grad/Sekunde (0,5-20 → 0001-0020)
+    // Option 2: Als Stufen (0,5-20 → 1-4 → 0001-0004)
+    //
+    // Basierend auf "1-4 Stufen" in der Dokumentation verwenden wir Stufen:
+    const convertSpeedToStage = (speedDegPerSec) => {
+      const clamped = Math.max(0.5, Math.min(20, speedDegPerSec));
+      // Lineare Konvertierung: 0,5-20 → 1-4 Stufen
+      // Stufe 1: 0,5-5,5 °/s
+      // Stufe 2: 5,5-10,5 °/s  
+      // Stufe 3: 10,5-15,5 °/s
+      // Stufe 4: 15,5-20 °/s
+      const stage = Math.round(1 + ((clamped - 0.5) / 19.5) * 3);
+      return Math.max(1, Math.min(4, stage));
+    };
     
     const commands = [];
     
     if (typeof this.speedSettings.azimuthSpeedDegPerSec === 'number') {
-      // Konvertiere Geschwindigkeit in ERC-DUO Format
-      // ERC-DUO erwartet 4-stellige Werte (0001-0020 typisch für Speed)
-      const speed = Math.max(1, Math.min(20, Math.round(this.speedSettings.azimuthSpeedDegPerSec)));
-      const value = speed.toString().padStart(4, '0');
+      const speedStage = convertSpeedToStage(this.speedSettings.azimuthSpeedDegPerSec);
+      const value = speedStage.toString().padStart(4, '0');
+      
+      console.log('[RotorService] Geschwindigkeit Azimuth konvertieren', {
+        original: this.speedSettings.azimuthSpeedDegPerSec,
+        stage: speedStage,
+        command: `sSL1${value} / sSH1${value}`
+      });
       
       // Setze Low-Speed und High-Speed auf den gleichen Wert
       // (ERC-DUO kann zwischen Low und High umschalten basierend auf Speed-Angle)
@@ -1792,23 +1816,39 @@ class RotorService {
     }
     
     if (typeof this.speedSettings.elevationSpeedDegPerSec === 'number') {
-      const speed = Math.max(1, Math.min(20, Math.round(this.speedSettings.elevationSpeedDegPerSec)));
-      const value = speed.toString().padStart(4, '0');
+      const speedStage = convertSpeedToStage(this.speedSettings.elevationSpeedDegPerSec);
+      const value = speedStage.toString().padStart(4, '0');
+      
+      console.log('[RotorService] Geschwindigkeit Elevation konvertieren', {
+        original: this.speedSettings.elevationSpeedDegPerSec,
+        stage: speedStage,
+        command: `sSL2${value} / sSH2${value}`
+      });
       
       commands.push(`sSL2${value}`); // Low-Speed Elevation
       commands.push(`sSH2${value}`); // High-Speed Elevation
     }
 
+    if (commands.length === 0) {
+      console.warn('[RotorService] Keine Geschwindigkeitsbefehle zu senden');
+      return;
+    }
+
+    console.log('[RotorService] Sende Geschwindigkeitsbefehle an ERC-DUO', { commands, count: commands.length });
+
     // Sende ERC-DUO API-Befehle mit Verzögerung
     // Wichtig: Diese Befehle haben keine Antwort, müssen aber trotzdem korrekt verarbeitet werden
     for (let i = 0; i < commands.length; i++) {
       const command = commands[i];
+      console.log(`[RotorService] Sende Geschwindigkeitsbefehl ${i + 1}/${commands.length}:`, command);
       await this.sendRawCommand(command);
       // ERC-DUO benötigt Zeit zum Verarbeiten von API-Befehlen
       if (i < commands.length - 1) {
         await delay(50);
       }
     }
+    
+    console.log('[RotorService] Alle Geschwindigkeitsbefehle gesendet');
   }
 
   async ensureSpeedSettings() {
