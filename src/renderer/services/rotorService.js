@@ -1426,8 +1426,9 @@ class RotorService {
     }
     const rampSettings = this.getRampSettings();
     
-    // Stoppe aktive manuelle Bewegung
+    // Stoppe alle aktiven Bewegungen (sowohl manuelle als auch Positions-basierte)
     this.cancelActiveManualRamp();
+    this.cancelActiveRamp();
 
     // Speichere aktuelle Position als Stopp-Position BEIM STOPPEN
     const stopPosition = this.currentStatus ? {
@@ -1443,8 +1444,17 @@ class RotorService {
       return;
     }
 
-    if (!stopPosition || !this.manualDirection) {
-      // Keine Position oder Richtung verfügbar, direkter Stopp
+    // Wenn keine manuelle Richtung gesetzt ist (z.B. bei Klicksteuerung), direkter Stopp
+    if (!this.manualDirection) {
+      // Sende sofort Stopp-Befehl an Hardware
+      await this.sendRawCommand(stopCommand);
+      this.manualDirection = null;
+      this.manualStopPosition = null;
+      return;
+    }
+
+    if (!stopPosition) {
+      // Keine Position verfügbar, direkter Stopp
       await this.sendRawCommand(stopCommand);
       this.manualDirection = null;
       this.manualStopPosition = null;
