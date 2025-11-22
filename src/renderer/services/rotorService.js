@@ -1091,8 +1091,14 @@ class RotorService {
     // GS-232B-Protokoll erfordert ein abschließendes Carriage Return
     const commandWithCr = upperCased.endsWith('\r') ? upperCased : `${upperCased}\r`;
     await this.serial.writeCommand(commandWithCr);
-    // Kleine Verzögerung, damit der Controller Zeit hat, den Befehl zu verarbeiten
-    await delay(10);
+    // Verzögerung basierend auf Befehlstyp:
+    // - Geschwindigkeitsbefehle (S, B): 50ms (wird in applySpeedSettings überschrieben)
+    // - Positionsbefehle (M, W): 50ms (wichtig für Hardware)
+    // - Andere Befehle: 20ms (Standard)
+    const isSpeedCommand = /^[SB]\d+/.test(upperCased);
+    const isPositionCommand = /^[MW]/.test(upperCased);
+    const delayMs = isSpeedCommand || isPositionCommand ? 50 : 20;
+    await delay(delayMs);
   }
 
   async setAzimuth(target) {
@@ -1101,8 +1107,7 @@ class RotorService {
       await this.executeRamp({ az: target });
       return;
     }
-    // Stelle sicher, dass Geschwindigkeitseinstellungen vor Positionsbefehl gesendet werden
-    await this.ensureSpeedSettings();
+    // ERC-DUO: Geschwindigkeitseinstellungen werden nicht vor jeder Bewegung neu gesetzt
     const plan = this.planAzimuthTarget(target);
     const value = Math.round(plan.commandValue).toString().padStart(3, '0');
     console.log('[RotorService] Azimut setzen', { target, plan, value });
@@ -1115,8 +1120,7 @@ class RotorService {
       await this.executeRamp({ az, el });
       return;
     }
-    // Stelle sicher, dass Geschwindigkeitseinstellungen vor Positionsbefehl gesendet werden
-    await this.ensureSpeedSettings();
+    // ERC-DUO: Geschwindigkeitseinstellungen werden nicht vor jeder Bewegung neu gesetzt
     const azPlan = this.planAzimuthTarget(az);
     const elPlan = this.planElevationTarget(el);
     const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
@@ -1136,8 +1140,10 @@ class RotorService {
       return;
     }
 
-    // Stelle sicher, dass Geschwindigkeitseinstellungen vor Ramp-Bewegung gesendet werden
-    await this.ensureSpeedSettings();
+    // ERC-DUO: Soft-Rampen sind nicht durch Geschwindigkeitsänderungen möglich
+    // Stattdessen verwenden wir kleinere Positionsschritte mit Verzögerungen
+    // Die Geschwindigkeit bleibt fest (Low/High-Speed), aber wir simulieren
+    // sanfte Bewegung durch graduelle Positionsänderungen
 
     // Warte auf ersten Status-Update, falls noch keiner vorhanden ist
     // (maximal 2 Sekunden, dann verwende direkten Befehl als Fallback)
@@ -1165,8 +1171,6 @@ class RotorService {
     let azIntegral = 0;
     let elIntegral = 0;
     const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
-    let lastSpeedUpdate = Date.now();
-    const speedUpdateInterval = 5000; // Geschwindigkeit alle 5 Sekunden neu setzen
 
     // Speichere initiale Fehler für symmetrische Beschleunigung/Verzögerung
     let azInitialError = null;
@@ -1249,13 +1253,9 @@ class RotorService {
         nextEl = clamp(status.elevation + step, this.softLimits.elevationMin, this.softLimits.elevationMax);
       }
 
-      // Stelle sicher, dass Geschwindigkeitseinstellungen regelmäßig neu gesendet werden
-      // (wichtig für echte Hardware, da Geschwindigkeit möglicherweise überschrieben wird)
-      const now = Date.now();
-      if (now - lastSpeedUpdate >= speedUpdateInterval) {
-        await this.ensureSpeedSettings();
-        lastSpeedUpdate = now;
-      }
+      // ERC-DUO: Geschwindigkeitseinstellungen werden nicht regelmäßig neu gesendet
+      // Sie bleiben fest, bis sie explizit geändert werden
+      // Soft-Rampen wird durch kleinere Positionsschritte simuliert
 
       await this.sendPlannedTarget(nextAz, nextEl);
       await delay(rampSettings.rampSampleTimeMs);
@@ -1287,14 +1287,14 @@ class RotorService {
     }
     const rampSettings = this.getRampSettings();
     if (!rampSettings.rampEnabled) {
-      // Wenn Softstart/Softstop deaktiviert, Geschwindigkeit setzen und direkten Befehl senden
-      await this.ensureSpeedSettings();
+      // Wenn Softstart/Softstop deaktiviert, direkten Befehl senden
+      // ERC-DUO: Geschwindigkeit wird nicht dynamisch geändert
       await this.sendRawCommand(direction);
       return;
     }
 
-    // Stelle sicher, dass Geschwindigkeitseinstellungen vor manueller Bewegung gesendet werden
-    await this.ensureSpeedSettings();
+    // ERC-DUO: Soft-Rampen für manuelle Steuerung durch Positionsbefehle simulieren
+    // statt durch Geschwindigkeitsänderungen
 
     // Speichere nur die Richtung beim Start, Position wird beim Stoppen gespeichert
     this.manualDirection = direction; // Speichere aktuelle Richtung
@@ -1311,8 +1311,6 @@ class RotorService {
     let timeSinceStart = 0;
     const rampUpTimeMs = 2000; // 2 Sekunden zum Aufbauen auf volle Geschwindigkeit
     const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
-    let lastSpeedUpdate = Date.now();
-    const speedUpdateInterval = 5000; // Geschwindigkeit alle 5 Sekunden neu setzen
 
     while (!rampContext.cancelled) {
       const status = this.currentStatus;
@@ -1433,12 +1431,8 @@ class RotorService {
         await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
       }
 
-      // Stelle sicher, dass Geschwindigkeitseinstellungen regelmäßig neu gesendet werden
-      const now = Date.now();
-      if (now - lastSpeedUpdate >= speedUpdateInterval) {
-        await this.ensureSpeedSettings();
-        lastSpeedUpdate = now;
-      }
+      // ERC-DUO: Geschwindigkeitseinstellungen werden nicht regelmäßig neu gesendet
+      // Soft-Rampen wird durch Positionsschritte simuliert
 
       timeSinceStart += rampSettings.rampSampleTimeMs;
       await delay(rampSettings.rampSampleTimeMs);
@@ -1774,29 +1768,61 @@ class RotorService {
       return;
     }
 
+    // ERC-DUO verwendet API-Befehle für Geschwindigkeitseinstellungen, nicht GS-232B Sxxx/Bxxx
+    // Format: s + 3-Letter-Code + 4-stelliger Wert + <cr>
+    // sSL1xxxx = Low-Speed Azimuth (xxxx = 4-stelliger Wert)
+    // sSH1xxxx = High-Speed Azimuth
+    // sSA1xxxx = Speed-Angle Azimuth (Umschaltposition)
+    // Analog für Elevation: ...2 statt ...1
+    
     const commands = [];
+    
     if (typeof this.speedSettings.azimuthSpeedDegPerSec === 'number') {
-      const value = Math.round(this.speedSettings.azimuthSpeedDegPerSec).toString().padStart(3, '0');
-      commands.push(`S${value}`);
+      // Konvertiere Geschwindigkeit in ERC-DUO Format
+      // ERC-DUO erwartet 4-stellige Werte (0001-0020 typisch für Speed)
+      const speed = Math.max(1, Math.min(20, Math.round(this.speedSettings.azimuthSpeedDegPerSec)));
+      const value = speed.toString().padStart(4, '0');
+      
+      // Setze Low-Speed und High-Speed auf den gleichen Wert
+      // (ERC-DUO kann zwischen Low und High umschalten basierend auf Speed-Angle)
+      commands.push(`sSL1${value}`); // Low-Speed Azimuth
+      commands.push(`sSH1${value}`); // High-Speed Azimuth
+      // Speed-Angle kann optional gesetzt werden (z.B. 30° = 0030)
+      // commands.push(`sSA10030`); // Speed-Angle 30°
     }
+    
     if (typeof this.speedSettings.elevationSpeedDegPerSec === 'number') {
-      const value = Math.round(this.speedSettings.elevationSpeedDegPerSec).toString().padStart(3, '0');
-      commands.push(`B${value}`);
+      const speed = Math.max(1, Math.min(20, Math.round(this.speedSettings.elevationSpeedDegPerSec)));
+      const value = speed.toString().padStart(4, '0');
+      
+      commands.push(`sSL2${value}`); // Low-Speed Elevation
+      commands.push(`sSH2${value}`); // High-Speed Elevation
     }
 
-    for (const command of commands) {
+    // Sende ERC-DUO API-Befehle mit Verzögerung
+    // Wichtig: Diese Befehle haben keine Antwort, müssen aber trotzdem korrekt verarbeitet werden
+    for (let i = 0; i < commands.length; i++) {
+      const command = commands[i];
       await this.sendRawCommand(command);
+      // ERC-DUO benötigt Zeit zum Verarbeiten von API-Befehlen
+      if (i < commands.length - 1) {
+        await delay(50);
+      }
     }
   }
 
   async ensureSpeedSettings() {
-    // Stelle sicher, dass Geschwindigkeitseinstellungen gesendet werden
-    // Wichtig für echte Hardware, da Geschwindigkeitseinstellungen möglicherweise
-    // bei Positionsbefehlen ignoriert oder überschrieben werden
+    // ERC-DUO: Geschwindigkeitseinstellungen können nicht dynamisch geändert werden
+    // Die Geschwindigkeit wird über API-Befehle (sSL1, sSH1, etc.) konfiguriert
+    // und bleibt dann fest, bis sie erneut geändert wird.
+    // Daher müssen wir die Geschwindigkeit nicht vor jeder Bewegung neu setzen.
+    // Nur beim Verbinden oder wenn sich die Einstellungen ändern.
     if (this.serial instanceof SimulationSerialConnection) {
       return; // Simulation verwaltet Geschwindigkeit intern
     }
-    await this.applySpeedSettings();
+    // Für ERC-DUO: Geschwindigkeit wird nur einmal beim Verbinden gesetzt
+    // oder wenn sich die Einstellungen ändern - nicht vor jeder Bewegung
+    // await this.applySpeedSettings(); // Deaktiviert, da nicht nötig
   }
 
   normalizeAzimuth(value) {
