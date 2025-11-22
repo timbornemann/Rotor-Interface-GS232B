@@ -1141,156 +1141,23 @@ class RotorService {
       return;
     }
 
-    // ERC-DUO: Soft-Rampen sind nicht durch Geschwindigkeitsänderungen möglich
-    // Stattdessen verwenden wir kleinere Positionsschritte mit Verzögerungen
-    // Die Geschwindigkeit bleibt fest (Low/High-Speed), aber wir simulieren
-    // sanfte Bewegung durch graduelle Positionsänderungen
-
-    // Warte auf ersten Status-Update, falls noch keiner vorhanden ist
-    // (maximal 2 Sekunden, dann verwende direkten Befehl als Fallback)
-    if (!this.currentStatus) {
-      let waited = 0;
-      const maxWaitMs = 2000;
-      const checkInterval = 50;
-      while (!this.currentStatus && waited < maxWaitMs) {
-        await delay(checkInterval);
-        waited += checkInterval;
-      }
-      // Wenn nach Wartezeit immer noch kein Status vorhanden, direkten Befehl senden
-      if (!this.currentStatus) {
-        await this.sendPlannedTarget(targets.az, targets.el);
-        return;
-      }
+    // ERC-DUO: Softstart/Softstop ist bereits eingebaut!
+    // ERC-DUO startet bei Low-Speed, wechselt nach Speed-Angle (z.B. 30°) zu High-Speed,
+    // und 30° vor dem Ziel zurück zu Low-Speed
+    // Zusätzlich gibt es einen Delay before move (sDM1, sDM2) für Softstart
+    // 
+    // Wenn Softstart/Softstop aktiviert ist, senden wir einfach das Ziel und ERC-DUO
+    // macht den Rest automatisch. Wir müssen keine Positionsschritte simulieren.
+    
+    if (rampSettings.rampEnabled) {
+      // ERC-DUO macht Softstart/Softstop automatisch
+      // Sende einfach das Ziel und ERC-DUO übernimmt die sanfte Bewegung
+      await this.sendPlannedTarget(targets.az, targets.el);
+      return;
     }
-
-    this.cancelActiveRamp();
-    const rampContext = { cancelled: false };
-    this.activeRamp = rampContext;
-
-    const azGoal = hasAz ? this.planAzimuthTarget(targets.az).calibrated : null;
-    const elGoal = hasEl ? this.planElevationTarget(targets.el).calibrated : null;
-    let azIntegral = 0;
-    let elIntegral = 0;
-    const dtSeconds = rampSettings.rampSampleTimeMs / 1000;
-
-    // Speichere initiale Fehler für symmetrische Beschleunigung/Verzögerung
-    let azInitialError = null;
-    let elInitialError = null;
-
-    const computeEasedStep = (error, integral, initialErrorRef) => {
-      const absError = Math.abs(error);
-      
-      // Speichere initialen Fehler beim ersten Aufruf
-      if (initialErrorRef.current === null && absError > 0.1) {
-        initialErrorRef.current = absError;
-      }
-      
-      const nextIntegral = clamp(
-        integral + error * dtSeconds,
-        -rampSettings.rampIntegralLimit,
-        rampSettings.rampIntegralLimit
-      );
-      const rawOutput = rampSettings.rampKp * error + rampSettings.rampKi * nextIntegral;
-      const limitedOutput = clamp(rawOutput, -rampSettings.rampMaxStepDeg, rampSettings.rampMaxStepDeg);
-
-      // Symmetrische Envelope: Reduziert sowohl beim Start als auch beim Stoppen
-      // Berechne Fortschritt: 0 = Start, 1 = Ziel erreicht
-      let envelope = 1.0;
-      if (initialErrorRef.current !== null && initialErrorRef.current > 0.1) {
-        const progress = 1.0 - (absError / initialErrorRef.current);
-        // Symmetrische lineare Funktion: langsam am Anfang, schnell in der Mitte, langsam am Ende
-        // V-förmig: steigt linear von 0.2 auf 1.0 in der ersten Hälfte, fällt linear von 1.0 auf 0.2 in der zweiten Hälfte
-        const minEnvelope = 0.2; // Minimum für sanften Start/Stopp
-        const maxEnvelope = 1.0;  // Maximum für volle Geschwindigkeit in der Mitte
-        
-        if (progress < 0.5) {
-          // Erste Hälfte: linear von minEnvelope auf maxEnvelope
-          envelope = minEnvelope + (progress * 2) * (maxEnvelope - minEnvelope);
-        } else {
-          // Zweite Hälfte: linear von maxEnvelope auf minEnvelope
-          envelope = maxEnvelope - ((progress - 0.5) * 2) * (maxEnvelope - minEnvelope);
-        }
-      }
-
-      const easedOutput = limitedOutput * envelope;
-      return { step: easedOutput, nextIntegral };
-    };
-
-    while (!rampContext.cancelled) {
-      const status = this.currentStatus;
-      if (!status) {
-        await this.sendPlannedTarget(targets.az, targets.el);
-        break;
-      }
-
-      const azError = hasAz && typeof status.azimuth === 'number'
-        ? shortestAngularDelta(azGoal, status.azimuth, this.maxAzimuthRange)
-        : 0;
-      const elError = hasEl && typeof status.elevation === 'number' ? elGoal - status.elevation : 0;
-
-      const azDone = !hasAz || Math.abs(azError) <= rampSettings.rampToleranceDeg;
-      const elDone = !hasEl || Math.abs(elError) <= rampSettings.rampToleranceDeg;
-
-      if (azDone && elDone) {
-        await this.sendPlannedTarget(targets.az, targets.el);
-        break;
-      }
-
-      let nextAz = hasAz ? status.azimuth : null;
-      if (!azDone && hasAz && typeof status.azimuth === 'number') {
-        const azInitialErrorRef = { current: azInitialError };
-        const { step, nextIntegral } = computeEasedStep(azError, azIntegral, azInitialErrorRef);
-        azInitialError = azInitialErrorRef.current;
-        azIntegral = nextIntegral;
-        nextAz = clamp(status.azimuth + step, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
-      }
-
-      let nextEl = hasEl ? status.elevation : null;
-      if (!elDone && hasEl && typeof status.elevation === 'number') {
-        const elInitialErrorRef = { current: elInitialError };
-        const { step, nextIntegral } = computeEasedStep(elError, elIntegral, elInitialErrorRef);
-        elInitialError = elInitialErrorRef.current;
-        elIntegral = nextIntegral;
-        nextEl = clamp(status.elevation + step, this.softLimits.elevationMin, this.softLimits.elevationMax);
-      }
-
-      // ERC-DUO: Geschwindigkeitseinstellungen werden nicht regelmäßig neu gesendet
-      // Sie bleiben fest, bis sie explizit geändert werden
-      // Soft-Rampen wird durch kleinere Positionsschritte simuliert
-      
-      // Prüfe ob Schritt groß genug ist (mindestens 0,5° für ERC-DUO)
-      // Zu kleine Schritte werden möglicherweise ignoriert
-      const minStepDeg = 0.5;
-      let shouldSend = false;
-      
-      if (nextAz !== null && hasAz && typeof status.azimuth === 'number') {
-        const azDelta = Math.abs(shortestAngularDelta(nextAz, status.azimuth, this.maxAzimuthRange));
-        if (azDelta >= minStepDeg) {
-          shouldSend = true;
-        }
-      }
-      
-      if (nextEl !== null && hasEl && typeof status.elevation === 'number') {
-        const elDelta = Math.abs(nextEl - status.elevation);
-        if (elDelta >= minStepDeg) {
-          shouldSend = true;
-        }
-      }
-      
-      if (shouldSend) {
-        await this.sendPlannedTarget(nextAz, nextEl);
-        // ERC-DUO benötigt mehr Zeit zum Verarbeiten von Positionsbefehlen
-        // Erhöhe Verzögerung für bessere Kompatibilität
-        await delay(Math.max(rampSettings.rampSampleTimeMs, 200));
-      } else {
-        // Schritt zu klein, warte länger bevor nächster Versuch
-        await delay(rampSettings.rampSampleTimeMs);
-      }
-    }
-
-    if (this.activeRamp === rampContext) {
-      this.activeRamp = null;
-    }
+    
+    // Wenn Softstart/Softstop deaktiviert ist, sende direkt das Ziel
+    await this.sendPlannedTarget(targets.az, targets.el);
   }
 
   cancelActiveRamp() {
@@ -1315,13 +1182,15 @@ class RotorService {
     const rampSettings = this.getRampSettings();
     if (!rampSettings.rampEnabled) {
       // Wenn Softstart/Softstop deaktiviert, direkten Befehl senden
-      // ERC-DUO: Geschwindigkeit wird nicht dynamisch geändert
       await this.sendRawCommand(direction);
       return;
     }
 
-    // ERC-DUO: Soft-Rampen für manuelle Steuerung durch Positionsbefehle simulieren
-    // statt durch Geschwindigkeitsänderungen
+    // ERC-DUO: Für manuelle Steuerung (R/L/U/D) können wir die eingebauten
+    // Softstart/Softstop-Features nicht direkt nutzen, da diese nur für
+    // Positionsbefehle (M, W) gelten. Für manuelle Steuerung verwenden wir
+    // weiterhin Positionsschritte, aber ERC-DUO's Delay (sDM1, sDM2) hilft
+    // beim Softstart.
 
     // Speichere nur die Richtung beim Start, Position wird beim Stoppen gespeichert
     this.manualDirection = direction; // Speichere aktuelle Richtung
@@ -1853,51 +1722,83 @@ class RotorService {
     // Analog für Elevation: ...2 statt ...1
     
     // ERC-DUO Speed-Einstellungen: Basierend auf der Dokumentation
-    // Die Werte werden direkt in Grad/Sekunde gesendet (0,5-20 → 0001-0020)
-    // ERC-DUO interpretiert diese Werte intern als Geschwindigkeitsstufen
-    const convertSpeedToERCValue = (speedDegPerSec) => {
+    // ERC-DUO hat nur 4 Geschwindigkeitsstufen: 1 (langsamste) bis 4 (schnellste)
+    // Konvertiere 0,5-20 °/s auf 1-4 Stufen
+    const convertSpeedToERCStage = (speedDegPerSec) => {
       const clamped = Math.max(0.5, Math.min(20, speedDegPerSec));
-      // Konvertiere direkt: 0,5-20 → 1-20 (als 4-stellige Zahl)
-      // ERC-DUO erwartet 4-stellige Werte, daher multiplizieren wir mit 10
-      // 0,5 → 0005, 1,0 → 0010, 2,0 → 0020, etc.
-      // Oder direkt als ganze Zahl: 1 → 0001, 2 → 0002, 20 → 0020
-      // Basierend auf der Dokumentation: Direkt als Grad/Sekunde (gerundet)
-      const rounded = Math.round(clamped);
-      return Math.max(1, Math.min(20, rounded));
+      // Lineare Konvertierung: 0,5-20 → 1-4 Stufen
+      // Stufe 1: 0,5-5,5 °/s (langsamste)
+      // Stufe 2: 5,5-10,5 °/s
+      // Stufe 3: 10,5-15,5 °/s
+      // Stufe 4: 15,5-20 °/s (schnellste)
+      const stage = Math.round(1 + ((clamped - 0.5) / 19.5) * 3);
+      return Math.max(1, Math.min(4, stage));
     };
     
     const commands = [];
     
     if (typeof this.speedSettings.azimuthSpeedDegPerSec === 'number') {
-      const speedValue = convertSpeedToERCValue(this.speedSettings.azimuthSpeedDegPerSec);
-      const value = speedValue.toString().padStart(4, '0');
+      const speedStage = convertSpeedToERCStage(this.speedSettings.azimuthSpeedDegPerSec);
+      const value = speedStage.toString().padStart(4, '0');
       
       console.log('[RotorService] Geschwindigkeit Azimuth konvertieren', {
         original: this.speedSettings.azimuthSpeedDegPerSec,
-        ercValue: speedValue,
+        stage: speedStage,
         command: `sSL1${value} / sSH1${value}`
       });
       
       // Setze Low-Speed und High-Speed auf den gleichen Wert
-      // (ERC-DUO kann zwischen Low und High umschalten basierend auf Speed-Angle)
-      commands.push(`sSL1${value}`); // Low-Speed Azimuth
-      commands.push(`sSH1${value}`); // High-Speed Azimuth
-      // Speed-Angle kann optional gesetzt werden (z.B. 30° = 0030)
-      // commands.push(`sSA10030`); // Speed-Angle 30°
+      // ERC-DUO schaltet automatisch zwischen Low und High um basierend auf Speed-Angle
+      commands.push(`sSL1${value}`); // Low-Speed Azimuth (1-4)
+      commands.push(`sSH1${value}`); // High-Speed Azimuth (1-4)
+      
+      // Speed-Angle: 0=0°, 1=10°, 2=20°, 3=30° (Default: 3 = 30°)
+      // ERC-DUO startet bei Low-Speed, wechselt nach Speed-Angle zu High-Speed,
+      // und 30° vor dem Ziel zurück zu Low-Speed
+      const rampSettings = this.getRampSettings();
+      if (rampSettings.rampEnabled) {
+        // Wenn Softstart/Softstop aktiviert, verwende Speed-Angle 3 (30°)
+        commands.push(`sSA10003`); // Speed-Angle 30° für Azimuth
+      }
     }
     
     if (typeof this.speedSettings.elevationSpeedDegPerSec === 'number') {
-      const speedValue = convertSpeedToERCValue(this.speedSettings.elevationSpeedDegPerSec);
-      const value = speedValue.toString().padStart(4, '0');
+      const speedStage = convertSpeedToERCStage(this.speedSettings.elevationSpeedDegPerSec);
+      const value = speedStage.toString().padStart(4, '0');
       
       console.log('[RotorService] Geschwindigkeit Elevation konvertieren', {
         original: this.speedSettings.elevationSpeedDegPerSec,
-        ercValue: speedValue,
+        stage: speedStage,
         command: `sSL2${value} / sSH2${value}`
       });
       
-      commands.push(`sSL2${value}`); // Low-Speed Elevation
-      commands.push(`sSH2${value}`); // High-Speed Elevation
+      commands.push(`sSL2${value}`); // Low-Speed Elevation (1-4)
+      commands.push(`sSH2${value}`); // High-Speed Elevation (1-4)
+      
+      // Speed-Angle für Elevation
+      const rampSettings = this.getRampSettings();
+      if (rampSettings.rampEnabled) {
+        commands.push(`sSA20003`); // Speed-Angle 30° für Elevation
+      }
+    }
+    
+    // ERC-DUO Softstart/Softstop: Delay before move (sDM1, sDM2)
+    // Range: 0-5000 ms, Default: 1000 ms
+    // Dies ist die Verzögerung bevor der Rotor sich zu bewegen beginnt
+    const rampSettings = this.getRampSettings();
+    if (rampSettings.rampEnabled) {
+      // Konvertiere rampSampleTimeMs (100-2000) auf Delay (0-5000)
+      // Verwende einen sinnvollen Wert basierend auf den Ramp-Einstellungen
+      const delayMs = Math.min(5000, Math.max(0, rampSettings.rampSampleTimeMs * 2));
+      const delayValue = Math.round(delayMs).toString().padStart(4, '0');
+      commands.push(`sDM1${delayValue}`); // Delay before move Azimuth
+      commands.push(`sDM2${delayValue}`); // Delay before move Elevation
+      
+      console.log('[RotorService] Softstart/Softstop Delay konfigurieren', {
+        delayMs,
+        delayValue,
+        commands: [`sDM1${delayValue}`, `sDM2${delayValue}`]
+      });
     }
 
     if (commands.length === 0) {
