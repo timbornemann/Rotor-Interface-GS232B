@@ -1242,11 +1242,17 @@ class RotorService {
         // um die Richtung beizubehalten
         nextAz = status.azimuth + step;
         
-        // Prüfe Limits
+        // Prüfe Limits und handle Wrap-around korrekt
         if (nextAz < this.softLimits.azimuthMin) {
           if (this.maxAzimuthRange === 450 && nextAz < 0) {
             // Bei 450°-Modus: Wrap-around erlauben
-            nextAz = wrapAzimuth(nextAz, this.maxAzimuthRange);
+            // Für Links-Bewegung: wenn wir unter 0 gehen, addiere 450
+            if (stepDirection < 0) {
+              nextAz = nextAz + this.maxAzimuthRange;
+            } else {
+              // Nach rechts, aber unter Minimum -> Limit erreicht
+              break;
+            }
             // Prüfe ob innerhalb der Limits nach Wrap-around
             if (nextAz < this.softLimits.azimuthMin || nextAz > this.softLimits.azimuthMax) {
               break;
@@ -1258,7 +1264,13 @@ class RotorService {
         } else if (nextAz > this.softLimits.azimuthMax) {
           if (this.maxAzimuthRange === 450 && nextAz > 450) {
             // Bei 450°-Modus: Wrap-around erlauben
-            nextAz = wrapAzimuth(nextAz, this.maxAzimuthRange);
+            // Für Rechts-Bewegung: wenn wir über 450 gehen, subtrahiere 450
+            if (stepDirection > 0) {
+              nextAz = nextAz - this.maxAzimuthRange;
+            } else {
+              // Nach links, aber über Maximum -> Limit erreicht
+              break;
+            }
             // Prüfe ob innerhalb der Limits nach Wrap-around
             if (nextAz < this.softLimits.azimuthMin || nextAz > this.softLimits.azimuthMax) {
               break;
@@ -1268,8 +1280,10 @@ class RotorService {
             break;
           }
         }
-        // Stelle sicher, dass wir innerhalb der Limits sind
-        nextAz = clamp(nextAz, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+        // Stelle sicher, dass wir innerhalb der Limits sind (ohne clamp, da wir Wrap-around bereits behandelt haben)
+        if (nextAz < this.softLimits.azimuthMin || nextAz > this.softLimits.azimuthMax) {
+          break;
+        }
       } else if (isElevation && typeof status.elevation === 'number') {
         nextEl = status.elevation + step;
         // Prüfe Limits
@@ -1281,19 +1295,18 @@ class RotorService {
       }
 
       // Sende Position direkt, wobei wir die Richtung durch die Schritt-Richtung erzwingen
-      // Verwende planAzimuthTarget für korrekte Umrechnung mit Skalierungsfaktoren
+      // Berechne Raw-Position direkt mit korrekter Berücksichtigung der Richtung
       if (isAzimuth) {
-        // Verwende planAzimuthTarget, um die korrekte Raw-Position zu berechnen
-        // Dies berücksichtigt bereits Skalierungsfaktoren und Offsets
-        const plan = this.planAzimuthTarget(nextAz);
+        // Konvertiere nextAz (kalibriert) zu Raw: raw = (displayed * scaleFactor) - offset
+        let rawAz = (nextAz * this.azimuthScaleFactor) - this.azimuthOffset;
         
-        // Prüfe ob die geplante Richtung mit der gewünschten Richtung übereinstimmt
-        // Wenn nicht, passe die Position an, um die gewünschte Richtung zu erzwingen
+        // Hole aktuelle Raw-Position
         const currentRawAz = typeof status.azimuthRaw === 'number' 
           ? status.azimuthRaw 
           : ((status.azimuth * this.azimuthScaleFactor) - this.azimuthOffset);
         
-        let rawDelta = plan.commandValue - currentRawAz;
+        // Berechne Delta in Raw-Koordinaten
+        let rawDelta = rawAz - currentRawAz;
         
         // Normalisiere Delta auf -range/2 bis +range/2
         while (rawDelta > this.maxAzimuthRange / 2) {
@@ -1303,8 +1316,8 @@ class RotorService {
           rawDelta += this.maxAzimuthRange;
         }
         
-        // Wenn die geplante Richtung nicht mit der gewünschten Richtung übereinstimmt,
-        // passe die Position an
+        // Stelle sicher, dass die Richtung mit der gewünschten Richtung übereinstimmt
+        // Wenn nicht, passe die Position an, um die gewünschte Richtung zu erzwingen
         if ((stepDirection > 0 && rawDelta < 0) || (stepDirection < 0 && rawDelta > 0)) {
           // Richtung stimmt nicht überein, passe Position an
           if (stepDirection > 0) {
@@ -1317,7 +1330,7 @@ class RotorService {
         }
         
         // Berechne finale Raw-Position
-        let rawAz = currentRawAz + rawDelta;
+        rawAz = currentRawAz + rawDelta;
         
         // Wende Wrap-around an
         const wrappedRawAz = wrapAzimuth(rawAz, this.maxAzimuthRange);
