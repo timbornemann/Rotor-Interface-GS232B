@@ -223,44 +223,65 @@ class RotorHandler(SimpleHTTPRequestHandler):
 ; Serial port connection settings
 baudRate=9600
 pollingIntervalMs=1000
-simulation=false
-connectionMode=local
+simulation=false ; alternatives: true, false
+connectionMode=local ; alternatives: local, server
 
 [Coordinates]
 ; Map display coordinates
 mapLatitude=null
 mapLongitude=null
-satelliteMapEnabled=false
+satelliteMapEnabled=false ; alternatives: true, false
+mapZoomLevel=15
+mapZoomMin=5
+mapZoomMax=25
 
 [Cone]
 ; Cone visualization settings
 coneAngle=10
 coneLength=1000
 azimuthDisplayOffset=0
+coneAngleMin=1
+coneAngleMax=90
+coneLengthMin=0
+coneLengthMax=100000
+azimuthDisplayOffsetMin=-180
+azimuthDisplayOffsetMax=180
 
 [Speed]
 ; Rotor movement speeds in degrees per second
 azimuthSpeedDegPerSec=4
 elevationSpeedDegPerSec=2
+speedMinDegPerSec=0.5
+speedMaxDegPerSec=20
 
 [Ramp]
 ; Softstart/Softstop PI controller settings
-rampEnabled=false
+rampEnabled=true ; alternatives: true, false
 rampKp=0.4
 rampKi=0.05
 rampSampleTimeMs=400
 rampMaxStepDeg=8
 rampToleranceDeg=1.5
+rampKpMin=0
+rampKpMax=5
+rampKiMin=0
+rampKiMax=5
+rampSampleTimeMsMin=100
+rampSampleTimeMsMax=2000
+rampMaxStepDegMin=0.1
+rampMaxStepDegMax=45
+rampToleranceDegMin=0.1
+rampToleranceDegMax=10
 
 [Mode]
 ; Azimuth rotation mode
-azimuthMode=360
-elevationDisplayEnabled=true
+azimuthMode=450 ; alternatives: 360, 450
+elevationDisplayEnabled=true ; alternatives: true, false
 
 [Limits]
 ; Soft limits for rotor movement
 azimuthMinLimit=0
-azimuthMaxLimit=360
+azimuthMaxLimit=450
 elevationMinLimit=0
 elevationMaxLimit=90
 
@@ -268,6 +289,9 @@ elevationMaxLimit=90
 ; Calibration offsets
 azimuthOffset=0
 elevationOffset=0
+; Scaling factors (affect how far the motor turns per degree)
+azimuthScaleFactor=1.0
+elevationScaleFactor=1.0
 """
 
     # --- helpers ---------------------------------------------------------

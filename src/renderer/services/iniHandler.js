@@ -55,7 +55,10 @@ class IniHandler {
       if (keyValueMatch) {
         const key = keyValueMatch[1].trim();
         let value = keyValueMatch[2].trim();
-        
+
+        // Remove inline comments (anything after ; or #)
+        value = value.replace(/\s*[;#].*$/, '').trim();
+
         // Remove quotes if present
         if ((value.startsWith('"') && value.endsWith('"')) ||
             (value.startsWith("'") && value.endsWith("'"))) {
