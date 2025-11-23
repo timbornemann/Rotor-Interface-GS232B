@@ -1281,20 +1281,19 @@ class RotorService {
       }
 
       // Sende Position direkt, wobei wir die Richtung durch die Schritt-Richtung erzwingen
-      // Berechne Raw-Position direkt, um die Richtung beizubehalten
+      // Verwende planAzimuthTarget für korrekte Umrechnung mit Skalierungsfaktoren
       if (isAzimuth) {
-        // Berechne Raw-Position direkt
-        const rawAz = nextAz - this.azimuthOffset;
+        // Verwende planAzimuthTarget, um die korrekte Raw-Position zu berechnen
+        // Dies berücksichtigt bereits Skalierungsfaktoren und Offsets
+        const plan = this.planAzimuthTarget(nextAz);
         
-        // Stelle sicher, dass die Position in die richtige Richtung geht
-        // Wenn wir nach links gehen (CCW), müssen wir sicherstellen, dass die Position
-        // so ist, dass die kürzeste Route nach links ist
+        // Prüfe ob die geplante Richtung mit der gewünschten Richtung übereinstimmt
+        // Wenn nicht, passe die Position an, um die gewünschte Richtung zu erzwingen
         const currentRawAz = typeof status.azimuthRaw === 'number' 
           ? status.azimuthRaw 
-          : rawAz;
+          : ((status.azimuth * this.azimuthScaleFactor) - this.azimuthOffset);
         
-        // Berechne Delta in Raw-Koordinaten
-        let rawDelta = rawAz - currentRawAz;
+        let rawDelta = plan.commandValue - currentRawAz;
         
         // Normalisiere Delta auf -range/2 bis +range/2
         while (rawDelta > this.maxAzimuthRange / 2) {
@@ -1304,18 +1303,21 @@ class RotorService {
           rawDelta += this.maxAzimuthRange;
         }
         
-        // Wenn die berechnete Richtung nicht mit der gewünschten Richtung übereinstimmt,
+        // Wenn die geplante Richtung nicht mit der gewünschten Richtung übereinstimmt,
         // passe die Position an
         if ((stepDirection > 0 && rawDelta < 0) || (stepDirection < 0 && rawDelta > 0)) {
           // Richtung stimmt nicht überein, passe Position an
           if (stepDirection > 0) {
             // Nach rechts, aber Delta ist negativ -> addiere range
-            rawAz += this.maxAzimuthRange;
+            rawDelta += this.maxAzimuthRange;
           } else {
             // Nach links, aber Delta ist positiv -> subtrahiere range
-            rawAz -= this.maxAzimuthRange;
+            rawDelta -= this.maxAzimuthRange;
           }
         }
+        
+        // Berechne finale Raw-Position
+        let rawAz = currentRawAz + rawDelta;
         
         // Wende Wrap-around an
         const wrappedRawAz = wrapAzimuth(rawAz, this.maxAzimuthRange);
