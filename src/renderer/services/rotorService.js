@@ -1858,14 +1858,18 @@ class RotorService {
   }
 
   normalizeAzimuth(value) {
-    // Konvertiere Raw-Wert zu Anzeige-Wert: (raw + offset) * scaleFactor
-    const calibrated = (value + this.azimuthOffset) * this.azimuthScaleFactor;
+    // Konvertiere Raw-Wert zu Anzeige-Wert: (raw + offset) / scaleFactor
+    // Wenn Motor doppelt so weit dreht wie gemeldet (Faktor 0.5), dann:
+    // Raw 45° → Anzeige 45° / 0.5 = 90° (tatsächliche Position)
+    const calibrated = (value + this.azimuthOffset) / this.azimuthScaleFactor;
     return clamp(calibrated, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
   }
 
   normalizeElevation(value) {
-    // Konvertiere Raw-Wert zu Anzeige-Wert: (raw + offset) * scaleFactor
-    const calibrated = (value + this.elevationOffset) * this.elevationScaleFactor;
+    // Konvertiere Raw-Wert zu Anzeige-Wert: (raw + offset) / scaleFactor
+    // Wenn Motor doppelt so weit dreht wie gemeldet (Faktor 0.5), dann:
+    // Raw 45° → Anzeige 45° / 0.5 = 90° (tatsächliche Position)
+    const calibrated = (value + this.elevationOffset) / this.elevationScaleFactor;
     return clamp(calibrated, this.softLimits.elevationMin, this.softLimits.elevationMax);
   }
 
@@ -1887,15 +1891,17 @@ class RotorService {
     // Berechne den Raw-Wert basierend auf der aktuellen Raw-Position und dem Delta
     // Dies stellt sicher, dass der kürzeste Weg gewählt wird
     // WICHTIG: current ist bereits ein Anzeige-Wert (nach normalizeAzimuth)
-    // Um zu Raw zu konvertieren: raw = (displayed / scaleFactor) - offset
+    // Um zu Raw zu konvertieren: raw = (displayed * scaleFactor) - offset
+    // Wenn wir 90° wollen und Faktor 0.5: Raw = 90 * 0.5 = 45° (Motor meldet 45°, dreht aber 90°)
     const currentRaw = typeof this.currentStatus?.azimuthRaw === 'number' 
       ? this.currentStatus.azimuthRaw 
-      : ((current / this.azimuthScaleFactor) - this.azimuthOffset);
+      : ((current * this.azimuthScaleFactor) - this.azimuthOffset);
     
     // Berechne das Delta in Raw-Koordinaten
     // route.target ist der Anzeige-Zielwert, route.delta ist die kürzeste Änderung in Anzeige-Koordinaten
-    // Um zu Raw-Delta zu konvertieren: rawDelta = displayedDelta / scaleFactor
-    const rawDelta = route.delta / this.azimuthScaleFactor;
+    // Um zu Raw-Delta zu konvertieren: rawDelta = displayedDelta * scaleFactor
+    // Wenn wir 90° drehen wollen und Faktor 0.5: RawDelta = 90 * 0.5 = 45°
+    const rawDelta = route.delta * this.azimuthScaleFactor;
     
     // Berechne den Ziel-Raw-Wert durch Addition des Deltas zur aktuellen Raw-Position
     // Dies stellt sicher, dass wir den kürzesten Weg nehmen
@@ -1932,8 +1938,9 @@ class RotorService {
 
   planElevationTarget(target) {
     const calibrated = clamp(target, this.softLimits.elevationMin, this.softLimits.elevationMax);
-    // Konvertiere Anzeige-Wert zu Raw-Wert: raw = (displayed / scaleFactor) - offset
-    const rawCommand = clamp((calibrated / this.elevationScaleFactor) - this.elevationOffset, 0, Math.max(this.softLimits.elevationMax, 90));
+    // Konvertiere Anzeige-Wert zu Raw-Wert: raw = (displayed * scaleFactor) - offset
+    // Wenn wir 90° wollen und Faktor 0.5: Raw = 90 * 0.5 = 45° (Motor meldet 45°, dreht aber 90°)
+    const rawCommand = clamp((calibrated * this.elevationScaleFactor) - this.elevationOffset, 0, Math.max(this.softLimits.elevationMax, 90));
     return {
       calibrated,
       commandValue: rawCommand

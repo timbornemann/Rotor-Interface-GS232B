@@ -257,6 +257,17 @@ class SettingsModal {
     if (settingsRampMaxStepInput) settingsRampMaxStepInput.value = config.rampMaxStepDeg || 8;
     if (settingsRampToleranceInput) settingsRampToleranceInput.value = config.rampToleranceDeg || 1.5;
 
+    // Calibration tab
+    const settingsAzOffsetInput = document.getElementById('settingsAzOffsetInput');
+    const settingsElOffsetInput = document.getElementById('settingsElOffsetInput');
+    const settingsAzScaleFactorInput = document.getElementById('settingsAzScaleFactorInput');
+    const settingsElScaleFactorInput = document.getElementById('settingsElScaleFactorInput');
+
+    if (settingsAzOffsetInput) settingsAzOffsetInput.value = config.azimuthOffset || 0;
+    if (settingsElOffsetInput) settingsElOffsetInput.value = config.elevationOffset || 0;
+    if (settingsAzScaleFactorInput) settingsAzScaleFactorInput.value = config.azimuthScaleFactor ?? 1.0;
+    if (settingsElScaleFactorInput) settingsElScaleFactorInput.value = config.elevationScaleFactor ?? 1.0;
+
     // Mode tab
     const settingsModeSelect = document.getElementById('settingsModeSelect');
     const settingsElevationDisplayToggle = document.getElementById('settingsElevationDisplayToggle');
@@ -337,6 +348,17 @@ class SettingsModal {
     if (settingsRampSampleInput) config.rampSampleTimeMs = Number(settingsRampSampleInput.value) || 400;
     if (settingsRampMaxStepInput) config.rampMaxStepDeg = Number(settingsRampMaxStepInput.value) || 8;
     if (settingsRampToleranceInput) config.rampToleranceDeg = Number(settingsRampToleranceInput.value) || 1.5;
+
+    // Calibration tab
+    const settingsAzOffsetInput = document.getElementById('settingsAzOffsetInput');
+    const settingsElOffsetInput = document.getElementById('settingsElOffsetInput');
+    const settingsAzScaleFactorInput = document.getElementById('settingsAzScaleFactorInput');
+    const settingsElScaleFactorInput = document.getElementById('settingsElScaleFactorInput');
+
+    if (settingsAzOffsetInput) config.azimuthOffset = Number(settingsAzOffsetInput.value) || 0;
+    if (settingsElOffsetInput) config.elevationOffset = Number(settingsElOffsetInput.value) || 0;
+    if (settingsAzScaleFactorInput) config.azimuthScaleFactor = Number(settingsAzScaleFactorInput.value) || 1.0;
+    if (settingsElScaleFactorInput) config.elevationScaleFactor = Number(settingsElScaleFactorInput.value) || 1.0;
 
     // Mode tab
     const settingsModeSelect = document.getElementById('settingsModeSelect');
