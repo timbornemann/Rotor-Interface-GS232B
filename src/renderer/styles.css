@@ -1038,6 +1038,27 @@ main.dashboard {
   width: 100%;
 }
 
+.settings-group .speed-stages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.settings-group .speed-stages-grid h4 {
+  margin: 0 0 0.5rem 0;
+}
+
+.settings-group .speed-stages-grid label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.settings-group .speed-stages-grid select {
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
 .settings-group .ramp-header {
   display: flex;
   align-items: center;

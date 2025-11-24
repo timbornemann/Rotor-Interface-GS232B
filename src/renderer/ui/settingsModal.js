@@ -236,11 +236,23 @@ class SettingsModal {
     const settingsAzSpeedInput = document.getElementById('settingsAzSpeedInput');
     const settingsElSpeedRange = document.getElementById('settingsElSpeedRange');
     const settingsElSpeedInput = document.getElementById('settingsElSpeedInput');
+    const settingsAzLowSpeedSelect = document.getElementById('settingsAzLowSpeedSelect');
+    const settingsAzHighSpeedSelect = document.getElementById('settingsAzHighSpeedSelect');
+    const settingsElLowSpeedSelect = document.getElementById('settingsElLowSpeedSelect');
+    const settingsElHighSpeedSelect = document.getElementById('settingsElHighSpeedSelect');
+    const settingsAzSpeedAngleSelect = document.getElementById('settingsAzSpeedAngleSelect');
+    const settingsElSpeedAngleSelect = document.getElementById('settingsElSpeedAngleSelect');
 
     if (settingsAzSpeedRange) settingsAzSpeedRange.value = config.azimuthSpeedDegPerSec || 4;
     if (settingsAzSpeedInput) settingsAzSpeedInput.value = config.azimuthSpeedDegPerSec || 4;
     if (settingsElSpeedRange) settingsElSpeedRange.value = config.elevationSpeedDegPerSec || 2;
     if (settingsElSpeedInput) settingsElSpeedInput.value = config.elevationSpeedDegPerSec || 2;
+    if (settingsAzLowSpeedSelect) settingsAzLowSpeedSelect.value = config.azimuthLowSpeedStage || 3;
+    if (settingsAzHighSpeedSelect) settingsAzHighSpeedSelect.value = config.azimuthHighSpeedStage || 4;
+    if (settingsElLowSpeedSelect) settingsElLowSpeedSelect.value = config.elevationLowSpeedStage || 3;
+    if (settingsElHighSpeedSelect) settingsElHighSpeedSelect.value = config.elevationHighSpeedStage || 4;
+    if (settingsAzSpeedAngleSelect) settingsAzSpeedAngleSelect.value = config.azimuthSpeedAngleCode ?? 3;
+    if (settingsElSpeedAngleSelect) settingsElSpeedAngleSelect.value = config.elevationSpeedAngleCode ?? 3;
 
     // Ramp tab
     const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');
@@ -330,9 +342,21 @@ class SettingsModal {
     // Speed tab
     const settingsAzSpeedInput = document.getElementById('settingsAzSpeedInput');
     const settingsElSpeedInput = document.getElementById('settingsElSpeedInput');
+    const settingsAzLowSpeedSelect = document.getElementById('settingsAzLowSpeedSelect');
+    const settingsAzHighSpeedSelect = document.getElementById('settingsAzHighSpeedSelect');
+    const settingsElLowSpeedSelect = document.getElementById('settingsElLowSpeedSelect');
+    const settingsElHighSpeedSelect = document.getElementById('settingsElHighSpeedSelect');
+    const settingsAzSpeedAngleSelect = document.getElementById('settingsAzSpeedAngleSelect');
+    const settingsElSpeedAngleSelect = document.getElementById('settingsElSpeedAngleSelect');
 
     if (settingsAzSpeedInput) config.azimuthSpeedDegPerSec = Number(settingsAzSpeedInput.value) || 4;
     if (settingsElSpeedInput) config.elevationSpeedDegPerSec = Number(settingsElSpeedInput.value) || 2;
+    if (settingsAzLowSpeedSelect) config.azimuthLowSpeedStage = Number(settingsAzLowSpeedSelect.value) || 3;
+    if (settingsAzHighSpeedSelect) config.azimuthHighSpeedStage = Number(settingsAzHighSpeedSelect.value) || 4;
+    if (settingsElLowSpeedSelect) config.elevationLowSpeedStage = Number(settingsElLowSpeedSelect.value) || 3;
+    if (settingsElHighSpeedSelect) config.elevationHighSpeedStage = Number(settingsElHighSpeedSelect.value) || 4;
+    if (settingsAzSpeedAngleSelect) config.azimuthSpeedAngleCode = Number(settingsAzSpeedAngleSelect.value);
+    if (settingsElSpeedAngleSelect) config.elevationSpeedAngleCode = Number(settingsElSpeedAngleSelect.value);
 
     // Ramp tab
     const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');

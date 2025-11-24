@@ -18,6 +18,12 @@ const defaultConfig = {
   elevationOffset: 0,
   azimuthSpeedDegPerSec: 4,
   elevationSpeedDegPerSec: 2,
+  azimuthLowSpeedStage: 3,
+  azimuthHighSpeedStage: 4,
+  elevationLowSpeedStage: 3,
+  elevationHighSpeedStage: 4,
+  azimuthSpeedAngleCode: 3,
+  elevationSpeedAngleCode: 3,
   rampEnabled: false,
   rampKp: 0.4,
   rampKi: 0.05,
@@ -204,6 +210,42 @@ class ConfigStore {
       sanitized.speedMinDegPerSec,
       sanitized.speedMaxDegPerSec,
       defaultConfig.elevationSpeedDegPerSec
+    );
+    sanitized.azimuthLowSpeedStage = this.sanitizeNumber(
+      config.azimuthLowSpeedStage,
+      1,
+      4,
+      defaultConfig.azimuthLowSpeedStage
+    );
+    sanitized.azimuthHighSpeedStage = this.sanitizeNumber(
+      config.azimuthHighSpeedStage,
+      1,
+      4,
+      defaultConfig.azimuthHighSpeedStage
+    );
+    sanitized.elevationLowSpeedStage = this.sanitizeNumber(
+      config.elevationLowSpeedStage,
+      1,
+      4,
+      defaultConfig.elevationLowSpeedStage
+    );
+    sanitized.elevationHighSpeedStage = this.sanitizeNumber(
+      config.elevationHighSpeedStage,
+      1,
+      4,
+      defaultConfig.elevationHighSpeedStage
+    );
+    sanitized.azimuthSpeedAngleCode = this.sanitizeNumber(
+      config.azimuthSpeedAngleCode,
+      0,
+      3,
+      defaultConfig.azimuthSpeedAngleCode
+    );
+    sanitized.elevationSpeedAngleCode = this.sanitizeNumber(
+      config.elevationSpeedAngleCode,
+      0,
+      3,
+      defaultConfig.elevationSpeedAngleCode
     );
     sanitized.rampKp = this.sanitizeNumber(
       config.rampKp,
