@@ -854,7 +854,13 @@ class RotorService {
     };
     this.speedSettings = {
       azimuthSpeedDegPerSec: 4,
-      elevationSpeedDegPerSec: 2
+      elevationSpeedDegPerSec: 2,
+      azimuthLowSpeedStage: 3,
+      azimuthHighSpeedStage: 4,
+      elevationLowSpeedStage: 3,
+      elevationHighSpeedStage: 4,
+      azimuthSpeedAngleCode: 3,
+      elevationSpeedAngleCode: 3
     };
     this.rampSettings = {
       rampEnabled: false,
@@ -1587,11 +1593,47 @@ class RotorService {
       return;
     }
     const nextSettings = { ...this.speedSettings };
+    const clampStage = (value) => {
+      if (typeof value !== 'number' || Number.isNaN(value)) {
+        return null;
+      }
+      return clamp(Math.round(value), 1, 4);
+    };
+    const clampAngle = (value) => {
+      if (typeof value !== 'number' || Number.isNaN(value)) {
+        return null;
+      }
+      return clamp(Math.round(value), 0, 3);
+    };
     if (typeof settings.azimuthSpeedDegPerSec === 'number' && !Number.isNaN(settings.azimuthSpeedDegPerSec)) {
       nextSettings.azimuthSpeedDegPerSec = clamp(settings.azimuthSpeedDegPerSec, 0.5, 20);
     }
     if (typeof settings.elevationSpeedDegPerSec === 'number' && !Number.isNaN(settings.elevationSpeedDegPerSec)) {
       nextSettings.elevationSpeedDegPerSec = clamp(settings.elevationSpeedDegPerSec, 0.5, 20);
+    }
+    const azLowStage = clampStage(settings.azimuthLowSpeedStage);
+    if (azLowStage !== null) {
+      nextSettings.azimuthLowSpeedStage = azLowStage;
+    }
+    const azHighStage = clampStage(settings.azimuthHighSpeedStage);
+    if (azHighStage !== null) {
+      nextSettings.azimuthHighSpeedStage = azHighStage;
+    }
+    const elLowStage = clampStage(settings.elevationLowSpeedStage);
+    if (elLowStage !== null) {
+      nextSettings.elevationLowSpeedStage = elLowStage;
+    }
+    const elHighStage = clampStage(settings.elevationHighSpeedStage);
+    if (elHighStage !== null) {
+      nextSettings.elevationHighSpeedStage = elHighStage;
+    }
+    const azSpeedAngle = clampAngle(settings.azimuthSpeedAngleCode);
+    if (azSpeedAngle !== null) {
+      nextSettings.azimuthSpeedAngleCode = azSpeedAngle;
+    }
+    const elSpeedAngle = clampAngle(settings.elevationSpeedAngleCode);
+    if (elSpeedAngle !== null) {
+      nextSettings.elevationSpeedAngleCode = elSpeedAngle;
     }
     this.speedSettings = nextSettings;
     await this.applySpeedSettings();
@@ -1769,53 +1811,75 @@ class RotorService {
       const stage = Math.round(1 + ((clamped - 0.5) / 19.5) * 3);
       return Math.max(1, Math.min(4, stage));
     };
+
+    const resolveSpeedStage = (stageValue, fallbackSpeed) => {
+      if (typeof stageValue === 'number' && !Number.isNaN(stageValue)) {
+        return clamp(Math.round(stageValue), 1, 4);
+      }
+      if (typeof fallbackSpeed === 'number' && !Number.isNaN(fallbackSpeed)) {
+        return convertSpeedToERCStage(fallbackSpeed);
+      }
+      return null;
+    };
+
+    const resolveSpeedAngleCode = (angleValue) => {
+      if (typeof angleValue === 'number' && !Number.isNaN(angleValue)) {
+        return clamp(Math.round(angleValue), 0, 3);
+      }
+      return 3; // Default 30°
+    };
     
     const commands = [];
     
-    if (typeof this.speedSettings.azimuthSpeedDegPerSec === 'number') {
-      const speedStage = convertSpeedToERCStage(this.speedSettings.azimuthSpeedDegPerSec);
-      const value = speedStage.toString().padStart(4, '0');
-      
-      console.log('[RotorService] Geschwindigkeit Azimuth konvertieren', {
-        original: this.speedSettings.azimuthSpeedDegPerSec,
-        stage: speedStage,
-        command: `sSL1${value} / sSH1${value}`
-      });
-      
-      // Setze Low-Speed und High-Speed auf den gleichen Wert
-      // ERC-DUO schaltet automatisch zwischen Low und High um basierend auf Speed-Angle
-      commands.push(`sSL1${value}`); // Low-Speed Azimuth (1-4)
-      commands.push(`sSH1${value}`); // High-Speed Azimuth (1-4)
-      
-      // Speed-Angle: 0=0°, 1=10°, 2=20°, 3=30° (Default: 3 = 30°)
-      // ERC-DUO startet bei Low-Speed, wechselt nach Speed-Angle zu High-Speed,
-      // und 30° vor dem Ziel zurück zu Low-Speed
-      const rampSettings = this.getRampSettings();
-      if (rampSettings.rampEnabled) {
-        // Wenn Softstart/Softstop aktiviert, verwende Speed-Angle 3 (30°)
-        commands.push(`sSA10003`); // Speed-Angle 30° für Azimuth
-      }
+    const azimuthLowStage = resolveSpeedStage(
+      this.speedSettings.azimuthLowSpeedStage,
+      this.speedSettings.azimuthSpeedDegPerSec
+    );
+    const azimuthHighStage = resolveSpeedStage(
+      this.speedSettings.azimuthHighSpeedStage,
+      this.speedSettings.azimuthSpeedDegPerSec
+    );
+    const azimuthSpeedAngleCode = resolveSpeedAngleCode(this.speedSettings.azimuthSpeedAngleCode);
+
+    console.log('[RotorService] ERC-DUO Azimut-Geschwindigkeit', {
+      lowStage: azimuthLowStage,
+      highStage: azimuthHighStage,
+      speedAngleCode: azimuthSpeedAngleCode,
+      fallbackSpeedDegPerSec: this.speedSettings.azimuthSpeedDegPerSec
+    });
+
+    if (azimuthLowStage !== null) {
+      commands.push(`sSL1${azimuthLowStage.toString().padStart(4, '0')}`);
     }
-    
-    if (typeof this.speedSettings.elevationSpeedDegPerSec === 'number') {
-      const speedStage = convertSpeedToERCStage(this.speedSettings.elevationSpeedDegPerSec);
-      const value = speedStage.toString().padStart(4, '0');
-      
-      console.log('[RotorService] Geschwindigkeit Elevation konvertieren', {
-        original: this.speedSettings.elevationSpeedDegPerSec,
-        stage: speedStage,
-        command: `sSL2${value} / sSH2${value}`
-      });
-      
-      commands.push(`sSL2${value}`); // Low-Speed Elevation (1-4)
-      commands.push(`sSH2${value}`); // High-Speed Elevation (1-4)
-      
-      // Speed-Angle für Elevation
-      const rampSettings = this.getRampSettings();
-      if (rampSettings.rampEnabled) {
-        commands.push(`sSA20003`); // Speed-Angle 30° für Elevation
-      }
+    if (azimuthHighStage !== null) {
+      commands.push(`sSH1${azimuthHighStage.toString().padStart(4, '0')}`);
     }
+    commands.push(`sSA1${azimuthSpeedAngleCode.toString().padStart(4, '0')}`);
+
+    const elevationLowStage = resolveSpeedStage(
+      this.speedSettings.elevationLowSpeedStage,
+      this.speedSettings.elevationSpeedDegPerSec
+    );
+    const elevationHighStage = resolveSpeedStage(
+      this.speedSettings.elevationHighSpeedStage,
+      this.speedSettings.elevationSpeedDegPerSec
+    );
+    const elevationSpeedAngleCode = resolveSpeedAngleCode(this.speedSettings.elevationSpeedAngleCode);
+
+    console.log('[RotorService] ERC-DUO Elevations-Geschwindigkeit', {
+      lowStage: elevationLowStage,
+      highStage: elevationHighStage,
+      speedAngleCode: elevationSpeedAngleCode,
+      fallbackSpeedDegPerSec: this.speedSettings.elevationSpeedDegPerSec
+    });
+
+    if (elevationLowStage !== null) {
+      commands.push(`sSL2${elevationLowStage.toString().padStart(4, '0')}`);
+    }
+    if (elevationHighStage !== null) {
+      commands.push(`sSH2${elevationHighStage.toString().padStart(4, '0')}`);
+    }
+    commands.push(`sSA2${elevationSpeedAngleCode.toString().padStart(4, '0')}`);
     
     // ERC-DUO Softstart/Softstop: Delay before move (sDM1, sDM2)
     // Range: 0-5000 ms, Default: 1000 ms

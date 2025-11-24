@@ -115,9 +115,17 @@ function getSpeedLimitText() {
 function sanitizeSpeedSettings(speedSettings = {}) {
   const { min, max } = getSpeedLimits();
   const clampToRange = (value) => Math.min(max, Math.max(min, value));
+  const clampStageValue = (value) => Math.min(4, Math.max(1, Math.round(value)));
+  const clampAngleCode = (value) => Math.min(3, Math.max(0, Math.round(value)));
   const sanitized = {
     azimuthSpeedDegPerSec: clampToRange(Number(config.azimuthSpeedDegPerSec) || min),
-    elevationSpeedDegPerSec: clampToRange(Number(config.elevationSpeedDegPerSec) || min)
+    elevationSpeedDegPerSec: clampToRange(Number(config.elevationSpeedDegPerSec) || min),
+    azimuthLowSpeedStage: clampStageValue(Number(config.azimuthLowSpeedStage ?? 3)),
+    azimuthHighSpeedStage: clampStageValue(Number(config.azimuthHighSpeedStage ?? 4)),
+    elevationLowSpeedStage: clampStageValue(Number(config.elevationLowSpeedStage ?? 3)),
+    elevationHighSpeedStage: clampStageValue(Number(config.elevationHighSpeedStage ?? 4)),
+    azimuthSpeedAngleCode: clampAngleCode(Number(config.azimuthSpeedAngleCode ?? 3)),
+    elevationSpeedAngleCode: clampAngleCode(Number(config.elevationSpeedAngleCode ?? 3))
   };
   const corrections = [];
 
@@ -140,6 +148,45 @@ function sanitizeSpeedSettings(speedSettings = {}) {
 
   apply(speedSettings.azimuthSpeedDegPerSec, 'azimuthSpeedDegPerSec', 'Azimut-Geschwindigkeit');
   apply(speedSettings.elevationSpeedDegPerSec, 'elevationSpeedDegPerSec', 'Elevation-Geschwindigkeit');
+
+  const applyStage = (value, key, label) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      corrections.push(`${label} auf Stufe ${sanitized[key]} gesetzt (ungueltiger Wert)`);
+      return;
+    }
+    const clamped = clampStageValue(numeric);
+    if (clamped !== Math.round(numeric)) {
+      corrections.push(`${label} auf Stufe ${clamped} begrenzt`);
+    }
+    sanitized[key] = clamped;
+  };
+
+  const applyAngle = (value, key, label) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      corrections.push(`${label} auf Code ${sanitized[key]} gesetzt (ungueltiger Wert)`);
+      return;
+    }
+    const clamped = clampAngleCode(numeric);
+    if (clamped !== Math.round(numeric)) {
+      corrections.push(`${label} auf Code ${clamped} begrenzt`);
+    }
+    sanitized[key] = clamped;
+  };
+
+  applyStage(speedSettings.azimuthLowSpeedStage, 'azimuthLowSpeedStage', 'Azimut Low-Speed');
+  applyStage(speedSettings.azimuthHighSpeedStage, 'azimuthHighSpeedStage', 'Azimut High-Speed');
+  applyStage(speedSettings.elevationLowSpeedStage, 'elevationLowSpeedStage', 'Elevation Low-Speed');
+  applyStage(speedSettings.elevationHighSpeedStage, 'elevationHighSpeedStage', 'Elevation High-Speed');
+  applyAngle(speedSettings.azimuthSpeedAngleCode, 'azimuthSpeedAngleCode', 'Azimut Speed-Angle');
+  applyAngle(speedSettings.elevationSpeedAngleCode, 'elevationSpeedAngleCode', 'Elevation Speed-Angle');
 
   return { sanitized, corrections };
 }
@@ -176,11 +223,23 @@ function updateSpeedInputsFromConfig() {
   const settingsAzSpeedInput = document.getElementById('settingsAzSpeedInput');
   const settingsElSpeedRange = document.getElementById('settingsElSpeedRange');
   const settingsElSpeedInput = document.getElementById('settingsElSpeedInput');
+  const settingsAzLowSpeedSelect = document.getElementById('settingsAzLowSpeedSelect');
+  const settingsAzHighSpeedSelect = document.getElementById('settingsAzHighSpeedSelect');
+  const settingsElLowSpeedSelect = document.getElementById('settingsElLowSpeedSelect');
+  const settingsElHighSpeedSelect = document.getElementById('settingsElHighSpeedSelect');
+  const settingsAzSpeedAngleSelect = document.getElementById('settingsAzSpeedAngleSelect');
+  const settingsElSpeedAngleSelect = document.getElementById('settingsElSpeedAngleSelect');
 
   if (settingsAzSpeedRange) settingsAzSpeedRange.value = sanitized.azimuthSpeedDegPerSec;
   if (settingsAzSpeedInput) settingsAzSpeedInput.value = sanitized.azimuthSpeedDegPerSec;
   if (settingsElSpeedRange) settingsElSpeedRange.value = sanitized.elevationSpeedDegPerSec;
   if (settingsElSpeedInput) settingsElSpeedInput.value = sanitized.elevationSpeedDegPerSec;
+  if (settingsAzLowSpeedSelect) settingsAzLowSpeedSelect.value = sanitized.azimuthLowSpeedStage;
+  if (settingsAzHighSpeedSelect) settingsAzHighSpeedSelect.value = sanitized.azimuthHighSpeedStage;
+  if (settingsElLowSpeedSelect) settingsElLowSpeedSelect.value = sanitized.elevationLowSpeedStage;
+  if (settingsElHighSpeedSelect) settingsElHighSpeedSelect.value = sanitized.elevationHighSpeedStage;
+  if (settingsAzSpeedAngleSelect) settingsAzSpeedAngleSelect.value = sanitized.azimuthSpeedAngleCode;
+  if (settingsElSpeedAngleSelect) settingsElSpeedAngleSelect.value = sanitized.elevationSpeedAngleCode;
 }
 
 function updateRampInputsFromConfig() {
