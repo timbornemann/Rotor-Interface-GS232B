@@ -880,6 +880,15 @@ class RotorService {
     this.statusListeners = new Set();
     this.errorListeners = new Set();
     this.portRegistry = new Map();
+    this.activeMove = null;
+    this.statusNoiseThresholdDeg = 2;
+    this.stallDetection = {
+      minimumDurationMs: 1500,
+      stallTimeoutMs: 4000,
+      maxRetries: 2,
+      fallbackStepDeg: 5,
+      movementThresholdDeg: 0.5
+    };
   }
 
   supportsWebSerial() {
@@ -1054,6 +1063,7 @@ class RotorService {
     this.stopPolling();
     this.cancelActiveRamp();
     this.cancelActiveManualRamp();
+    this.activeMove = null;
     if (this.serial) {
       try {
         await this.serial.close();
@@ -1512,6 +1522,16 @@ class RotorService {
     // Zu kleine Schritte werden möglicherweise ignoriert
     const minStepDeg = 0.5;
     let shouldSend = false;
+    const startMovementMonitor = (currentAz, currentEl) => {
+      this.startMovementMonitor({
+        targetAz: azimuth,
+        targetEl: elevation,
+        azPlan,
+        elPlan,
+        currentAz,
+        currentEl
+      });
+    };
 
     if (azPlan && elPlan) {
       const currentAz = typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : azimuth;
@@ -1523,11 +1543,12 @@ class RotorService {
         shouldSend = true;
         const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
         const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
-        console.log('[RotorService] PI-Rampe Schritt (Az+El)', { 
+        console.log('[RotorService] PI-Rampe Schritt (Az+El)', {
           azimuth, elevation, azPlan, elPlan, azValue, elValue,
           azDelta: azDelta.toFixed(2), elDelta: elDelta.toFixed(2)
         });
         await this.sendRawCommand(`W${azValue} ${elValue}`);
+        startMovementMonitor(currentAz, currentEl);
       }
       return;
     }
@@ -1539,10 +1560,11 @@ class RotorService {
       if (azDelta >= minStepDeg) {
         shouldSend = true;
         const azValue = Math.round(azPlan.commandValue).toString().padStart(3, '0');
-        console.log('[RotorService] PI-Rampe Schritt (Az)', { 
+        console.log('[RotorService] PI-Rampe Schritt (Az)', {
           azimuth, azPlan, azValue, azDelta: azDelta.toFixed(2)
         });
         await this.sendRawCommand(`M${azValue}`);
+        startMovementMonitor(currentAz, this.currentStatus?.elevation ?? elevation);
       }
       return;
     }
@@ -1557,13 +1579,14 @@ class RotorService {
           ? Math.round(this.currentStatus.azimuthRaw).toString().padStart(3, '0')
           : '000';
         const elValue = Math.round(elPlan.commandValue).toString().padStart(3, '0');
-        console.log('[RotorService] PI-Rampe Schritt (El)', { 
+        console.log('[RotorService] PI-Rampe Schritt (El)', {
           elevation, elPlan, elValue, currentAzRaw, elDelta: elDelta.toFixed(2)
         });
         await this.sendRawCommand(`W${currentAzRaw} ${elValue}`);
+        startMovementMonitor(this.currentStatus?.azimuth ?? null, currentEl);
       }
     }
-    
+
     if (!shouldSend) {
       console.log('[RotorService] Schritt zu klein, überspringe Befehl', { azimuth, elevation });
     }
@@ -1754,8 +1777,158 @@ class RotorService {
       status.elevation = this.normalizeElevation(status.elevationRaw);
     }
     console.log('[RotorService] Verarbeiteter Status', status);
-    this.currentStatus = status;
-    this.statusListeners.forEach((listener) => listener(status));
+    const filteredStatus = this.applyStatusJitterFilter(status);
+    this.currentStatus = filteredStatus;
+    this.updateMovementTracking(filteredStatus);
+    this.statusListeners.forEach((listener) => listener(filteredStatus));
+    this.handleStallDetection(filteredStatus).catch((error) => this.emitError(error));
+  }
+
+  applyStatusJitterFilter(status) {
+    if (!this.currentStatus) {
+      return status;
+    }
+
+    const filtered = { ...status };
+    const last = this.currentStatus;
+
+    const normalize = (value) => (typeof value === 'number' && !Number.isNaN(value) ? value : null);
+    const lastAz = normalize(last.azimuth);
+    const nextAz = normalize(status.azimuth);
+    if (lastAz != null && nextAz != null) {
+      const azDelta = Math.abs(shortestAngularDelta(nextAz, lastAz, this.maxAzimuthRange));
+      if (azDelta < this.statusNoiseThresholdDeg) {
+        filtered.azimuth = lastAz;
+        if (typeof last.azimuthRaw === 'number') {
+          filtered.azimuthRaw = last.azimuthRaw;
+        }
+      }
+    }
+
+    const lastEl = normalize(last.elevation);
+    const nextEl = normalize(status.elevation);
+    if (lastEl != null && nextEl != null) {
+      const elDelta = Math.abs(nextEl - lastEl);
+      if (elDelta < this.statusNoiseThresholdDeg) {
+        filtered.elevation = lastEl;
+        if (typeof last.elevationRaw === 'number') {
+          filtered.elevationRaw = last.elevationRaw;
+        }
+      }
+    }
+
+    return filtered;
+  }
+
+  updateMovementTracking(status) {
+    if (!this.activeMove) {
+      return;
+    }
+
+    const azimuth = typeof status.azimuth === 'number' ? status.azimuth : null;
+    const elevation = typeof status.elevation === 'number' ? status.elevation : null;
+
+    const azMoved =
+      azimuth != null && this.activeMove.lastAz != null
+        ? Math.abs(shortestAngularDelta(azimuth, this.activeMove.lastAz, this.maxAzimuthRange))
+        : 0;
+    const elMoved =
+      elevation != null && this.activeMove.lastEl != null
+        ? Math.abs(elevation - this.activeMove.lastEl)
+        : 0;
+
+    if (azMoved > this.stallDetection.movementThresholdDeg || elMoved > this.stallDetection.movementThresholdDeg) {
+      this.activeMove.lastMovementAt = status.timestamp || Date.now();
+      this.activeMove.lastAz = azimuth ?? this.activeMove.lastAz;
+      this.activeMove.lastEl = elevation ?? this.activeMove.lastEl;
+    }
+
+    const azTargetReached =
+      this.activeMove.targetAz == null ||
+      (azimuth != null && Math.abs(shortestAngularDelta(this.activeMove.targetAz, azimuth, this.maxAzimuthRange)) < 0.5);
+    const elTargetReached =
+      this.activeMove.targetEl == null ||
+      (elevation != null && Math.abs(this.activeMove.targetEl - elevation) < 0.5);
+
+    if (azTargetReached && elTargetReached) {
+      this.activeMove = null;
+    }
+  }
+
+  async handleStallDetection(status) {
+    if (!this.activeMove) {
+      return;
+    }
+
+    const now = Date.now();
+    const timeSinceStart = now - this.activeMove.startedAt;
+    const timeSinceMovement = now - this.activeMove.lastMovementAt;
+
+    if (timeSinceStart < this.stallDetection.minimumDurationMs) {
+      return;
+    }
+
+    if (timeSinceMovement < this.stallDetection.stallTimeoutMs) {
+      return;
+    }
+
+    if (this.activeMove.retries >= this.stallDetection.maxRetries) {
+      this.activeMove = null;
+      return;
+    }
+
+    let fallbackAz = null;
+    if (this.activeMove.azDirection && typeof status.azimuth === 'number') {
+      const step = this.stallDetection.fallbackStepDeg;
+      const directionStep = this.activeMove.azDirection === 'CW' ? -step : this.activeMove.azDirection === 'CCW' ? step : 0;
+      fallbackAz = wrapAzimuth(status.azimuth + directionStep, this.maxAzimuthRange);
+      fallbackAz = clamp(fallbackAz, this.softLimits.azimuthMin, this.softLimits.azimuthMax);
+    }
+
+    let fallbackEl = null;
+    if (this.activeMove.elDirection && typeof status.elevation === 'number') {
+      const step = this.stallDetection.fallbackStepDeg;
+      fallbackEl = status.elevation + (this.activeMove.elDirection === 'UP' ? -step : step);
+      fallbackEl = clamp(fallbackEl, this.softLimits.elevationMin, this.softLimits.elevationMax);
+    }
+
+    this.activeMove.retries += 1;
+    this.startMovementMonitor({
+      targetAz: fallbackAz,
+      targetEl: fallbackEl,
+      azPlan: fallbackAz != null ? this.planAzimuthTarget(fallbackAz) : null,
+      elPlan: fallbackEl != null ? this.planElevationTarget(fallbackEl) : null,
+      currentAz: status.azimuth,
+      currentEl: status.elevation
+    });
+
+    if (fallbackAz != null || fallbackEl != null) {
+      await this.sendPlannedTarget(fallbackAz ?? status.azimuth, fallbackEl ?? status.elevation);
+    }
+  }
+
+  startMovementMonitor({ targetAz, targetEl, azPlan, elPlan, currentAz, currentEl }) {
+    const azDirection = azPlan?.direction ?? null;
+    const elDirection =
+      elPlan && typeof targetEl === 'number' && typeof currentEl === 'number'
+        ? targetEl > currentEl
+          ? 'UP'
+          : targetEl < currentEl
+            ? 'DOWN'
+            : null
+        : null;
+
+    this.activeMove = {
+      targetAz: typeof targetAz === 'number' && !Number.isNaN(targetAz) ? targetAz : null,
+      targetEl: typeof targetEl === 'number' && !Number.isNaN(targetEl) ? targetEl : null,
+      azDirection,
+      elDirection,
+      startedAt: Date.now(),
+      lastMovementAt: Date.now(),
+      lastAz: typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : currentAz ?? null,
+      lastEl: typeof this.currentStatus?.elevation === 'number' ? this.currentStatus.elevation : currentEl ?? null,
+      retries: 0
+    };
   }
 
   emitError(error) {
@@ -1954,9 +2127,20 @@ class RotorService {
 
   planAzimuthTarget(target) {
     const range = this.maxAzimuthRange;
+    let normalizedTarget = target;
+
+    if (range === 450) {
+      normalizedTarget = wrapAzimuth(normalizedTarget, range);
+      if (normalizedTarget < this.softLimits.azimuthMin) {
+        normalizedTarget += range;
+      } else if (normalizedTarget > Math.max(this.softLimits.azimuthMax, 450)) {
+        normalizedTarget -= range;
+      }
+    }
+
     // Bei 450°-Modus: Erlaube Werte über 360°, wenn sie innerhalb des Bereichs liegen
     const effectiveMax = range === 450 ? Math.max(this.softLimits.azimuthMax, 450) : this.softLimits.azimuthMax;
-    const clampedTarget = clamp(target, this.softLimits.azimuthMin, effectiveMax);
+    const clampedTarget = clamp(normalizedTarget, this.softLimits.azimuthMin, effectiveMax);
     const current = typeof this.currentStatus?.azimuth === 'number' ? this.currentStatus.azimuth : clampedTarget;
 
     const route = computeAzimuthRoute({
