@@ -515,6 +515,7 @@ class ServerConnection extends SerialConnection {
     this.apiBase = apiBase || (window.location.origin);
     this.isConnected = false;
     this.statusPollTimer = null;
+    this.clientCount = 0; // Anzahl der verbundenen Clients
   }
 
   async open(options) {
@@ -656,6 +657,12 @@ class ServerConnection extends SerialConnection {
         }
 
         const data = await response.json();
+        
+        // Speichere Client-Anzahl
+        if (typeof data.clientCount === 'number') {
+          this.clientCount = data.clientCount;
+        }
+        
         if (data.connected && data.status) {
           const status = data.status;
           // Konvertiere neue API-Struktur in das erwartete Format
@@ -1784,6 +1791,14 @@ class RotorService {
 
   getCurrentStatus() {
     return this.currentStatus;
+  }
+
+  getClientCount() {
+    // Gibt die Anzahl der verbundenen Clients zurück (nur im Server-Modus)
+    if (this.serial instanceof ServerConnection) {
+      return this.serial.clientCount || 0;
+    }
+    return null; // Nicht im Server-Modus
   }
 
   handleSerialLine(line) {

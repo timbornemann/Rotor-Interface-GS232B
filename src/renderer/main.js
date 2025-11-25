@@ -1027,6 +1027,33 @@ async function handleRampSettingsChange() {
 let lastStatusReceivedTime = null;
 let statusCheckInterval = null;
 
+function updateConnectionStatusText() {
+  if (!connected) {
+    connectionStatus.textContent = 'Getrennt';
+    return;
+  }
+  
+  const isSimulation = (simulationToggle ? simulationToggle.checked : config.simulation) || portSelect.value === SIMULATED_PORT_ID;
+  const portInfo = portSelect.selectedOptions[0]?.textContent || '';
+  const isServerMode = rotor.connectionMode === 'server';
+  
+  let statusText = '';
+  if (isSimulation) {
+    statusText = 'Verbunden (Simulation)';
+  } else if (isServerMode) {
+    const clientCount = rotor.getClientCount();
+    if (clientCount !== null && clientCount > 0) {
+      statusText = `Verbunden (${portInfo}) - ${clientCount} Gerät${clientCount !== 1 ? 'e' : ''}`;
+    } else {
+      statusText = `Verbunden (${portInfo})`;
+    }
+  } else {
+    statusText = `Verbunden (${portInfo})`;
+  }
+  
+  connectionStatus.textContent = statusText;
+}
+
 function setConnectionState(state) {
   connected = state;
   logAction('Verbindungsstatus gesetzt', { connected: state });
@@ -1038,10 +1065,8 @@ function setConnectionState(state) {
   disconnectBtn.disabled = !state;
   
   if (state) {
-    // Prüfe, ob es eine echte Verbindung oder Simulation ist
-    const isSimulation = (simulationToggle ? simulationToggle.checked : config.simulation) || portSelect.value === SIMULATED_PORT_ID;
-    const portInfo = portSelect.selectedOptions[0]?.textContent || '';
-    connectionStatus.textContent = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
+    // Aktualisiere Status-Text
+    updateConnectionStatusText();
     
     // Starte Überwachung, ob Status-Updates empfangen werden
     lastStatusReceivedTime = Date.now();
@@ -1060,7 +1085,8 @@ function setConnectionState(state) {
           connectionStatus.classList.remove('connected');
           connectionStatus.classList.add('disconnected');
         } else {
-          connectionStatus.textContent = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
+          // Aktualisiere Status-Text (inkl. Client-Anzahl)
+          updateConnectionStatusText();
           connectionStatus.classList.add('connected');
           connectionStatus.classList.remove('disconnected');
         }
@@ -1112,9 +1138,7 @@ function handleStatus(status) {
   
   // Aktualisiere Verbindungsstatus-Anzeige, wenn Daten empfangen werden
   if (connected) {
-    const isSimulation = (simulationToggle ? simulationToggle.checked : config.simulation) || portSelect.value === SIMULATED_PORT_ID;
-    const portInfo = portSelect.selectedOptions[0]?.textContent || '';
-    connectionStatus.textContent = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
+    updateConnectionStatusText();
     connectionStatus.classList.add('connected');
     connectionStatus.classList.remove('disconnected');
   }
