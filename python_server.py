@@ -48,6 +48,7 @@ COMMAND_LOCK = threading.Lock()
 ROTOR_CONNECTION: Optional[Any] = None
 ROTOR_LOCK = threading.Lock()
 ROTOR_STATUS: Optional[Dict[str, Any]] = None
+ROTOR_CLIENT_COUNT: int = 0  # Anzahl der verbundenen Clients
 
 # Calibration cache (offsets + scale factors)
 CALIBRATION_DEFAULTS = {
@@ -429,6 +430,7 @@ elevationScaleFactor=1.0
             return
         
         if parsed.path == "/api/rotor/status":
+            global ROTOR_CLIENT_COUNT
             with ROTOR_LOCK:
                 if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
                     status = build_status_payload(ROTOR_CONNECTION.get_status())
@@ -436,10 +438,11 @@ elevationScaleFactor=1.0
                         "connected": True,
                         "port": ROTOR_CONNECTION.port,
                         "baudRate": ROTOR_CONNECTION.baud_rate,
-                        "status": status
+                        "status": status,
+                        "clientCount": ROTOR_CLIENT_COUNT
                     })
                 else:
-                    self._send_json({"connected": False})
+                    self._send_json({"connected": False, "clientCount": 0})
             return
         
         if parsed.path == "/api/rotor/position":
@@ -519,6 +522,7 @@ elevationScaleFactor=1.0
         
         # New rotor API endpoints
         if parsed.path == "/api/rotor/connect":
+            global ROTOR_CLIENT_COUNT
             payload = self._read_json_body()
             port = payload.get("port")
             baud_rate = payload.get("baudRate", 9600)
@@ -529,21 +533,62 @@ elevationScaleFactor=1.0
             
             try:
                 with ROTOR_LOCK:
+                    port_str = port.strip()
+                    baud_rate_int = int(baud_rate)
+                    
+                    # Wenn bereits eine Verbindung existiert
+                    if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
+                        # Prüfe, ob es derselbe Port ist
+                        if ROTOR_CONNECTION.port == port_str and ROTOR_CONNECTION.baud_rate == baud_rate_int:
+                            # Gleicher Port - erhöhe nur die Referenzzählung
+                            ROTOR_CLIENT_COUNT += 1
+                            self._send_json({
+                                "status": "ok", 
+                                "port": port_str, 
+                                "baudRate": baud_rate_int,
+                                "message": "Reusing existing connection"
+                            })
+                            return
+                        else:
+                            # Anderer Port - Fehler zurückgeben
+                            self._send_json({
+                                "error": f"Already connected to {ROTOR_CONNECTION.port} at {ROTOR_CONNECTION.baud_rate} baud. Disconnect first to change port."
+                            }, HTTPStatus.BAD_REQUEST)
+                            return
+                    
+                    # Keine bestehende Verbindung - erstelle neue
                     if ROTOR_CONNECTION is None:
                         ROTOR_CONNECTION = RotorConnection()
-                    ROTOR_CONNECTION.connect(port.strip(), int(baud_rate))
-                self._send_json({"status": "ok", "port": port, "baudRate": baud_rate})
+                    ROTOR_CONNECTION.connect(port_str, baud_rate_int)
+                    ROTOR_CLIENT_COUNT = 1  # Erste Verbindung
+                self._send_json({"status": "ok", "port": port_str, "baudRate": baud_rate_int})
             except Exception as e:
                 self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
             return
         
         if parsed.path == "/api/rotor/disconnect":
+            global ROTOR_CLIENT_COUNT
             try:
                 with ROTOR_LOCK:
-                    if ROTOR_CONNECTION:
-                        ROTOR_CONNECTION.disconnect()
-                        ROTOR_CONNECTION = None
-                self._send_json({"status": "ok"})
+                    if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
+                        # Verringere Referenzzählung
+                        ROTOR_CLIENT_COUNT = max(0, ROTOR_CLIENT_COUNT - 1)
+                        
+                        # Trenne nur, wenn keine Clients mehr verbunden sind
+                        if ROTOR_CLIENT_COUNT == 0:
+                            ROTOR_CONNECTION.disconnect()
+                            ROTOR_CONNECTION = None
+                            self._send_json({"status": "ok", "message": "Disconnected"})
+                        else:
+                            self._send_json({
+                                "status": "ok", 
+                                "message": f"Client disconnected, {ROTOR_CLIENT_COUNT} client(s) still connected",
+                                "remainingClients": ROTOR_CLIENT_COUNT
+                            })
+                    else:
+                        # Nicht verbunden - setze Zählung auf 0
+                        ROTOR_CLIENT_COUNT = 0
+                        self._send_json({"status": "ok", "message": "Not connected"})
             except Exception as e:
                 self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
             return
