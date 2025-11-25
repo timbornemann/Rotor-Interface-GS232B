@@ -343,6 +343,10 @@ class RotorClient:
         print(json.dumps(data, indent=2))
         return data
 
+    def _post_command(self, command: str, label: Optional[str] = None) -> Dict:
+        response = requests.post(self._url("/api/rotor/command"), json={"command": command})
+        return self._log_response(label or f"Command {command}", response)
+
     # --- Public API ------------------------------------------------------
     def list_ports(self) -> Dict:
         response = requests.get(self._url("/api/rotor/ports"))
@@ -357,9 +361,45 @@ class RotorClient:
         response = requests.post(self._url("/api/rotor/disconnect"))
         return self._log_response("Disconnect", response)
 
-    def send_command(self, command: str) -> Dict:
-        response = requests.post(self._url("/api/rotor/command"), json={"command": command})
-        return self._log_response(f"Command {command}", response)
+    def send_raw_command(self, command: str) -> Dict:
+        """Sende einen beliebigen GS-232B Befehl."""
+        return self._post_command(command)
+
+    def move_to(self, azimuth: Optional[int] = None, elevation: Optional[int] = None) -> Dict:
+        """Fahre gezielt zu Azimut und optional Elevation."""
+        if azimuth is None and elevation is None:
+            raise ValueError("Mindestens azimuth oder elevation angeben.")
+        if azimuth is not None and elevation is not None:
+            cmd = f"W{azimuth:03d} {elevation:03d}"
+        elif azimuth is not None:
+            cmd = f"M{azimuth:03d}"
+        else:
+            cmd = f"X{elevation:03d}"  # GS-232B: nur Elevation setzen (X=Elevation)
+        return self._post_command(cmd, "MoveTo")
+
+    def move_azimuth_right(self) -> Dict:
+        return self._post_command("R", "Azimuth Right")
+
+    def move_azimuth_left(self) -> Dict:
+        return self._post_command("L", "Azimuth Left")
+
+    def move_elevation_up(self) -> Dict:
+        return self._post_command("U", "Elevation Up")
+
+    def move_elevation_down(self) -> Dict:
+        return self._post_command("D", "Elevation Down")
+
+    def stop_azimuth(self) -> Dict:
+        return self._post_command("A", "Stop Azimuth")
+
+    def stop_elevation(self) -> Dict:
+        return self._post_command("E", "Stop Elevation")
+
+    def stop_all(self) -> Dict:
+        return self._post_command("S", "Stop All")
+
+    def request_status(self) -> Dict:
+        return self._post_command("C2", "Request Status")
 
     def get_status(self) -> Dict:
         response = requests.get(self._url("/api/rotor/status"))
@@ -392,10 +432,13 @@ if __name__ == "__main__":
     if ports:
         target = ports[0]["path"]
         client.connect(target, 9600)
-        client.send_command("C2")
+        client.request_status()
         client.tap_status_loop()
-        client.send_command("M180")
+        client.move_to(180, 45)
         time.sleep(2)
+        client.move_azimuth_right()
+        time.sleep(1)
+        client.stop_all()
         client.get_position(cone_angle=15, cone_length=2000)
         client.disconnect()
     else:
