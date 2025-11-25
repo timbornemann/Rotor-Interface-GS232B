@@ -13,6 +13,7 @@ allowing remote clients to control the rotor via the API.
 from __future__ import annotations
 
 import argparse
+import configparser
 import json
 import re
 import threading
@@ -47,6 +48,17 @@ COMMAND_LOCK = threading.Lock()
 ROTOR_CONNECTION: Optional[Any] = None
 ROTOR_LOCK = threading.Lock()
 ROTOR_STATUS: Optional[Dict[str, Any]] = None
+
+# Calibration cache (offsets + scale factors)
+CALIBRATION_DEFAULTS = {
+    "azimuthOffset": 0.0,
+    "elevationOffset": 0.0,
+    "azimuthScaleFactor": 1.0,
+    "elevationScaleFactor": 1.0,
+}
+CALIBRATION_SETTINGS: Dict[str, float] = CALIBRATION_DEFAULTS.copy()
+CALIBRATION_MTIME: Optional[float] = None
+CALIBRATION_LOCK = threading.Lock()
 
 
 def iso_timestamp() -> str:
@@ -183,6 +195,85 @@ class RotorConnection:
         """Get the current status."""
         with self.status_lock:
             return self.status.copy() if self.status else None
+
+
+def _safe_float(value: Any, fallback: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _calibrate_value(raw_value: Optional[float], offset: float, scale: float) -> Optional[float]:
+    if raw_value is None:
+        return None
+    safe_scale = scale if abs(scale) > 1e-9 else 1.0
+    return (raw_value + offset) / safe_scale
+
+
+def get_calibration_settings() -> Dict[str, float]:
+    """Load calibration settings (offset + scale factors) with simple caching."""
+
+    global CALIBRATION_MTIME, CALIBRATION_SETTINGS
+
+    with CALIBRATION_LOCK:
+        try:
+            mtime = INI_FILE.stat().st_mtime
+        except FileNotFoundError:
+            return CALIBRATION_SETTINGS.copy()
+
+        if CALIBRATION_MTIME == mtime:
+            return CALIBRATION_SETTINGS.copy()
+
+        parser = configparser.ConfigParser()
+        try:
+            parser.read(INI_FILE, encoding="utf-8")
+        except Exception as exc:  # pragma: no cover - defensive
+            print(f"[Calibration] Failed to read {INI_FILE}: {exc}")
+            return CALIBRATION_SETTINGS.copy()
+
+        calibration = CALIBRATION_DEFAULTS.copy()
+        if parser.has_section("Calibration"):
+            section = parser["Calibration"]
+            calibration["azimuthOffset"] = _safe_float(section.get("azimuthOffset"), calibration["azimuthOffset"])
+            calibration["elevationOffset"] = _safe_float(section.get("elevationOffset"), calibration["elevationOffset"])
+            calibration["azimuthScaleFactor"] = _safe_float(
+                section.get("azimuthScaleFactor"), calibration["azimuthScaleFactor"]
+            )
+            calibration["elevationScaleFactor"] = _safe_float(
+                section.get("elevationScaleFactor"), calibration["elevationScaleFactor"]
+            )
+
+        CALIBRATION_SETTINGS = calibration
+        CALIBRATION_MTIME = mtime
+        return calibration.copy()
+
+
+def build_status_payload(status: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Return structured status data with raw (RPH) and factor-adjusted values."""
+
+    if not status:
+        return None
+
+    calibration = get_calibration_settings()
+    azimuth_raw = status.get("azimuthRaw") if isinstance(status, dict) else None
+    elevation_raw = status.get("elevationRaw") if isinstance(status, dict) else None
+
+    calibrated = {
+        "azimuth": _calibrate_value(azimuth_raw, calibration["azimuthOffset"], calibration["azimuthScaleFactor"]),
+        "elevation": _calibrate_value(elevation_raw, calibration["elevationOffset"], calibration["elevationScaleFactor"]),
+    }
+
+    return {
+        "timestamp": status.get("timestamp"),
+        "rawLine": status.get("raw"),
+        "rph": {
+            "azimuth": azimuth_raw,
+            "elevation": elevation_raw,
+        },
+        "calibrated": calibrated,
+        "calibration": calibration,
+    }
 
 
 def list_available_ports() -> List[Dict[str, Any]]:
@@ -340,7 +431,7 @@ elevationScaleFactor=1.0
         if parsed.path == "/api/rotor/status":
             with ROTOR_LOCK:
                 if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
-                    status = ROTOR_CONNECTION.get_status()
+                    status = build_status_payload(ROTOR_CONNECTION.get_status())
                     self._send_json({
                         "connected": True,
                         "port": ROTOR_CONNECTION.port,
@@ -355,7 +446,7 @@ elevationScaleFactor=1.0
             # Neuer Endpunkt: Gibt Positionen (C2-Status) mit Kegel-Einstellungen zurück
             with ROTOR_LOCK:
                 if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
-                    status = ROTOR_CONNECTION.get_status()
+                    status = build_status_payload(ROTOR_CONNECTION.get_status())
                     
                     # Parse Query-Parameter für Kegel-Einstellungen (optional)
                     query_params = parse_qs(parsed.query)
@@ -368,35 +459,17 @@ elevationScaleFactor=1.0
                     except (ValueError, IndexError):
                         cone_length = 100
                     
-                    if status:
-                        self._send_json({
-                            "connected": True,
-                            "port": ROTOR_CONNECTION.port,
-                            "baudRate": ROTOR_CONNECTION.baud_rate,
-                            "position": {
-                                "azimuth": status.get("azimuth"),
-                                "elevation": status.get("elevation"),
-                                "azimuthRaw": status.get("azimuthRaw"),
-                                "elevationRaw": status.get("elevationRaw"),
-                                "timestamp": status.get("timestamp"),
-                                "raw": status.get("raw")
-                            },
-                            "cone": {
-                                "angle": cone_angle,
-                                "length": cone_length
-                            }
-                        })
-                    else:
-                        self._send_json({
-                            "connected": True,
-                            "port": ROTOR_CONNECTION.port,
-                            "baudRate": ROTOR_CONNECTION.baud_rate,
-                            "position": None,
-                            "cone": {
-                                "angle": cone_angle,
-                                "length": cone_length
-                            }
-                        })
+                    response = {
+                        "connected": True,
+                        "port": ROTOR_CONNECTION.port,
+                        "baudRate": ROTOR_CONNECTION.baud_rate,
+                        "position": status,
+                        "cone": {
+                            "angle": cone_angle,
+                            "length": cone_length
+                        }
+                    }
+                    self._send_json(response)
                 else:
                     self._send_json({"connected": False})
             return
