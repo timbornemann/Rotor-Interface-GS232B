@@ -657,7 +657,29 @@ class ServerConnection extends SerialConnection {
 
         const data = await response.json();
         if (data.connected && data.status) {
-          this.emitData(data.status.raw || '');
+          const status = data.status;
+          // Konvertiere neue API-Struktur in das erwartete Format
+          // Die neue API hat: rawLine, rph, calibrated, calibration
+          // handleSerialLine erwartet eine Zeile im Format "AZ=xxx EL=xxx" mit RPH-Werten (roh)
+          // handleSerialLine wird dann normalizeAzimuth/normalizeElevation aufrufen,
+          // die die Kalibrierung (Offset + ScaleFactor) anwenden
+          
+          // Verwende RPH-Werte (roh) für die Zeile, damit handleSerialLine die Kalibrierung korrekt anwenden kann
+          const azimuthRaw = status.rph?.azimuth ?? null;
+          const elevationRaw = status.rph?.elevation ?? null;
+          
+          // Erstelle Zeile mit RPH-Werten (roh)
+          let lineToEmit = status.rawLine || '';
+          if (!lineToEmit && azimuthRaw !== null && elevationRaw !== null) {
+            // Erstelle Zeile mit RPH-Werten im Standard-Format
+            lineToEmit = `AZ=${Math.round(azimuthRaw)} EL=${String(Math.round(elevationRaw)).padStart(3, '0')}`;
+          }
+          
+          // Emit als rohe Zeile, handleSerialLine wird sie parsen und normalisieren
+          // (normalizeAzimuth/normalizeElevation wenden die Kalibrierung an)
+          if (lineToEmit) {
+            this.emitData(lineToEmit);
+          }
         }
       } catch (error) {
         console.error('[RotorService][Server] Status-Polling-Fehler', error);
