@@ -413,7 +413,7 @@ elevationScaleFactor=1.0
         self.end_headers()
 
     def do_GET(self) -> None:
-        global ROTOR_CONNECTION
+        global ROTOR_CONNECTION, ROTOR_CLIENT_COUNT
         parsed = urlparse(self.path)
         
         # Legacy endpoint
@@ -430,7 +430,6 @@ elevationScaleFactor=1.0
             return
         
         if parsed.path == "/api/rotor/status":
-            global ROTOR_CLIENT_COUNT
             with ROTOR_LOCK:
                 if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
                     status = build_status_payload(ROTOR_CONNECTION.get_status())
@@ -498,7 +497,7 @@ elevationScaleFactor=1.0
         super().do_GET()
 
     def do_POST(self) -> None:
-        global ROTOR_CONNECTION
+        global ROTOR_CONNECTION, ROTOR_CLIENT_COUNT
         parsed = urlparse(self.path)
         
         # Legacy endpoint
@@ -522,7 +521,6 @@ elevationScaleFactor=1.0
         
         # New rotor API endpoints
         if parsed.path == "/api/rotor/connect":
-            global ROTOR_CLIENT_COUNT
             payload = self._read_json_body()
             port = payload.get("port")
             baud_rate = payload.get("baudRate", 9600)
@@ -567,7 +565,6 @@ elevationScaleFactor=1.0
             return
         
         if parsed.path == "/api/rotor/disconnect":
-            global ROTOR_CLIENT_COUNT
             try:
                 with ROTOR_LOCK:
                     if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
