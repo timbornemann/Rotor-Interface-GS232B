@@ -668,18 +668,45 @@ class ServerConnection extends SerialConnection {
           const azimuthRaw = status.rph?.azimuth ?? null;
           const elevationRaw = status.rph?.elevation ?? null;
           
+          console.log('[RotorService][Server] Status-Daten empfangen', {
+            rawLine: status.rawLine,
+            azimuthRaw,
+            elevationRaw,
+            status
+          });
+          
           // Erstelle Zeile mit RPH-Werten (roh)
-          let lineToEmit = status.rawLine || '';
-          if (!lineToEmit && azimuthRaw !== null && elevationRaw !== null) {
-            // Erstelle Zeile mit RPH-Werten im Standard-Format
-            lineToEmit = `AZ=${Math.round(azimuthRaw)} EL=${String(Math.round(elevationRaw)).padStart(3, '0')}`;
+          // Normalisiere rawLine: entferne doppelte Leerzeichen und trim
+          let lineToEmit = (status.rawLine || '').trim().replace(/\s+/g, ' ');
+          
+          // Wenn rawLine leer ist oder kein gültiges Format hat, erstelle aus RPH-Werten
+          if (!lineToEmit || (!lineToEmit.match(/AZ\s*=\s*\d+/i) && azimuthRaw !== null && elevationRaw !== null)) {
+            if (azimuthRaw !== null && elevationRaw !== null) {
+              // Erstelle Zeile mit RPH-Werten im Standard-Format
+              lineToEmit = `AZ=${Math.round(azimuthRaw)} EL=${String(Math.round(elevationRaw)).padStart(3, '0')}`;
+              console.log('[RotorService][Server] Erstellte Zeile aus RPH-Werten', { lineToEmit });
+            }
+          } else {
+            console.log('[RotorService][Server] Verwende rawLine', { lineToEmit });
           }
           
           // Emit als rohe Zeile, handleSerialLine wird sie parsen und normalisieren
           // (normalizeAzimuth/normalizeElevation wenden die Kalibrierung an)
           if (lineToEmit) {
+            console.log('[RotorService][Server] Emit Daten', { lineToEmit });
             this.emitData(lineToEmit);
+          } else {
+            console.warn('[RotorService][Server] Keine Daten zum Emit', {
+              rawLine: status.rawLine,
+              azimuthRaw,
+              elevationRaw
+            });
           }
+        } else {
+          console.log('[RotorService][Server] Kein Status verfügbar', {
+            connected: data.connected,
+            hasStatus: !!data.status
+          });
         }
       } catch (error) {
         console.error('[RotorService][Server] Status-Polling-Fehler', error);
