@@ -4,7 +4,8 @@
   "description": "Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors mit Web Serial oder Simulation.",
   "private": true,
   "scripts": {
-    "serve": "npx http-server src/renderer -p 4173 -c-1"
+    "serve": "npx http-server src/renderer -p 4173 -c-1",
+    "test": "node --test tests/*.test.js"
   },
   "repository": {
     "type": "git",
