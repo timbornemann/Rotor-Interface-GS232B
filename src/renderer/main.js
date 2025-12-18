@@ -21,7 +21,7 @@ const manualPortBtn = document.getElementById('manualPortBtn');
 // Elements from settings modal may be null here, so we check them inside update functions or modal logic
 const baudInput = document.getElementById('baudInput');
 const pollingInput = document.getElementById('pollingInput');
-const simulationToggle = document.getElementById('simulationToggle');
+// const simulationToggle = document.getElementById('simulationToggle'); // Removed
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const connectionStatus = document.getElementById('connectionStatus');
@@ -345,7 +345,7 @@ function updateOffsetInputsFromConfig() {
 function updateUIFromConfig() {
   if (baudInput) baudInput.value = config.baudRate.toString();
   if (pollingInput) pollingInput.value = config.pollingIntervalMs.toString();
-  if (simulationToggle) simulationToggle.checked = config.simulation;
+  // if (simulationToggle) simulationToggle.checked = config.simulation; // Removed
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
@@ -517,7 +517,7 @@ async function refreshPorts() {
         const option = document.createElement('option');
         option.value = port.path;
         option.textContent = port.friendlyName || port.path;
-        if(port.simulated) option.dataset.simulated = 'true';
+        // if(port.simulated) option.dataset.simulated = 'true'; // Removed
         portSelect.appendChild(option);
         hasRelevantPorts = true;
     });
@@ -542,11 +542,11 @@ async function handleConnect() {
   const baudRate = Number(config.baudRate) || 9600;
   const pollingIntervalMs = Number(config.pollingIntervalMs) || 1000;
   const selectedOption = portSelect.selectedOptions[0];
-  const simulation = config.simulation || selectedOption?.dataset.simulated === 'true';
-  const path = simulation ? SIMULATED_PORT_ID : portSelect.value;
-  const azimuthMode = simulation
-    ? (Number(config.simulationAzimuthMode) === 450 ? 450 : 360)
-    : (Number(config.azimuthMode) === 450 ? 450 : 360);
+  
+  // No simulation support
+  const simulation = false;
+  const path = portSelect.value;
+  const azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
 
   if (!path) {
     logAction('Verbindungsversuch ohne Port');
@@ -555,23 +555,26 @@ async function handleConnect() {
   }
 
   try {
-    logAction('Verbindung wird aufgebaut', { path, simulation });
+    logAction('Verbindung wird aufgebaut', { path });
     applyLimitsToRotor();
     applyOffsetsToRotor();
     applyScaleFactorsToRotor();
     
-    await rotor.connect({ path, baudRate, simulation, azimuthMode });
-    await rotor.setMode(azimuthMode);
-    rotor.startPolling();
-    connected = true;
+    // We update config first so connection uses latest settings
     config = await configStore.save({
       baudRate,
       pollingIntervalMs,
-      simulation,
+      simulation: false, // Ensure this is false
       portPath: path,
       azimuthMode,
       connectionMode: 'server'
     });
+
+    await rotor.connect({ path, baudRate, simulation: false, azimuthMode });
+    await rotor.setMode(azimuthMode);
+    rotor.startPolling();
+    connected = true;
+    
     setConnectionState(true);
     logAction('Verbindung hergestellt');
   } catch (error) {
@@ -704,9 +707,9 @@ function updateConnectionStatusText() {
     connectionStatus.textContent = 'Getrennt';
     return;
   }
-  const isSimulation = config.simulation || portSelect.value === SIMULATED_PORT_ID;
+  // const isSimulation = config.simulation || portSelect.value === SIMULATED_PORT_ID;
   const portInfo = portSelect.selectedOptions[0]?.textContent || '';
-  let statusText = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
+  let statusText = `Verbunden (${portInfo})`;
   connectionStatus.textContent = statusText;
 }
 

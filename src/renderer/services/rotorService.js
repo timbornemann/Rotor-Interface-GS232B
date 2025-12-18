@@ -1,5 +1,5 @@
 
-const SIMULATED_PORT_ID = 'SIMULATED-ROTOR';
+
 
 class RotorService {
   constructor() {

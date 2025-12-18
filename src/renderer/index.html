@@ -283,14 +283,7 @@
             </label>
             <button id="settingsRequestPortBtn" class="secondary" type="button">Port hinzufügen</button>
             <button id="settingsRefreshPortsBtn" class="secondary" type="button">Ports aktualisieren</button>
-            <label style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
-              INI-Datei laden (optional)
-              <input id="settingsLoadIniFile" type="file" accept=".ini" style="margin-top: 0.5rem;" />
-              <small style="display: block; margin-top: 0.25rem; opacity: 0.7; font-size: 0.85em;">
-                Nur nötig wenn direkt im Browser geöffnet (file://). Bei Server-Betrieb wird die INI automatisch
-                geladen.
-              </small>
-            </label>
+
             <label>
               Baudrate
               <input id="settingsBaudInput" type="number" min="1200" max="115200" step="100" value="9600" />
@@ -299,17 +292,8 @@
               Polling (ms)
               <input id="settingsPollingInput" type="number" min="250" max="5000" step="250" value="1000" />
             </label>
-            <label class="checkbox">
-              <input id="settingsSimulationToggle" type="checkbox" />
-              Simulation
-            </label>
-            <label>
-              Simulations-Azimutbereich
-              <select id="settingsSimulationModeSelect">
-                <option value="360">360°</option>
-                <option value="450">450°</option>
-              </select>
-            </label>
+
+
           </div>
         </div>
 
@@ -521,7 +505,7 @@
   </div>
 
   <!-- Services zuerst -->
-  <script src="./services/iniHandler.js"></script>
+
   <script src="./services/configStore.js"></script>
   <script src="./services/rotorService.js"></script>
   <!-- UI-Komponenten -->
