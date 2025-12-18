@@ -6,6 +6,10 @@
 
 ---
 
+## Contents
+[1. BOM](#1-bill-of-materials-bom) • [2. Pinout](#2-pinout-map) • [3. Wiring](#3-detailed-wiring-instructions) • [4. Libraries](#4-software-libraries) • [5. Operation](#5-operation-guide) • [6. Commands](#6-serial-command-reference-gs-232b-subset) • [7. Audio](#7-audio-feedback-codes-buzzer) • [8. LCD](#8-lcd-status-layout) • [9. Simulation](#9-simulation--wokwi-configuration)
+---
+
 ## 1. Bill of Materials (BOM)
 
 To replicate this setup, the following components are required:
@@ -100,11 +104,74 @@ Ensure the following libraries are installed in your Arduino IDE:
 
 ### PC Mode (Automatic)
 * **Default State:** The controller waits for serial commands (Baud: 9600).
-* **Protocol:** GS-232B compatible (supports `C`, `C2`, `Mxxx`, `Wxxx yyy`, etc.).
-* **Virtual Elevation:** Elevation is calculated virtually over time, as the 28BYJ-48 only controls Azimuth physically in this setup.
+*   **Default State:** The controller waits for serial commands (Baud: 9600).
+*   **Protocol:** GS-232B compatible (supports `C`, `C2`, `Mxxx`, `Wxxx yyy`, etc.).
+*   **Virtual Elevation:** Elevation is calculated virtually over time, as the 28BYJ-48 only controls Azimuth physically in this setup.
 
 ### Manual Mode (Calibration)
-* **Activation:** Press **Left** or **Right** button.
-* **Movement:** Hold button to move the rotator manually.
-* **Zero Set:** Press **Left + Right** buttons simultaneously to reset the Azimuth to 0° (North).
-* **Exit:** The system automatically returns to PC Mode when serial commands are received or after movement stops.
+*   **Activation:** Press **Left** or **Right** button.
+*   **Movement:** Hold button to move the rotator manually.
+*   **Zero Set:** Press **Left + Right** buttons simultaneously to reset the Azimuth to 0° (North).
+*   **Exit:** The system automatically returns to PC Mode when serial commands are received or after movement stops.
+
+---
+
+## 6. Serial Command Reference (GS-232B Subset)
+
+The firmware parses the following commands (terminated by `CR` or `CRLF`). Case-insensitive.
+
+| Command | Description | Functionality in this Firmware |
+| :--- | :--- | :--- |
+| **C** | Query Azimuth | Returns `AZ=xxx` |
+| **C2** | Query Az/El | Returns `AZ=xxx EL=xxx` |
+| **B** | Query Elevation | Returns `EL=xxx` (Virtual Elevation) |
+| **Mxxx** | Move Azimuth | Moves rotor to angle `xxx` |
+| **Wxxx yyy** | Move Az/El | Moves Az to `xxx` and virtual El to `yyy` |
+| **R** | Right | Turns Clockwise usually |
+| **L** | Left | Turns Counter-Clockwise usually |
+| **A** / **S** | Stop | Stops all movement immediately |
+| **U** / **D** | Up/Down | Sets virtual target Elevation to 180° / 0° |
+| **E** | Elev Stop | Stops virtual Elevation change |
+| **P36** | 360° Mode | Limits range to 0-360° (Blue LED Off) |
+| **P45** | 450° Mode | Extends range to 0-450° (Blue LED On) |
+| **Xn** | Speed | Set max speed level `n` (1-4). Base 200 + n*100 steps/sec |
+
+---
+
+## 7. Audio Feedback Codes (Buzzer)
+
+The system provides acoustic feedback for status changes.
+
+*   **Startup Melody:** 3 rising tones (C-E-G) $\rightarrow$ System Ready.
+*   **Short High Beep:** Command received & valid (`SND_CMD_OK`).
+*   **Long Low Beep:** Unknown command or Error (`SND_ERROR`).
+*   **Double Dull Beep:** Limit reached (0° or Max) (`SND_LIMIT`).
+*   **Rising Tone Sequence:** Zero Set calibration successful (`SND_ZERO_SET`).
+*   **Short Click:** Movement Start / Stop (`SND_MOVE_START` / `SND_MOVE_STOP`).
+
+---
+
+## 8. LCD Status Layout
+
+**Row 1 (Top):**
+*   Displays the last received serial command (e.g., `RX:          M180`).
+*   In Manual Mode, shows Calibration status (e.g., `CALIB: >>>`).
+
+**Row 2 (Bottom):**
+*   **Format:** `Axxx Eyyy Pmm *`
+    *   `Axxx`: Current Azimuth (000-450)
+    *   `Eyyy`: Current Elevation (000-180)
+    *   `Pmm`: Mode (`P36` or `P45`)
+    *   `*`: Blinking asterisk indicates active movement.
+
+---
+
+## 9. Simulation & Wokwi Configuration
+
+This project includes a [Wokwi](https://wokwi.com) project file: `Circuit_diagram_wokwi.json`.
+To simulate this setup without hardware:
+1.  Go to [Wokwi.com](https://wokwi.com).
+2.  Start a new **Arduino Uno** project.
+3.  Press **F1** and select "Upload Project File...", then choose the `.json` file.
+4.  Replace the code in the editor with the content of `arduino_code.ino`.
+5.  Start the simulation.
