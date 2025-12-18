@@ -1,11 +1,23 @@
+// Force unregister legacy Service Workers (Vite PWA leftovers)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    for (const registration of registrations) {
+      console.log('[Maintenance] Unregistering legacy Service Worker due to architecture change:', registration);
+      registration.unregister();
+    }
+  });
+}
+
 // Alle Klassen werden über Script-Tags geladen
-const SIMULATED_PORT_ID = 'SIMULATED-ROTOR';
+// SIMULATED_PORT_ID is defined in rotorService.js
+// const SIMULATED_PORT_ID = 'SIMULATED-ROTOR'; // Removed to avoid syntax error
 
 const rotor = createRotorService(); // createRotorService is global from rotorService.js
 window.rotorService = rotor; // Make available globally for settings modal
 
 const portSelect = document.getElementById('portSelect');
 const refreshPortsBtn = document.getElementById('refreshPortsBtn');
+const manualPortBtn = document.getElementById('manualPortBtn');
 // Elements from settings modal may be null here, so we check them inside update functions or modal logic
 const baudInput = document.getElementById('baudInput');
 const pollingInput = document.getElementById('pollingInput');
@@ -371,11 +383,9 @@ async function init() {
   if (refreshPortsBtn) {
     refreshPortsBtn.addEventListener('click', () => void refreshPorts());
   }
-
-  await refreshPorts();
-  subscribeToStatus();
-
-  logAction('Initialisierung abgeschlossen');
+  if (manualPortBtn) {
+    manualPortBtn.addEventListener('click', () => handleManualPort());
+  }
 
   if (connectBtn) {
     connectBtn.addEventListener('click', () => void handleConnect());
@@ -474,6 +484,25 @@ async function init() {
         void handleSendSerialCommand(cmd);
       });
     });
+  }
+
+  await refreshPorts();
+  subscribeToStatus();
+
+  logAction('Initialisierung abgeschlossen');
+}
+
+function handleManualPort() {
+  const port = prompt('Port-Pfad eingeben (z.B. COM3 oder /dev/ttyUSB0):');
+  if (port && port.trim()) {
+    const trimmed = port.trim();
+    const option = document.createElement('option');
+    option.value = trimmed;
+    option.textContent = `${trimmed} (Manuell)`;
+    portSelect.appendChild(option);
+    portSelect.value = trimmed;
+    logAction('Manueller Port hinzugefügt', { port: trimmed });
+    logAction('Manueller Port hinzugefügt', { port: trimmed });
   }
 }
 

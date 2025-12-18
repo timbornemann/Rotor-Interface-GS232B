@@ -191,10 +191,13 @@ class RotorService {
 
   // --- Polling ---
   
+  // --- Polling ---
+  
   startPolling() {
       if (this.statusPollTimer) clearInterval(this.statusPollTimer);
+      // Poll faster for smoother updates (500ms)
       this.statusPollTimer = setInterval(() => this.poll(), 500);
-      this.poll();
+      this.poll(); // Initial poll
   }
   
   stopPolling() {
@@ -203,23 +206,20 @@ class RotorService {
   }
   
   async poll() {
-      if (!this.isConnected) return;
+      // Don't poll if we know we are disconnected logic is handled by main.js calling stopPolling()
       try {
           const resp = await fetch(`${this.apiBase}/api/rotor/status`);
           if (resp.ok) {
               const data = await resp.json();
               
-              if (!data.connected) {
-                  // Handle server disconnect state vs api disconnect state?
-                  // For now assume if server says connected=false, updates UI
-              }
-              
               if (data.status) {
                   // Transform to format expected by UI
                   // UI expects status.azimuth, status.elevation (calibrated)
-                  // and status.azimuthRaw (raw)
+                  // and status.azimuthRaw (raw) lines for history
                   
                   const s = data.status;
+                  
+                  // Construct object compatible with main.js handlers
                   const newStatus = {
                       azimuth: s.calibrated.azimuth, 
                       elevation: s.calibrated.elevation,
@@ -230,27 +230,48 @@ class RotorService {
                   };
                   
                   this.currentStatus = newStatus;
-                  
-                  // Emit simple string for listeners expecting "AZ=xxx EL=xxx"
-                  // Actually connection.onData in main.js calls handleSerialLine -> logAction?
-                  // main.js subscribes via main.js:493 `subscribeToStatus`
-                  // It expects `rotor.onStatus(status)` ? No, let's check main.js usage.
-                  
-                  // RotorService.js emitted "AZ=..." strings, then `handleSerialLine` parsed them.
-                  // But here we emit OBJECT to listeners?
-                  // Wait, original `rotorService.js` had `emitData(string)`
-                  
-                  // `main.js`: `subscribeToStatus` is actually calling `rotor.onStatus`?
-                  // No, `main.js`:493 is function `subscribeToStatus()` inside main.js? No it calls `subscribeToStatus` (local function?)
-                  
                   this.emitStatus(newStatus); 
               }
           }
       } catch (e) {
-          // ignore poll errors
+          // console.error("Poll error:", e);
       }
   }
+
+  // --- Events ---
+  
+  emitError(error) {
+    if (this.onErrorCallback) this.onErrorCallback(error);
+  }
+
+  emitStatus(status) {
+    if (this.onStatusCallback) this.onStatusCallback(status);
+  }
+
+  onError(callback) {
+    this.onErrorCallback = callback;
+  }
+
+  onStatus(callback) {
+    this.onStatusCallback = callback;
+  }
+    
+  // --- Legacy helpers ---
+
 }
+
+// Create instance
+// const rotorService = new RotorService(); // Created in main.js or index.html??
+// It seems main.js expects global `rotor`
+// Check index.html -> loading order. main.js loaded LAST.
+// So we should instantiate here or let main.js do it?
+// "rotor" is used in main.js. Let's look at main.js again.
+// Based on previous reads, main.js expects 'rotor' to be available.
+
+
+// window.rotor = rotor; // Make it globally available if not module
+
+
 
 // Export factory function as used in main.js
 function createRotorService() {

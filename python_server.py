@@ -56,6 +56,83 @@ def iso_timestamp() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+# SIMULATION LOGIC
+class SimulatedSerial:
+    """Mocks a serial port for testing without hardware."""
+    def __init__(self, port, baudrate, timeout=1.0):
+        self.port = port
+        self.baudrate = baudrate
+        self.timeout = timeout
+        self.is_open = True
+        self.buffer = b""
+        self.in_waiting = 0
+        self._azimuth = 0.0
+        self._elevation = 0.0
+        self._target_az = 0.0
+        self._target_el = 0.0
+        self._last_cmd_time = time.time()
+        
+    def close(self):
+        self.is_open = False
+        
+    def write(self, data):
+        if not self.is_open:
+            raise serial.SerialException("Port not open")
+        cmd = data.decode('utf-8').strip()
+        print(f"[SimulatedSerial] Received: {cmd}")
+        self._process_command(cmd)
+        return len(data)
+        
+    def read(self, size=1):
+        if not self.is_open:
+            raise serial.SerialException("Port not open")
+        if self.in_waiting > 0:
+            data = self.buffer[:size]
+            self.buffer = self.buffer[size:]
+            self.in_waiting = max(0, len(self.buffer))
+            return data
+        return b""
+
+    def _process_command(self, cmd):
+        # GS-232B Command Simulation
+        if cmd == "C2": # Request Az/El
+            resp = f"AZ={int(self._azimuth):03d} EL={int(self._elevation):03d}\r\n"
+            self._queue_response(resp)
+        elif cmd.startswith("W"): # Set Target "Waaa eee"
+            parts = cmd[1:].split()
+            if len(parts) >= 2:
+                try:
+                    self._target_az = int(parts[0])
+                    self._target_el = int(parts[1])
+                except:
+                    pass
+        elif cmd == "S" or cmd == "A": # Stop
+             self._target_az = self._azimuth
+             self._target_el = self._elevation
+
+    def _queue_response(self, text):
+        self.buffer += text.encode('utf-8')
+        self.in_waiting = len(self.buffer)
+        
+    def update_physics(self):
+        """Called periodically to simulate movement."""
+        # Simple movement simulation
+        step = 1.0 # deg per tick
+        
+        # Azimuth
+        diff_az = self._target_az - self._azimuth
+        if abs(diff_az) > step:
+            self._azimuth += step if diff_az > 0 else -step
+        else:
+            self._azimuth = self._target_az
+            
+        # Elevation
+        diff_el = self._target_el - self._elevation
+        if abs(diff_el) > step:
+            self._elevation += step if diff_el > 0 else -step
+        else:
+            self._elevation = self._target_el
+
 class RotorConnection:
     """Manages a serial connection to the rotor controller."""
 
@@ -69,18 +146,36 @@ class RotorConnection:
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
         self.write_lock = threading.Lock()
+        self.simulated = False
 
     def is_connected(self) -> bool:
         """Check if connected to a port."""
+        if self.simulated:
+             return self.serial and self.serial.is_open
         return self.serial is not None and self.serial.is_open
 
     def connect(self, port: str, baud_rate: int = 9600) -> None:
         """Connect to a COM port."""
-        if not SERIAL_AVAILABLE:
-            raise RuntimeError("pyserial is not installed. Install with: pip install pyserial")
-        
         if self.is_connected():
             self.disconnect()
+        
+        # SIMULATION CHECK
+        if port == "SIMULATED-ROTOR":
+            print("[RotorConnection] Starting SIMULATION mode")
+            self.serial = SimulatedSerial(port, baud_rate)
+            self.simulated = True
+            self.port = port
+            self.baud_rate = baud_rate
+            self.read_active = True
+            self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
+            self.read_thread.start()
+            
+            # Start physics thread for simulation
+            threading.Thread(target=self._sim_physics_loop, daemon=True).start()
+            return
+
+        if not SERIAL_AVAILABLE:
+            raise RuntimeError("pyserial is not installed. Install with: pip install pyserial")
         
         try:
             self.serial = serial.Serial(
@@ -92,6 +187,7 @@ class RotorConnection:
                 timeout=1.0,
                 write_timeout=1.0
             )
+            self.simulated = False
             self.port = port
             self.baud_rate = baud_rate
             self.read_active = True
@@ -109,14 +205,16 @@ class RotorConnection:
             self.read_thread.join(timeout=2.0)
         self.read_thread = None
         
-        if self.serial and self.serial.is_open:
-            try:
-                self.serial.close()
-            except Exception as e:
-                print(f"[RotorConnection] Error closing port: {e}")
+        if self.serial:
+            if hasattr(self.serial, 'is_open') and self.serial.is_open:
+                try:
+                    self.serial.close()
+                except Exception as e:
+                    print(f"[RotorConnection] Error closing port: {e}")
         self.serial = None
         self.port = None
         self.buffer = ""
+        self.simulated = False
         with self.status_lock:
             self.status = None
         print("[RotorConnection] Disconnected")
@@ -129,34 +227,50 @@ class RotorConnection:
         command_with_cr = command if command.endswith('\r') else f"{command}\r"
         try:
             with self.write_lock:
-                self.serial.write(command_with_cr.encode('utf-8'))
+                if self.simulated:
+                     self.serial.write(command_with_cr.encode('utf-8'))
+                else:
+                     self.serial.write(command_with_cr.encode('utf-8'))
             print(f"[RotorConnection] Sent: {command_with_cr!r}")
         except Exception as e:
             raise RuntimeError(f"Failed to send command: {e}")
+
+    def _sim_physics_loop(self):
+        """Background thread to update simulation physics."""
+        while self.simulated and self.read_active and self.serial:
+            self.serial.update_physics()
+            time.sleep(0.05)
 
     def _read_loop(self) -> None:
         """Background thread to read data from the serial port."""
         while self.read_active and self.serial and self.serial.is_open:
             try:
                 if self.serial.in_waiting > 0:
-                    data = self.serial.read(self.serial.in_waiting).decode('utf-8', errors='ignore')
-                    self.buffer += data
-                    
-                    # Process complete lines
-                    while '\r' in self.buffer or '\n' in self.buffer:
-                        delimiter = '\r' if '\r' in self.buffer else '\n'
-                        line_end = self.buffer.find(delimiter)
-                        if line_end >= 0:
-                            line = self.buffer[:line_end].strip()
-                            self.buffer = self.buffer[line_end + 1:]
-                            if line:
-                                self._process_status_line(line)
+                    try:
+                        data = self.serial.read(self.serial.in_waiting)
+                        decoded = data.decode('utf-8', errors='ignore')
+                        self.buffer += decoded
+                        
+                        # Process complete lines
+                        while '\r' in self.buffer or '\n' in self.buffer:
+                            delimiter = '\r' if '\r' in self.buffer else '\n'
+                            line_end = self.buffer.find(delimiter)
+                            if line_end >= 0:
+                                line = self.buffer[:line_end].strip()
+                                self.buffer = self.buffer[line_end + 1:]
+                                if line:
+                                    self._process_status_line(line)
+                    except Exception as e:
+                        print(f"[RotorConnection] Decode error: {e}")
                 else:
                     time.sleep(0.1)
             except Exception as e:
-                if self.read_active:
-                    print(f"[RotorConnection] Read error: {e}")
-                break
+                # if self.read_active:
+                #    print(f"[RotorConnection] Read error: {e}")
+                # Don't spam log on repetitive errors, just break if fatal
+                if not self.serial or not self.serial.is_open:
+                    break
+                time.sleep(1)
 
     def _process_status_line(self, line: str) -> None:
         """Process a status line from the rotor."""
@@ -167,13 +281,13 @@ class RotorConnection:
         }
         
         # Parse AZ=xxx
-        az_match = re.search(r'AZ\s*=\s*(\d+)', line, re.IGNORECASE)
+        az_match = re.search(r'AZ\s*=\\s*(\d+)', line, re.IGNORECASE)
         if az_match:
             status["azimuthRaw"] = int(az_match.group(1))
             status["azimuth"] = status["azimuthRaw"] # Legacy field
         
         # Parse EL=xxx
-        el_match = re.search(r'EL\s*=\s*(\d+)', line, re.IGNORECASE)
+        el_match = re.search(r'EL\s*=\\s*(\d+)', line, re.IGNORECASE)
         if el_match:
             status["elevationRaw"] = int(el_match.group(1))
             status["elevation"] = status["elevationRaw"] # Legacy field
@@ -184,7 +298,7 @@ class RotorConnection:
     def get_status(self) -> Optional[Dict[str, Any]]:
         """Get the current status."""
         with self.status_lock:
-            return self.status.copy() if self.status else None
+            return self.status
 
 
 def list_available_ports() -> List[Dict[str, Any]]:
@@ -283,8 +397,8 @@ class RotorHandler(SimpleHTTPRequestHandler):
                         "port": ROTOR_CONNECTION.port,
                         "baudRate": ROTOR_CONNECTION.baud_rate,
                         "status": {
-                             "rawLine": status.get("raw"),
-                             "timestamp": status.get("timestamp"),
+                             "rawLine": status.get("raw") if status else None,
+                             "timestamp": status.get("timestamp") if status else None,
                              "rph": {
                                  "azimuth": azimuth_raw,
                                  "elevation": elevation_raw
@@ -405,8 +519,27 @@ class RotorHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:
         # Suppress logging for status polls to keep console clean
-        if "GET /api/rotor/status" in args[0]:
-            return
+        try:
+            # args[0] is usually the request string like "GET /api/rotor/status HTTP/1.1" 
+            # OR the status code if this is log_error -> log_message path
+            # But standard log_message args are (code, message) ONLY when coming from send_error -> log_error ??
+            # Actually BaseHTTPRequestHandler.log_message receives "format" and "args". 
+            # If log_request calls it: log_message('"%s" %s %s', request_line, code, size) -> args=(req, code, size)
+            # If log_error calls it: log_message(format, *args) -> args matches format
+            
+            # The error happened in send_error -> log_error("code %d, message %s", code, message)
+            # So args is (code, message). code is HTTPStatus (IntEnum).
+            
+            # We only want to filter access logs for polls.
+            # Access logs usually come from log_request -> log_message
+            # Format is usually '"%s" %s %s'
+            # So args[0] is the request line.
+            
+            if len(args) > 0 and isinstance(args[0], str) and "GET /api/rotor/status" in args[0]:
+                return
+        except Exception:
+            pass
+            
         super().log_message(format, *args)
 
 

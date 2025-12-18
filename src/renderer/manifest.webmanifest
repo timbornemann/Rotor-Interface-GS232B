@@ -1,0 +1,15 @@
+{
+  "name": "Rotor Control GS-232B",
+  "short_name": "RotorControl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#2196f3",
+  "icons": [
+    {
+      "src": "assets/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
