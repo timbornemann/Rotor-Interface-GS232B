@@ -34,37 +34,25 @@ except ImportError:
     print("WARNING: pyserial not installed. COM port functionality will be disabled.")
     print("Install with: pip install pyserial")
 
+from rotor_logic import RotorLogic
+from settings_manager import SettingsManager
+
 SERVER_ROOT = Path(__file__).parent / "src" / "renderer"
 CONFIG_DIR = Path(__file__).parent
-INI_FILE = CONFIG_DIR / "rotor-config.ini"
-DEFAULT_API_KEY = "rotor-secret-key"
 DEFAULT_PORT = 8081
 
-# In-memory store for received commands.
+# Globals
+SETTINGS = SettingsManager(CONFIG_DIR)
 COMMAND_LOG: List[Dict[str, Any]] = []
 COMMAND_LOCK = threading.Lock()
 
-# Rotor connection state
-ROTOR_CONNECTION: Optional[Any] = None
+ROTOR_CONNECTION: Optional[RotorConnection] = None
+ROTOR_LOGIC: Optional[RotorLogic] = None
 ROTOR_LOCK = threading.Lock()
-ROTOR_STATUS: Optional[Dict[str, Any]] = None
-ROTOR_CLIENT_COUNT: int = 0  # Anzahl der verbundenen Clients
-
-# Calibration cache (offsets + scale factors)
-CALIBRATION_DEFAULTS = {
-    "azimuthOffset": 0.0,
-    "elevationOffset": 0.0,
-    "azimuthScaleFactor": 1.0,
-    "elevationScaleFactor": 1.0,
-}
-CALIBRATION_SETTINGS: Dict[str, float] = CALIBRATION_DEFAULTS.copy()
-CALIBRATION_MTIME: Optional[float] = None
-CALIBRATION_LOCK = threading.Lock()
-
+ROTOR_CLIENT_COUNT: int = 0
 
 def iso_timestamp() -> str:
     """Return a simple UTC ISO timestamp."""
-
     return datetime.now(tz=timezone.utc).isoformat()
 
 
@@ -80,6 +68,7 @@ class RotorConnection:
         self.buffer = ""
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
+        self.write_lock = threading.Lock()
 
     def is_connected(self) -> bool:
         """Check if connected to a port."""
@@ -139,7 +128,8 @@ class RotorConnection:
         
         command_with_cr = command if command.endswith('\r') else f"{command}\r"
         try:
-            self.serial.write(command_with_cr.encode('utf-8'))
+            with self.write_lock:
+                self.serial.write(command_with_cr.encode('utf-8'))
             print(f"[RotorConnection] Sent: {command_with_cr!r}")
         except Exception as e:
             raise RuntimeError(f"Failed to send command: {e}")
@@ -170,8 +160,7 @@ class RotorConnection:
 
     def _process_status_line(self, line: str) -> None:
         """Process a status line from the rotor."""
-        print(f"[RotorConnection] Received: {line}")
-        
+        # Simple parsing logic
         status = {
             "raw": line,
             "timestamp": int(time.time() * 1000)
@@ -181,13 +170,13 @@ class RotorConnection:
         az_match = re.search(r'AZ\s*=\s*(\d+)', line, re.IGNORECASE)
         if az_match:
             status["azimuthRaw"] = int(az_match.group(1))
-            status["azimuth"] = status["azimuthRaw"]
+            status["azimuth"] = status["azimuthRaw"] # Legacy field
         
         # Parse EL=xxx
         el_match = re.search(r'EL\s*=\s*(\d+)', line, re.IGNORECASE)
         if el_match:
             status["elevationRaw"] = int(el_match.group(1))
-            status["elevation"] = status["elevationRaw"]
+            status["elevation"] = status["elevationRaw"] # Legacy field
         
         with self.status_lock:
             self.status = status
@@ -196,85 +185,6 @@ class RotorConnection:
         """Get the current status."""
         with self.status_lock:
             return self.status.copy() if self.status else None
-
-
-def _safe_float(value: Any, fallback: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _calibrate_value(raw_value: Optional[float], offset: float, scale: float) -> Optional[float]:
-    if raw_value is None:
-        return None
-    safe_scale = scale if abs(scale) > 1e-9 else 1.0
-    return (raw_value + offset) / safe_scale
-
-
-def get_calibration_settings() -> Dict[str, float]:
-    """Load calibration settings (offset + scale factors) with simple caching."""
-
-    global CALIBRATION_MTIME, CALIBRATION_SETTINGS
-
-    with CALIBRATION_LOCK:
-        try:
-            mtime = INI_FILE.stat().st_mtime
-        except FileNotFoundError:
-            return CALIBRATION_SETTINGS.copy()
-
-        if CALIBRATION_MTIME == mtime:
-            return CALIBRATION_SETTINGS.copy()
-
-        parser = configparser.ConfigParser()
-        try:
-            parser.read(INI_FILE, encoding="utf-8")
-        except Exception as exc:  # pragma: no cover - defensive
-            print(f"[Calibration] Failed to read {INI_FILE}: {exc}")
-            return CALIBRATION_SETTINGS.copy()
-
-        calibration = CALIBRATION_DEFAULTS.copy()
-        if parser.has_section("Calibration"):
-            section = parser["Calibration"]
-            calibration["azimuthOffset"] = _safe_float(section.get("azimuthOffset"), calibration["azimuthOffset"])
-            calibration["elevationOffset"] = _safe_float(section.get("elevationOffset"), calibration["elevationOffset"])
-            calibration["azimuthScaleFactor"] = _safe_float(
-                section.get("azimuthScaleFactor"), calibration["azimuthScaleFactor"]
-            )
-            calibration["elevationScaleFactor"] = _safe_float(
-                section.get("elevationScaleFactor"), calibration["elevationScaleFactor"]
-            )
-
-        CALIBRATION_SETTINGS = calibration
-        CALIBRATION_MTIME = mtime
-        return calibration.copy()
-
-
-def build_status_payload(status: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Return structured status data with raw (RPH) and factor-adjusted values."""
-
-    if not status:
-        return None
-
-    calibration = get_calibration_settings()
-    azimuth_raw = status.get("azimuthRaw") if isinstance(status, dict) else None
-    elevation_raw = status.get("elevationRaw") if isinstance(status, dict) else None
-
-    calibrated = {
-        "azimuth": _calibrate_value(azimuth_raw, calibration["azimuthOffset"], calibration["azimuthScaleFactor"]),
-        "elevation": _calibrate_value(elevation_raw, calibration["elevationOffset"], calibration["elevationScaleFactor"]),
-    }
-
-    return {
-        "timestamp": status.get("timestamp"),
-        "rawLine": status.get("raw"),
-        "rph": {
-            "azimuth": azimuth_raw,
-            "elevation": elevation_raw,
-        },
-        "calibrated": calibrated,
-        "calibration": calibration,
-    }
 
 
 def list_available_ports() -> List[Dict[str, Any]]:
@@ -300,93 +210,11 @@ def list_available_ports() -> List[Dict[str, Any]]:
 class RotorHandler(SimpleHTTPRequestHandler):
     """Serve static files and a minimal authenticated API."""
 
-    server_version = "RotorHTTP/0.1"
+    server_version = "RotorHTTP/0.2"
 
     def __init__(self, *args: Any, directory: str | None = None, **kwargs: Any) -> None:
         super().__init__(*args, directory=directory or str(SERVER_ROOT), **kwargs)
 
-    def _get_default_ini_content(self) -> str:
-        """Return default INI file content."""
-        return """; Rotor Control Configuration
-; This file is automatically generated
-; Settings are organized by category
-
-[Connection]
-; Serial port connection settings
-baudRate=9600
-pollingIntervalMs=1000
-simulation=false ; alternatives: true, false
-connectionMode=local ; alternatives: local, server
-
-[Coordinates]
-; Map display coordinates
-mapLatitude=null
-mapLongitude=null
-satelliteMapEnabled=false ; alternatives: true, false
-mapZoomLevel=15
-mapZoomMin=5
-mapZoomMax=25
-
-[Cone]
-; Cone visualization settings
-coneAngle=10
-coneLength=1000
-azimuthDisplayOffset=0
-coneAngleMin=1
-coneAngleMax=90
-coneLengthMin=0
-coneLengthMax=100000
-azimuthDisplayOffsetMin=-180
-azimuthDisplayOffsetMax=180
-
-[Speed]
-; Rotor movement speeds in degrees per second
-azimuthSpeedDegPerSec=4
-elevationSpeedDegPerSec=2
-speedMinDegPerSec=0.5
-speedMaxDegPerSec=20
-
-[Ramp]
-; Softstart/Softstop PI controller settings
-rampEnabled=true ; alternatives: true, false
-rampKp=0.4
-rampKi=0.05
-rampSampleTimeMs=400
-rampMaxStepDeg=8
-rampToleranceDeg=1.5
-rampKpMin=0
-rampKpMax=5
-rampKiMin=0
-rampKiMax=5
-rampSampleTimeMsMin=100
-rampSampleTimeMsMax=2000
-rampMaxStepDegMin=0.1
-rampMaxStepDegMax=45
-rampToleranceDegMin=0.1
-rampToleranceDegMax=10
-
-[Mode]
-; Azimuth rotation mode
-azimuthMode=450 ; alternatives: 360, 450
-elevationDisplayEnabled=true ; alternatives: true, false
-
-[Limits]
-; Soft limits for rotor movement
-azimuthMinLimit=0
-azimuthMaxLimit=450
-elevationMinLimit=0
-elevationMaxLimit=90
-
-[Calibration]
-; Calibration offsets
-azimuthOffset=0
-elevationOffset=0
-; Scaling factors (affect how far the motor turns per degree)
-azimuthScaleFactor=1.0
-elevationScaleFactor=1.0
-"""
-
-    # --- helpers ---------------------------------------------------------
     def _send_json(self, payload: Dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -405,7 +233,6 @@ elevationScaleFactor=1.0
 
     # --- routing ---------------------------------------------------------
     def do_OPTIONS(self) -> None:
-        # Minimal CORS support for API usage from the frontend.
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -416,14 +243,10 @@ elevationScaleFactor=1.0
         global ROTOR_CONNECTION, ROTOR_CLIENT_COUNT
         parsed = urlparse(self.path)
         
-        # Legacy endpoint
-        if parsed.path == "/api/commands":
-            with COMMAND_LOCK:
-                commands = list(COMMAND_LOG)
-            self._send_json({"commands": commands})
-            return
-        
-        # New rotor API endpoints
+        if parsed.path.startswith("/api/settings"):
+             self._send_json(SETTINGS.get_all())
+             return
+
         if parsed.path == "/api/rotor/ports":
             ports = list_available_ports()
             self._send_json({"ports": ports})
@@ -432,242 +255,191 @@ elevationScaleFactor=1.0
         if parsed.path == "/api/rotor/status":
             with ROTOR_LOCK:
                 if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
-                    status = build_status_payload(ROTOR_CONNECTION.get_status())
+                    # Get raw status from connection
+                    status = ROTOR_CONNECTION.get_status()
+                    
+                    # Logic: RotorLogic calculates calibrated values
+                    # We can use RotorLogic's internal helper method or duplicate logic here.
+                    # Or we update RotorLogic to expose a "get_current_state" method.
+                    # For now we reuse the connection status + calibration from settings.
+                    
+                    config = SETTINGS.get_all()
+                    azimuth_raw = status.get("azimuthRaw") if status else None
+                    elevation_raw = status.get("elevationRaw") if status else None
+                    
+                    calibrated = { "azimuth": None, "elevation": None }
+                    if azimuth_raw is not None:
+                         scale = config.get("azimuthScaleFactor", 1.0) or 1.0
+                         offset = config.get("azimuthOffset", 0.0) or 0.0
+                         calibrated["azimuth"] = (azimuth_raw + offset) / scale
+                    
+                    if elevation_raw is not None:
+                         scale = config.get("elevationScaleFactor", 1.0) or 1.0
+                         offset = config.get("elevationOffset", 0.0) or 0.0
+                         calibrated["elevation"] = (elevation_raw + offset) / scale
+
                     self._send_json({
                         "connected": True,
                         "port": ROTOR_CONNECTION.port,
                         "baudRate": ROTOR_CONNECTION.baud_rate,
-                        "status": status,
+                        "status": {
+                             "rawLine": status.get("raw"),
+                             "timestamp": status.get("timestamp"),
+                             "rph": {
+                                 "azimuth": azimuth_raw,
+                                 "elevation": elevation_raw
+                             },
+                             "calibrated": calibrated
+                        },
                         "clientCount": ROTOR_CLIENT_COUNT
                     })
                 else:
                     self._send_json({"connected": False, "clientCount": 0})
             return
         
-        if parsed.path == "/api/rotor/position":
-            # Neuer Endpunkt: Gibt Positionen (C2-Status) mit Kegel-Einstellungen zurück
-            with ROTOR_LOCK:
-                if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
-                    status = build_status_payload(ROTOR_CONNECTION.get_status())
-                    
-                    # Parse Query-Parameter für Kegel-Einstellungen (optional)
-                    query_params = parse_qs(parsed.query)
-                    try:
-                        cone_angle = float(query_params.get("coneAngle", [10])[0]) if query_params.get("coneAngle") else 10
-                    except (ValueError, IndexError):
-                        cone_angle = 10
-                    try:
-                        cone_length = float(query_params.get("coneLength", [100])[0]) if query_params.get("coneLength") else 100
-                    except (ValueError, IndexError):
-                        cone_length = 100
-                    
-                    response = {
-                        "connected": True,
-                        "port": ROTOR_CONNECTION.port,
-                        "baudRate": ROTOR_CONNECTION.baud_rate,
-                        "position": status,
-                        "cone": {
-                            "angle": cone_angle,
-                            "length": cone_length
-                        }
-                    }
-                    self._send_json(response)
-                else:
-                    self._send_json({"connected": False})
-            return
-
-        if parsed.path == "/api/config/ini":
-            # INI file endpoint
-            try:
-                if INI_FILE.exists():
-                    with open(INI_FILE, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    self._send_json({"content": content})
-                else:
-                    # Create default INI file if it doesn't exist
-                    default_ini = self._get_default_ini_content()
-                    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-                    with open(INI_FILE, 'w', encoding='utf-8') as f:
-                        f.write(default_ini)
-                    self._send_json({"content": default_ini})
-            except Exception as e:
-                self._send_json({"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
-            return
-
         super().do_GET()
 
     def do_POST(self) -> None:
         global ROTOR_CONNECTION, ROTOR_CLIENT_COUNT
         parsed = urlparse(self.path)
         
-        # Legacy endpoint
-        if parsed.path == "/api/commands":
-            payload = self._read_json_body()
-            command = payload.get("command")
-            meta = payload.get("meta", {})
-            if not isinstance(command, str) or not command.strip():
-                self._send_json({"error": "command must be a non-empty string"}, HTTPStatus.BAD_REQUEST)
-                return
+        if parsed.path == "/api/settings":
+             payload = self._read_json_body()
+             SETTINGS.update(payload)
+             # Update RotorLogic config too
+             if ROTOR_LOGIC:
+                 ROTOR_LOGIC.update_config(SETTINGS.get_all())
+             self._send_json({"status": "ok", "settings": SETTINGS.get_all()})
+             return
 
-            entry = {
-                "received_at": iso_timestamp(),
-                "command": command.strip(),
-                "meta": meta if isinstance(meta, dict) else {},
-            }
-            with COMMAND_LOCK:
-                COMMAND_LOG.append(entry)
-            self._send_json({"status": "ok", "entry": entry}, HTTPStatus.CREATED)
-            return
-        
-        # New rotor API endpoints
         if parsed.path == "/api/rotor/connect":
             payload = self._read_json_body()
             port = payload.get("port")
             baud_rate = payload.get("baudRate", 9600)
             
-            if not isinstance(port, str) or not port.strip():
-                self._send_json({"error": "port must be a non-empty string"}, HTTPStatus.BAD_REQUEST)
+            if not port:
+                self._send_json({"error": "port required"}, HTTPStatus.BAD_REQUEST)
                 return
             
-            try:
-                with ROTOR_LOCK:
-                    port_str = port.strip()
-                    baud_rate_int = int(baud_rate)
+            with ROTOR_LOCK:
+                if ROTOR_CONNECTION is None:
+                     # This should not happen if initialized in main, but safe check
+                     pass # handled below
+                
+                try:
+                    if ROTOR_CONNECTION.is_connected():
+                         if ROTOR_CONNECTION.port == port:
+                             ROTOR_CLIENT_COUNT += 1
+                             self._send_json({"status": "ok", "message": "Already connected"})
+                             return
+                         else:
+                             self._send_json({"error": "Already connected to another port"}, HTTPStatus.BAD_REQUEST)
+                             return
                     
-                    # Wenn bereits eine Verbindung existiert
-                    if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
-                        # Prüfe, ob es derselbe Port ist
-                        if ROTOR_CONNECTION.port == port_str and ROTOR_CONNECTION.baud_rate == baud_rate_int:
-                            # Gleicher Port - erhöhe nur die Referenzzählung
-                            ROTOR_CLIENT_COUNT += 1
-                            self._send_json({
-                                "status": "ok", 
-                                "port": port_str, 
-                                "baudRate": baud_rate_int,
-                                "message": "Reusing existing connection"
-                            })
-                            return
-                        else:
-                            # Anderer Port - Fehler zurückgeben
-                            self._send_json({
-                                "error": f"Already connected to {ROTOR_CONNECTION.port} at {ROTOR_CONNECTION.baud_rate} baud. Disconnect first to change port."
-                            }, HTTPStatus.BAD_REQUEST)
-                            return
-                    
-                    # Keine bestehende Verbindung - erstelle neue
-                    if ROTOR_CONNECTION is None:
-                        ROTOR_CONNECTION = RotorConnection()
-                    ROTOR_CONNECTION.connect(port_str, baud_rate_int)
-                    ROTOR_CLIENT_COUNT = 1  # Erste Verbindung
-                self._send_json({"status": "ok", "port": port_str, "baudRate": baud_rate_int})
-            except Exception as e:
-                self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+                    ROTOR_CONNECTION.connect(port, int(baud_rate))
+                    ROTOR_CLIENT_COUNT = 1
+                    self._send_json({"status": "ok"})
+                except Exception as e:
+                    self._send_json({"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
             return
-        
+
         if parsed.path == "/api/rotor/disconnect":
-            try:
-                with ROTOR_LOCK:
-                    if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
-                        # Verringere Referenzzählung
-                        ROTOR_CLIENT_COUNT = max(0, ROTOR_CLIENT_COUNT - 1)
-                        
-                        # Trenne nur, wenn keine Clients mehr verbunden sind
-                        if ROTOR_CLIENT_COUNT == 0:
-                            ROTOR_CONNECTION.disconnect()
-                            ROTOR_CONNECTION = None
-                            self._send_json({"status": "ok", "message": "Disconnected"})
-                        else:
-                            self._send_json({
-                                "status": "ok", 
-                                "message": f"Client disconnected, {ROTOR_CLIENT_COUNT} client(s) still connected",
-                                "remainingClients": ROTOR_CLIENT_COUNT
-                            })
-                    else:
-                        # Nicht verbunden - setze Zählung auf 0
-                        ROTOR_CLIENT_COUNT = 0
-                        self._send_json({"status": "ok", "message": "Not connected"})
-            except Exception as e:
-                self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+            with ROTOR_LOCK:
+                 if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
+                      ROTOR_CLIENT_COUNT = max(0, ROTOR_CLIENT_COUNT - 1)
+                      if ROTOR_CLIENT_COUNT == 0:
+                           ROTOR_CONNECTION.disconnect()
+                           self._send_json({"status": "ok", "message": "Disconnected"})
+                      else:
+                           self._send_json({"status": "ok", "message": "Client disconnected", "remaining": ROTOR_CLIENT_COUNT})
+                 else:
+                      self._send_json({"status": "ok", "message": "Not connected"})
             return
-        
+
         if parsed.path == "/api/rotor/command":
-            
-            payload = self._read_json_body()
-            command = payload.get("command")
-            
-            if not isinstance(command, str) or not command.strip():
-                self._send_json({"error": "command must be a non-empty string"}, HTTPStatus.BAD_REQUEST)
-                return
-            
-            try:
-                with ROTOR_LOCK:
-                    if not ROTOR_CONNECTION or not ROTOR_CONNECTION.is_connected():
-                        self._send_json({"error": "not connected"}, HTTPStatus.BAD_REQUEST)
-                        return
-                    ROTOR_CONNECTION.send_command(command.strip())
-                
-                # Also log to command log
-                entry = {
-                    "received_at": iso_timestamp(),
-                    "command": command.strip(),
-                    "meta": {"source": "api"}
-                }
-                with COMMAND_LOCK:
-                    COMMAND_LOG.append(entry)
-                
-                self._send_json({"status": "ok"})
-            except Exception as e:
-                self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+            # Legacy raw command or internal usage
+             payload = self._read_json_body()
+             cmd = payload.get("command")
+             if cmd and ROTOR_CONNECTION:
+                  try:
+                      ROTOR_CONNECTION.send_command(cmd)
+                      self._send_json({"status": "ok"})
+                  except Exception as e:
+                      self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+             else:
+                  self._send_json({"error": "No command or not connected"}, HTTPStatus.BAD_REQUEST)
+             return
+
+        # NEW CONTROL ENDPOINTS
+        if parsed.path == "/api/rotor/set_target":
+             payload = self._read_json_body()
+             az = payload.get("az")
+             el = payload.get("el")
+             
+             if ROTOR_LOGIC:
+                 ROTOR_LOGIC.set_target(az, el)
+                 self._send_json({"status": "ok"})
+             else:
+                 self._send_json({"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+             return
+
+        if parsed.path == "/api/rotor/manual":
+             payload = self._read_json_body()
+             direction = payload.get("direction")
+             if ROTOR_LOGIC:
+                 ROTOR_LOGIC.manual_move(direction)
+                 self._send_json({"status": "ok"})
+             else:
+                  self._send_json({"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+             return
+
+        if parsed.path == "/api/rotor/stop":
+             if ROTOR_LOGIC:
+                 ROTOR_LOGIC.stop_motion()
+                 self._send_json({"status": "ok"})
+             else:
+                  self._send_json({"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+             return
+
+        self._send_json({"error": "Not Found"}, HTTPStatus.NOT_FOUND)
+
+    def log_message(self, format: str, *args: Any) -> None:
+        # Suppress logging for status polls to keep console clean
+        if "GET /api/rotor/status" in args[0]:
             return
-
-        if parsed.path == "/api/config/ini":
-            # INI file is read-only - do not allow saving via API
-            # The INI file should be edited manually
-            self._send_json({
-                "error": "INI file is read-only. Please edit rotor-config.ini manually."
-            }, HTTPStatus.METHOD_NOT_ALLOWED)
-            return
-
-        self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
-
-    # --- logging ---------------------------------------------------------
-    def log_message(self, format: str, *args: Any) -> None:  # noqa: A003 - matching base signature
-        # Include client address and API awareness in logs.
-        message = f"{self.client_address[0]} - {format % args}"
-        print(message)
+        super().log_message(format, *args)
 
 
 def run_server(port: int) -> None:
-    handler = lambda *args, **kwargs: RotorHandler(*args, **kwargs)  # type: ignore[call-arg]
+    global ROTOR_CONNECTION, ROTOR_LOGIC
+    
+    # Initialize components
+    ROTOR_CONNECTION = RotorConnection()
+    ROTOR_LOGIC = RotorLogic(ROTOR_CONNECTION)
+    
+    # Init logic with settings
+    ROTOR_LOGIC.update_config(SETTINGS.get_all())
+    ROTOR_LOGIC.start()
+    
+    handler = lambda *args, **kwargs: RotorHandler(*args, **kwargs)
+    
     with ThreadingHTTPServer(("0.0.0.0", port), handler) as httpd:
         print(f"Serving Rotor UI from {SERVER_ROOT} at http://localhost:{port}")
-        print("API endpoints (no authentication required):")
-        print("  - /api/commands (legacy)")
-        print("  - /api/rotor/ports - List available COM ports")
-        print("  - /api/rotor/connect - Connect to a COM port")
-        print("  - /api/rotor/disconnect - Disconnect from COM port")
-        print("  - /api/rotor/command - Send command to rotor")
-        print("  - /api/rotor/status - Get current status")
-        print("  - /api/rotor/position - Get position with cone settings (C2 status)")
-        print("  - /api/config/ini - Read INI configuration file (read-only)")
-        if not SERIAL_AVAILABLE:
-            print("WARNING: COM port functionality disabled (pyserial not installed)")
+        print("API V2 enabled (Server-Side Logic)")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("Shutting down server...")
-            with ROTOR_LOCK:
-                if ROTOR_CONNECTION:
-                    ROTOR_CONNECTION.disconnect()
-
+            print("Shutting down...")
+            if ROTOR_LOGIC:
+                ROTOR_LOGIC.stop()
+            if ROTOR_CONNECTION:
+                ROTOR_CONNECTION.disconnect()
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Serve the Rotor UI with a minimal API (no authentication)")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Port for the HTTP server (default: 8081)")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
-
-    run_server(port=args.port)
-
+    run_server(args.port)
 
 if __name__ == "__main__":
     main()

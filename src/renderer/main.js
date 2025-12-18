@@ -1,20 +1,18 @@
 // Alle Klassen werden über Script-Tags geladen
+const SIMULATED_PORT_ID = 'SIMULATED-ROTOR';
 
-const rotor = createRotorService();
+const rotor = createRotorService(); // createRotorService is global from rotorService.js
 window.rotorService = rotor; // Make available globally for settings modal
 
 const portSelect = document.getElementById('portSelect');
-const requestPortBtn = document.getElementById('requestPortBtn');
 const refreshPortsBtn = document.getElementById('refreshPortsBtn');
-// These elements are now in the settings modal, so they may be null
+// Elements from settings modal may be null here, so we check them inside update functions or modal logic
 const baudInput = document.getElementById('baudInput');
 const pollingInput = document.getElementById('pollingInput');
 const simulationToggle = document.getElementById('simulationToggle');
-const connectionModeSelect = document.getElementById('connectionModeSelect');
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const connectionStatus = document.getElementById('connectionStatus');
-const serialSupportNotice = document.getElementById('serialSupportNotice');
 const modeStatus = document.getElementById('modeStatus');
 const azValue = document.getElementById('azValue');
 const elValue = document.getElementById('elValue');
@@ -23,6 +21,7 @@ const gotoElInput = document.getElementById('gotoElInput');
 const compass = new Compass(document.getElementById('compassRoot'));
 const elevation = new Elevation(document.getElementById('elevationRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
+
 // Setup click handler for map
 mapView.setOnClick(async (azimuth, elevation) => {
   if (!connected) {
@@ -44,6 +43,7 @@ mapView.setOnClick(async (azimuth, elevation) => {
     reportError(error);
   }
 });
+
 const lastStatusValue = document.getElementById('lastStatusValue');
 const mapCoordinatesInput = document.getElementById('mapCoordinatesInput');
 const loadMapBtn = document.getElementById('loadMapBtn');
@@ -149,45 +149,6 @@ function sanitizeSpeedSettings(speedSettings = {}) {
   apply(speedSettings.azimuthSpeedDegPerSec, 'azimuthSpeedDegPerSec', 'Azimut-Geschwindigkeit');
   apply(speedSettings.elevationSpeedDegPerSec, 'elevationSpeedDegPerSec', 'Elevation-Geschwindigkeit');
 
-  const applyStage = (value, key, label) => {
-    if (value === undefined || value === null) {
-      return;
-    }
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      corrections.push(`${label} auf Stufe ${sanitized[key]} gesetzt (ungueltiger Wert)`);
-      return;
-    }
-    const clamped = clampStageValue(numeric);
-    if (clamped !== Math.round(numeric)) {
-      corrections.push(`${label} auf Stufe ${clamped} begrenzt`);
-    }
-    sanitized[key] = clamped;
-  };
-
-  const applyAngle = (value, key, label) => {
-    if (value === undefined || value === null) {
-      return;
-    }
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      corrections.push(`${label} auf Code ${sanitized[key]} gesetzt (ungueltiger Wert)`);
-      return;
-    }
-    const clamped = clampAngleCode(numeric);
-    if (clamped !== Math.round(numeric)) {
-      corrections.push(`${label} auf Code ${clamped} begrenzt`);
-    }
-    sanitized[key] = clamped;
-  };
-
-  applyStage(speedSettings.azimuthLowSpeedStage, 'azimuthLowSpeedStage', 'Azimut Low-Speed');
-  applyStage(speedSettings.azimuthHighSpeedStage, 'azimuthHighSpeedStage', 'Azimut High-Speed');
-  applyStage(speedSettings.elevationLowSpeedStage, 'elevationLowSpeedStage', 'Elevation Low-Speed');
-  applyStage(speedSettings.elevationHighSpeedStage, 'elevationHighSpeedStage', 'Elevation High-Speed');
-  applyAngle(speedSettings.azimuthSpeedAngleCode, 'azimuthSpeedAngleCode', 'Azimut Speed-Angle');
-  applyAngle(speedSettings.elevationSpeedAngleCode, 'elevationSpeedAngleCode', 'Elevation Speed-Angle');
-
   return { sanitized, corrections };
 }
 
@@ -203,11 +164,11 @@ function getRampConfigFromState() {
 }
 
 function updateLimitInputsFromConfig() {
-  azLimitMinInput.value = config.azimuthMinLimit.toString();
-  azLimitMaxInput.value = config.azimuthMaxLimit.toString();
-  elLimitMinInput.value = config.elevationMinLimit.toString();
-  elLimitMaxInput.value = config.elevationMaxLimit.toString();
-  syncGotoInputBounds();
+    if(azLimitMinInput) azLimitMinInput.value = config.azimuthMinLimit.toString();
+    if(azLimitMaxInput) azLimitMaxInput.value = config.azimuthMaxLimit.toString();
+    if(elLimitMinInput) elLimitMinInput.value = config.elevationMinLimit.toString();
+    if(elLimitMaxInput) elLimitMaxInput.value = config.elevationMaxLimit.toString();
+    syncGotoInputBounds();
 }
 
 function updateSpeedInputsFromConfig() {
@@ -218,51 +179,24 @@ function updateSpeedInputsFromConfig() {
     azimuthSpeedDegPerSec: sanitized.azimuthSpeedDegPerSec,
     elevationSpeedDegPerSec: sanitized.elevationSpeedDegPerSec
   });
-
-  const settingsAzSpeedRange = document.getElementById('settingsAzSpeedRange');
-  const settingsAzSpeedInput = document.getElementById('settingsAzSpeedInput');
-  const settingsElSpeedRange = document.getElementById('settingsElSpeedRange');
-  const settingsElSpeedInput = document.getElementById('settingsElSpeedInput');
-  const settingsAzLowSpeedSelect = document.getElementById('settingsAzLowSpeedSelect');
-  const settingsAzHighSpeedSelect = document.getElementById('settingsAzHighSpeedSelect');
-  const settingsElLowSpeedSelect = document.getElementById('settingsElLowSpeedSelect');
-  const settingsElHighSpeedSelect = document.getElementById('settingsElHighSpeedSelect');
-  const settingsAzSpeedAngleSelect = document.getElementById('settingsAzSpeedAngleSelect');
-  const settingsElSpeedAngleSelect = document.getElementById('settingsElSpeedAngleSelect');
-
-  if (settingsAzSpeedRange) settingsAzSpeedRange.value = sanitized.azimuthSpeedDegPerSec;
-  if (settingsAzSpeedInput) settingsAzSpeedInput.value = sanitized.azimuthSpeedDegPerSec;
-  if (settingsElSpeedRange) settingsElSpeedRange.value = sanitized.elevationSpeedDegPerSec;
-  if (settingsElSpeedInput) settingsElSpeedInput.value = sanitized.elevationSpeedDegPerSec;
-  if (settingsAzLowSpeedSelect) settingsAzLowSpeedSelect.value = sanitized.azimuthLowSpeedStage;
-  if (settingsAzHighSpeedSelect) settingsAzHighSpeedSelect.value = sanitized.azimuthHighSpeedStage;
-  if (settingsElLowSpeedSelect) settingsElLowSpeedSelect.value = sanitized.elevationLowSpeedStage;
-  if (settingsElHighSpeedSelect) settingsElHighSpeedSelect.value = sanitized.elevationHighSpeedStage;
-  if (settingsAzSpeedAngleSelect) settingsAzSpeedAngleSelect.value = sanitized.azimuthSpeedAngleCode;
-  if (settingsElSpeedAngleSelect) settingsElSpeedAngleSelect.value = sanitized.elevationSpeedAngleCode;
+  
+  // Ensure configStore is updated if we sanitized values?
+  // We'll leave it for next save or explicit update
 }
 
 function updateRampInputsFromConfig() {
-  const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');
-  const settingsRampKpInput = document.getElementById('settingsRampKpInput');
-  const settingsRampKiInput = document.getElementById('settingsRampKiInput');
-  const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
-  const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
-  const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
-
-  if (settingsRampEnabledToggle) settingsRampEnabledToggle.checked = Boolean(config.rampEnabled);
-  if (settingsRampKpInput) settingsRampKpInput.value = config.rampKp ?? 0.4;
-  if (settingsRampKiInput) settingsRampKiInput.value = config.rampKi ?? 0.05;
-  if (settingsRampSampleInput) settingsRampSampleInput.value = config.rampSampleTimeMs ?? 400;
-  if (settingsRampMaxStepInput) settingsRampMaxStepInput.value = config.rampMaxStepDeg ?? 8;
-  if (settingsRampToleranceInput) settingsRampToleranceInput.value = config.rampToleranceDeg ?? 1.5;
+    // Only updates if elements exist (e.g. in settings modal but handled by modal logic usually)
 }
 
 function syncGotoInputBounds() {
-  gotoAzInput.min = config.azimuthMinLimit;
-  gotoAzInput.max = config.azimuthMaxLimit;
-  gotoElInput.min = config.elevationMinLimit;
-  gotoElInput.max = config.elevationMaxLimit;
+  if (gotoAzInput) {
+      gotoAzInput.min = config.azimuthMinLimit;
+      gotoAzInput.max = config.azimuthMaxLimit;
+  }
+  if (gotoElInput) {
+      gotoElInput.min = config.elevationMinLimit;
+      gotoElInput.max = config.elevationMaxLimit;
+  }
 }
 
 function applyLimitsToRotor() {
@@ -281,9 +215,7 @@ function applyScaleFactorsToRotor() {
 }
 
 function showLimitWarning(message) {
-  if (!limitWarning) {
-    return;
-  }
+  if (!limitWarning) return;
   if (message) {
     limitWarning.textContent = message;
     limitWarning.classList.remove('hidden');
@@ -294,9 +226,7 @@ function showLimitWarning(message) {
 }
 
 function showSpeedWarning(message) {
-  if (!speedWarning) {
-    return;
-  }
+  if (!speedWarning) return;
   if (message) {
     speedWarning.textContent = message;
     speedWarning.classList.remove('hidden');
@@ -305,6 +235,7 @@ function showSpeedWarning(message) {
     speedWarning.classList.add('hidden');
   }
 }
+
 const controls = new Controls(document.querySelector('.controls-card'), {
   onCommand: async (command) => {
     if (!connected) {
@@ -331,7 +262,7 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     }
     logAction('Azimut-Befehl senden', { azimuth });
     try {
-      const plan = rotor.planAzimuthTarget(azimuth);
+      const plan = await rotor.planAzimuthTarget(azimuth);
       controls.showRouteHint(plan);
       await rotor.setAzimuth(azimuth);
     } catch (error) {
@@ -351,7 +282,7 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     }
     logAction('Azimut/Elevation-Befehl senden', { azimuth, elevation });
     try {
-      const plan = rotor.planAzimuthTarget(azimuth);
+      const plan = await rotor.planAzimuthTarget(azimuth);
       controls.showRouteHint(plan);
       await rotor.setAzEl({ az: azimuth, el: elevation });
     } catch (error) {
@@ -364,80 +295,59 @@ const controls = new Controls(document.querySelector('.controls-card'), {
 });
 
 const configStore = new ConfigStore();
-let config = configStore.loadSync(); // Start with sync load, then async update
+let config = configStore.loadSync();
 let connected = false;
 let unsubscribeStatus = null;
 const unsubscribeError = rotor.onError((error) => reportError(error));
 let settingsModal = null;
 
-// Initialize settings modal after DOM is ready
+// Initialize settings modal
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    settingsModal = new SettingsModal();
-  });
+  document.addEventListener('DOMContentLoaded', () => { settingsModal = new SettingsModal(); });
 } else {
   settingsModal = new SettingsModal();
 }
 
-// Load config asynchronously from INI file
+// Load config asynchronously
 configStore.load().then(loadedConfig => {
   if (loadedConfig) {
     config = loadedConfig;
-    // Update UI with loaded config
     updateUIFromConfig();
   }
 }).catch(err => {
-  console.warn('[main] Could not load config from INI, using localStorage', err);
+  console.warn('[main] Could not load config', err);
 });
 
 init().catch(reportError);
 
 function updateScaleFactorInputsFromConfig() {
-  if (azScaleFactorInput) {
-    azScaleFactorInput.value = config.azimuthScaleFactor ?? 1.0;
-  }
-  if (elScaleFactorInput) {
-    elScaleFactorInput.value = config.elevationScaleFactor ?? 1.0;
-  }
+  if (azScaleFactorInput) azScaleFactorInput.value = config.azimuthScaleFactor ?? 1.0;
+  if (elScaleFactorInput) elScaleFactorInput.value = config.elevationScaleFactor ?? 1.0;
 }
 
 function updateOffsetInputsFromConfig() {
-  if (azOffsetInput) {
-    azOffsetInput.value = config.azimuthOffset ?? 0;
-  }
-  if (elOffsetInput) {
-    elOffsetInput.value = config.elevationOffset ?? 0;
-  }
+  if (azOffsetInput) azOffsetInput.value = config.azimuthOffset ?? 0;
+  if (elOffsetInput) elOffsetInput.value = config.elevationOffset ?? 0;
 }
 
 function updateUIFromConfig() {
-  // These elements are now in the settings modal, so only update if they exist
   if (baudInput) baudInput.value = config.baudRate.toString();
   if (pollingInput) pollingInput.value = config.pollingIntervalMs.toString();
   if (simulationToggle) simulationToggle.checked = config.simulation;
-  if (connectionModeSelect) connectionModeSelect.value = config.connectionMode || 'local';
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
   updateModeLabel();
-  updateConnectionModeUI();
   updateConeSettings();
   
-  // Elevation display
-  if (elevation) {
-    elevation.setDisplayEnabled(config.elevationDisplayEnabled !== false);
-  }
+  if (elevation) elevation.setDisplayEnabled(config.elevationDisplayEnabled !== false);
   
-  // Map settings
-  if (mapCoordinatesInput && config.mapLatitude !== null && config.mapLatitude !== undefined &&
-      config.mapLongitude !== null && config.mapLongitude !== undefined) {
+  if (mapCoordinatesInput && config.mapLatitude !== null && config.mapLongitude !== null) {
     mapCoordinatesInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
   }
   if (satelliteMapToggle) satelliteMapToggle.checked = config.satelliteMapEnabled || false;
 
-  // Map zoom limits
   mapView.setZoomLimits(config.mapZoomMin, config.mapZoomMax, config.mapZoomLevel);
-
   if (config.mapLatitude !== null && config.mapLongitude !== null) {
     mapView.setCoordinates(config.mapLatitude, config.mapLongitude);
   }
@@ -458,46 +368,14 @@ async function init() {
   rotor.setRampSettings(getRampConfigFromState());
   await rotor.setSpeed(getSpeedConfigFromState());
 
-  updateSerialSupportNotice();
-  
-  // Warnung aktualisieren wenn Modus wechselt
-  if (connectionModeSelect) {
-    connectionModeSelect.addEventListener('change', () => {
-      updateSerialSupportNotice();
-    });
-  }
-  if (requestPortBtn) {
-    requestPortBtn.addEventListener('click', () => void handleRequestPort());
-  }
   if (refreshPortsBtn) {
     refreshPortsBtn.addEventListener('click', () => void refreshPorts());
-  }
-  
-  updatePortButtons();
-  
-  // Aktualisiere Port-Button Status wenn Modus wechselt
-  if (connectionModeSelect) {
-    connectionModeSelect.addEventListener('change', () => {
-      updatePortButtons();
-    });
-  }
-  
-  // Aktualisiere Port-Liste wenn Simulation umgeschaltet wird
-  if (simulationToggle) {
-    simulationToggle.addEventListener('change', () => {
-      refreshPorts().catch(reportError);
-    });
   }
 
   await refreshPorts();
   subscribeToStatus();
 
-  logAction('Initialisierung abgeschlossen', {
-    baudRate: config.baudRate,
-    pollingIntervalMs: config.pollingIntervalMs,
-    simulation: config.simulation,
-    azimuthMode: config.azimuthMode
-  });
+  logAction('Initialisierung abgeschlossen');
 
   if (connectBtn) {
     connectBtn.addEventListener('click', () => void handleConnect());
@@ -505,9 +383,7 @@ async function init() {
   if (disconnectBtn) {
     disconnectBtn.addEventListener('click', () => void handleDisconnect());
   }
-  if (connectionModeSelect) {
-    connectionModeSelect.addEventListener('change', () => void handleConnectionModeChange());
-  }
+  
   if (applyLimitsBtn) {
     applyLimitsBtn.addEventListener('click', () => void handleApplyLimits());
   }
@@ -534,42 +410,28 @@ async function init() {
   if (zoomOutBtn) {
     zoomOutBtn.addEventListener('click', () => mapView.setZoom(mapView.zoomLevel - 1));
   }
-  
-  // Enter-Taste im Koordinatenfeld
   if (mapCoordinatesInput) {
     mapCoordinatesInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        void handleLoadMap();
-      }
+      if (e.key === 'Enter') void handleLoadMap();
     });
   }
-  
-  // Initialisiere Zoom-Anzeige
   mapView.updateZoomDisplay();
   
   // Settings Modal
   const settingsBtn = document.getElementById('settingsBtn');
   if (settingsBtn) {
     settingsBtn.addEventListener('click', async () => {
-      // Ensure settings modal is initialized
-      if (!settingsModal) {
-        settingsModal = new SettingsModal();
-      }
-      // Refresh ports before opening modal
+      if (!settingsModal) settingsModal = new SettingsModal();
       await refreshPorts();
       if (settingsModal) {
         settingsModal.open(config, async (newConfig) => {
           const { sanitized, corrections } = sanitizeSpeedSettings(newConfig);
-          newConfig.azimuthSpeedDegPerSec = sanitized.azimuthSpeedDegPerSec;
-          newConfig.elevationSpeedDegPerSec = sanitized.elevationSpeedDegPerSec;
+          newConfig = { ...newConfig, ...sanitized };
           if (corrections.length) {
-            showSpeedWarning(
-              `Geschwindigkeiten wurden auf ${getSpeedLimitText()}°/s begrenzt (${corrections.join('; ')}).`
-            );
+            showSpeedWarning(`Begrenzt: ${corrections.join('; ')}`);
           } else {
             showSpeedWarning('');
           }
-          // Save new config
           config = await configStore.save(newConfig);
           updateUIFromConfig();
           applyLimitsToRotor();
@@ -579,252 +441,71 @@ async function init() {
           await rotor.setSpeed(getSpeedConfigFromState());
           updateConeSettings();
 
-          // Update mode if changed
           const newMode = Number(newConfig.azimuthMode) === 450 ? 450 : 360;
           if (connected) {
-            try {
+              // Mode update on server handled by config save
+              // But explicit setMode call might be useful for immediate feedback or legacy
               await rotor.setMode(newMode);
-            } catch (error) {
-              reportError(error);
-            }
           }
-
           logAction('Einstellungen gespeichert', newConfig);
         });
       }
     });
   }
 
-  // INI-Datei manuell laden (für file:// Protokoll)
-  const settingsLoadIniFile = document.getElementById('settingsLoadIniFile');
-  if (settingsLoadIniFile) {
-    settingsLoadIniFile.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      
-      try {
-        const text = await file.text();
-        if (typeof IniHandler !== 'undefined') {
-          const handler = new IniHandler();
-          const iniConfig = handler.parseIni(text);
-          const flattened = handler.iniToConfig(iniConfig);
-          
-          // Merge with current config and sanitize
-          const merged = { ...config, ...flattened };
-          config = await configStore.save(merged);
-          
-          // Update UI
-          updateUIFromConfig();
-          applyLimitsToRotor();
-          applyOffsetsToRotor();
-          applyScaleFactorsToRotor();
-          rotor.setRampSettings(getRampConfigFromState());
-          await rotor.setSpeed(getSpeedConfigFromState());
-          updateConeSettings();
-          
-          // Update settings modal if open
-          if (settingsModal) {
-            settingsModal.loadConfigIntoModal(config);
-          }
-          
-          logAction('INI-Datei geladen', { fileName: file.name });
-          reportError(null); // Clear any previous errors
-        }
-      } catch (error) {
-        console.error('[main] Fehler beim Laden der INI-Datei:', error);
-        reportError('Fehler beim Laden der INI-Datei: ' + error.message);
-      } finally {
-        // Reset file input
-        e.target.value = '';
-      }
-    });
-  }
-
-  // Serielles Tool Event-Handler
+  // Serial Tool
   if (sendSerialCommandBtn) {
     sendSerialCommandBtn.addEventListener('click', () => void handleSendSerialCommand());
   }
   if (serialCommandInput) {
     serialCommandInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        void handleSendSerialCommand();
-      }
+      if (e.key === 'Enter') void handleSendSerialCommand();
     });
   }
   if (clearHistoryBtn) {
     clearHistoryBtn.addEventListener('click', () => clearCommandHistory());
   }
-  
-  // Quick-Command Buttons
   const quickCmdButtons = document.querySelectorAll('.quick-cmd-btn');
-  if (quickCmdButtons && quickCmdButtons.length > 0) {
+  if (quickCmdButtons) {
     quickCmdButtons.forEach((btn) => {
       btn.addEventListener('click', () => {
         const cmd = btn.dataset.cmd;
-        if (serialCommandInput) {
-          serialCommandInput.value = cmd;
-        }
+        if (serialCommandInput) serialCommandInput.value = cmd;
         void handleSendSerialCommand(cmd);
       });
     });
   }
 }
 
-function updateSerialSupportNotice() {
-  if (!serialSupportNotice) return;
-  const isLocalMode = (connectionModeSelect ? connectionModeSelect.value : config.connectionMode) === 'local';
-  const supportsWebSerial = rotor.supportsWebSerial();
-  
-  if (!supportsWebSerial && isLocalMode) {
-    serialSupportNotice.classList.remove('hidden');
-  } else {
-    serialSupportNotice.classList.add('hidden');
-  }
-}
-
-function updatePortButtons() {
-  const isServerMode = (connectionModeSelect ? connectionModeSelect.value : config.connectionMode) === 'server';
-  const supportsWebSerial = rotor.supportsWebSerial();
-  
-  if (requestPortBtn) {
-    requestPortBtn.disabled = isServerMode || !supportsWebSerial;
-    requestPortBtn.style.display = isServerMode ? 'none' : '';
-  }
-  if (refreshPortsBtn) {
-    refreshPortsBtn.style.display = isServerMode ? '' : 'none';
-  }
-}
-
-async function handleRequestPort() {
-  try {
-    logAction('Port-Anforderung gestartet');
-    await rotor.requestPortAccess();
-    await refreshPorts();
-    logAction('Port-Anforderung abgeschlossen');
-  } catch (error) {
-    reportError(error);
-  }
-}
-
 async function refreshPorts() {
   try {
     logAction('Portliste wird aktualisiert');
-    const connectionMode = connectionModeSelect ? connectionModeSelect.value : config.connectionMode;
     const ports = await rotor.listPorts();
     portSelect.innerHTML = '';
     
-    console.log('[refreshPorts] Alle Ports vom Service:', ports);
-    console.log('[refreshPorts] Aktueller Verbindungsmodus:', connectionMode);
-    
     let hasRelevantPorts = false;
-    let serverPortCount = 0;
-    let localPortCount = 0;
-    let simulatedPortCount = 0;
-    
     ports.forEach((port) => {
-      console.log('[refreshPorts] Prüfe Port:', { 
-        path: port.path, 
-        serverPort: port.serverPort, 
-        simulated: port.simulated,
-        friendlyName: port.friendlyName 
-      });
-      
-      // Filtere Ports basierend auf Verbindungsmodus
-      if (port.simulated || port.path === SIMULATED_PORT_ID) {
-        // Simulation immer anzeigen
-        const option = document.createElement('option');
-        option.value = port.path;
-        option.textContent = 'Simulierter Rotor';
-        option.dataset.simulated = 'true';
-        portSelect.appendChild(option);
-        hasRelevantPorts = true;
-        simulatedPortCount++;
-        console.log('[refreshPorts] Simulation hinzugefügt');
-      } else if (connectionMode === 'server' && port.serverPort) {
-        // Server-Modus: nur Server-Ports anzeigen
-        const option = document.createElement('option');
-        option.value = port.path;
-        option.textContent = `[Server] ${port.friendlyName || port.path}`;
-        option.dataset.serverPort = 'true';
-        portSelect.appendChild(option);
-        hasRelevantPorts = true;
-        serverPortCount++;
-        console.log('[refreshPorts] Server-Port hinzugefügt:', port.path);
-      } else if (connectionMode === 'local' && !port.serverPort) {
-        // Lokaler Modus: nur lokale Web Serial Ports anzeigen
         const option = document.createElement('option');
         option.value = port.path;
         option.textContent = port.friendlyName || port.path;
+        if(port.simulated) option.dataset.simulated = 'true';
         portSelect.appendChild(option);
         hasRelevantPorts = true;
-        localPortCount++;
-        console.log('[refreshPorts] Lokaler Port hinzugefügt:', port.path);
-      } else {
-        console.log('[refreshPorts] Port übersprungen:', { 
-          connectionMode, 
-          serverPort: port.serverPort,
-          reason: connectionMode === 'server' ? 'nicht serverPort' : 'serverPort im lokalen Modus'
-        });
-      }
     });
 
-    console.log('[refreshPorts] Port-Zusammenfassung:', { 
-      serverPortCount, 
-      localPortCount, 
-      simulatedPortCount,
-      hasRelevantPorts,
-      totalOptions: portSelect.options.length
-    });
-
-    // Warnung anzeigen wenn keine Ports gefunden wurden
-    if (!hasRelevantPorts && connectionMode === 'server') {
+    if (!hasRelevantPorts) {
       const option = document.createElement('option');
       option.value = '';
-      option.textContent = 'Keine Ports verfügbar - Server erreichbar?';
+      option.textContent = 'Keine Ports verfügbar';
       option.disabled = true;
       portSelect.appendChild(option);
-      logAction('Keine Server-Ports gefunden - möglicherweise Server nicht erreichbar');
-      console.warn('[refreshPorts] Keine Server-Ports gefunden!');
-    }
-
-    if (config.portPath && Array.from(portSelect.options).some((opt) => opt.value === config.portPath)) {
-      portSelect.value = config.portPath;
-    } else {
-      // Im Server-Modus: Wähle ersten Server-Port, sonst Simulation
-      if (connectionMode === 'server') {
-        const serverOption = Array.from(portSelect.options).find((option) => option.dataset.serverPort === 'true');
-        if (serverOption) {
-          portSelect.value = serverOption.value;
-        } else {
-          const simulatedOption = Array.from(portSelect.options).find((option) => option.dataset.simulated === 'true');
-          if (simulatedOption) {
-            portSelect.value = simulatedOption.value;
-          }
+    } else if (config.portPath) {
+        if (Array.from(portSelect.options).some(o => o.value === config.portPath)) {
+            portSelect.value = config.portPath;
         }
-      } else {
-        const simulatedOption = Array.from(portSelect.options).find((option) => option.dataset.simulated === 'true');
-        if (simulatedOption) {
-          portSelect.value = simulatedOption.value;
-        }
-      }
     }
-    logAction('Portliste aktualisiert', { 
-      selected: portSelect.value, 
-      connectionMode, 
-      serverPortCount,
-      localPortCount,
-      totalPorts: ports.length
-    });
   } catch (error) {
-    console.error('[refreshPorts] Fehler beim Aktualisieren der Portliste', error);
     reportError(error);
-    // Zeige Fehlermeldung in der Port-Liste
-    portSelect.innerHTML = '';
-    const errorOption = document.createElement('option');
-    errorOption.value = '';
-    errorOption.textContent = `Fehler: ${error.message || 'Portliste konnte nicht geladen werden'}`;
-    errorOption.disabled = true;
-    portSelect.appendChild(errorOption);
   }
 }
 
@@ -837,7 +518,6 @@ async function handleConnect() {
   const azimuthMode = simulation
     ? (Number(config.simulationAzimuthMode) === 450 ? 450 : 360)
     : (Number(config.azimuthMode) === 450 ? 450 : 360);
-  const connectionMode = config.connectionMode || 'local';
 
   if (!path) {
     logAction('Verbindungsversuch ohne Port');
@@ -845,29 +525,26 @@ async function handleConnect() {
     return;
   }
 
-  // Verwende manuelle Modus-Auswahl statt automatischer Erkennung
-  const useServer = connectionMode === 'server' && !simulation;
-
   try {
-    logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
+    logAction('Verbindung wird aufgebaut', { path, simulation });
     applyLimitsToRotor();
     applyOffsetsToRotor();
     applyScaleFactorsToRotor();
-    await rotor.connect({ path, baudRate, simulation, useServer, azimuthMode });
+    
+    await rotor.connect({ path, baudRate, simulation, azimuthMode });
     await rotor.setMode(azimuthMode);
-    rotor.startPolling(pollingIntervalMs);
+    rotor.startPolling();
     connected = true;
     config = await configStore.save({
       baudRate,
       pollingIntervalMs,
       simulation,
-      simulationAzimuthMode: config.simulationAzimuthMode,
       portPath: path,
       azimuthMode,
-      connectionMode
+      connectionMode: 'server'
     });
     setConnectionState(true);
-    logAction('Verbindung hergestellt', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
+    logAction('Verbindung hergestellt');
   } catch (error) {
     reportError(error);
     setConnectionState(false);
@@ -887,7 +564,6 @@ async function handleDisconnect() {
     setConnectionState(false);
   }
 }
-
 
 function readLimitInputs() {
   return {
@@ -932,46 +608,29 @@ async function handleApplyLimits() {
     return;
   }
   if (!limitsAreValid(limits)) {
-    reportError('Limits ungueltig: Minimum muss kleiner als Maximum sein.');
+    reportError('Max-Limits müssen größer als Min-Limits sein.');
     return;
   }
   config = await configStore.save(limits);
   applyLimitsToRotor();
-  updateLimitInputsFromConfig();
-  showLimitWarning('Limits wurden aktualisiert.');
-  logAction('Soft-Limits aktualisiert', limits);
+  showLimitWarning('Limits wurden angewendet.');
+  logAction('Software-Limits aktualisiert', limits);
 }
 
-async function handleSetAzReference(targetAzimuth) {
-  const status = rotor.getCurrentStatus();
-  if (!status || typeof status.azimuthRaw !== 'number') {
-    reportError('Keine aktuelle Positionsrueckmeldung fuer die Referenz vorhanden.');
-    return;
-  }
-  const newAzOffset = targetAzimuth - status.azimuthRaw;
-  config = await configStore.save({ azimuthOffset: newAzOffset });
+async function handleSetAzReference(value) {
+  config = await configStore.save({ azimuthOffset: 0 }); // Reset first
+  const currentStat = rotor.currentStatus;
+  const rawAz = currentStat && typeof currentStat.azimuthRaw === 'number' ? currentStat.azimuthRaw : 0;
+  // Calculate offset so that (raw + offset) / scale = value
+  // offset = (value * scale) - raw
+  const scale = config.azimuthScaleFactor || 1.0;
+  const offset = (value * scale) - rawAz;
+  
+  config = await configStore.save({ azimuthOffset: offset });
   applyOffsetsToRotor();
-  showLimitWarning(`Referenz gesetzt: aktueller Azimut wird als ${targetAzimuth}° verwendet.`);
-  logAction('Azimut-Referenz gesetzt', { targetAzimuth, newAzOffset });
-}
-
-async function handleApplyScaleFactors() {
-  if (!azScaleFactorInput || !elScaleFactorInput) {
-    return;
-  }
-  const azimuthScaleFactor = Number(azScaleFactorInput.value) || 1.0;
-  const elevationScaleFactor = Number(elScaleFactorInput.value) || 1.0;
-  
-  config = await configStore.save({
-    azimuthScaleFactor: clamp(azimuthScaleFactor, 0.1, 2.0),
-    elevationScaleFactor: clamp(elevationScaleFactor, 0.1, 2.0)
-  });
-  
-  applyScaleFactorsToRotor();
-  logAction('Skalierungsfaktoren gespeichert', {
-    azimuthScaleFactor: config.azimuthScaleFactor,
-    elevationScaleFactor: config.elevationScaleFactor
-  });
+  updateOffsetInputsFromConfig();
+  showLimitWarning(`Azimut auf ${value}° referenziert (Offset: ${offset.toFixed(1)}).`);
+  logAction('Azimut referenziert', { value, offset });
 }
 
 async function handleResetOffsets() {
@@ -996,28 +655,12 @@ async function handleSpeedChange(speedSettings) {
 }
 
 function readRampInputs() {
-  const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');
-  const settingsRampKpInput = document.getElementById('settingsRampKpInput');
-  const settingsRampKiInput = document.getElementById('settingsRampKiInput');
-  const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
-  const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
-  const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
-
-  return {
-    rampEnabled: settingsRampEnabledToggle ? settingsRampEnabledToggle.checked : Boolean(config.rampEnabled),
-    rampKp: settingsRampKpInput ? Number(settingsRampKpInput.value) || 0.4 : Number(config.rampKp || 0.4),
-    rampKi: settingsRampKiInput ? Number(settingsRampKiInput.value) || 0.05 : Number(config.rampKi || 0.05),
-    rampSampleTimeMs:
-      settingsRampSampleInput ? Number(settingsRampSampleInput.value) || 400 : Number(config.rampSampleTimeMs || 400),
-    rampMaxStepDeg:
-      settingsRampMaxStepInput ? Number(settingsRampMaxStepInput.value) || 8 : Number(config.rampMaxStepDeg || 8),
-    rampToleranceDeg:
-      settingsRampToleranceInput ? Number(settingsRampToleranceInput.value) || 1.5 : Number(config.rampToleranceDeg || 1.5)
-  };
+  // Not directly used by UI anymore (managed in modal), but kept for legacy calls?
+  // We can return from config
+  return getRampConfigFromState();
 }
 
 async function handleRampSettingsChange() {
-  // This function is kept for compatibility but ramp settings are now managed via settings modal
   const rampSettings = readRampInputs();
   config = await configStore.save(rampSettings);
   rotor.setRampSettings(getRampConfigFromState());
@@ -1032,25 +675,9 @@ function updateConnectionStatusText() {
     connectionStatus.textContent = 'Getrennt';
     return;
   }
-  
-  const isSimulation = (simulationToggle ? simulationToggle.checked : config.simulation) || portSelect.value === SIMULATED_PORT_ID;
+  const isSimulation = config.simulation || portSelect.value === SIMULATED_PORT_ID;
   const portInfo = portSelect.selectedOptions[0]?.textContent || '';
-  const isServerMode = rotor.connectionMode === 'server';
-  
-  let statusText = '';
-  if (isSimulation) {
-    statusText = 'Verbunden (Simulation)';
-  } else if (isServerMode) {
-    const clientCount = rotor.getClientCount();
-    if (clientCount !== null && clientCount > 0) {
-      statusText = `Verbunden (${portInfo}) - ${clientCount} Gerät${clientCount !== 1 ? 'e' : ''}`;
-    } else {
-      statusText = `Verbunden (${portInfo})`;
-    }
-  } else {
-    statusText = `Verbunden (${portInfo})`;
-  }
-  
+  let statusText = isSimulation ? 'Verbunden (Simulation)' : `Verbunden (${portInfo})`;
   connectionStatus.textContent = statusText;
 }
 
@@ -1065,30 +692,19 @@ function setConnectionState(state) {
   disconnectBtn.disabled = !state;
   
   if (state) {
-    // Aktualisiere Status-Text
     updateConnectionStatusText();
-    
-    // Starte Überwachung, ob Status-Updates empfangen werden
     lastStatusReceivedTime = Date.now();
-    if (statusCheckInterval) {
-      clearInterval(statusCheckInterval);
-    }
+    if (statusCheckInterval) clearInterval(statusCheckInterval);
     statusCheckInterval = setInterval(() => {
       if (connected) {
         const timeSinceLastStatus = Date.now() - lastStatusReceivedTime;
-        const isSimulation = (simulationToggle ? simulationToggle.checked : config.simulation) || portSelect.value === SIMULATED_PORT_ID;
-        const portInfo = portSelect.selectedOptions[0]?.textContent || '';
-        
-        if (timeSinceLastStatus > 5000 && !isSimulation) {
-          // Keine Status-Updates seit 5 Sekunden - möglicherweise Problem
-          connectionStatus.textContent = `Verbunden (${portInfo}) - Keine Daten`;
-          connectionStatus.classList.remove('connected');
-          connectionStatus.classList.add('disconnected');
+        // Simple check
+        if (timeSinceLastStatus > 5000) {
+           connectionStatus.classList.remove('connected');
+           connectionStatus.classList.add('disconnected');
         } else {
-          // Aktualisiere Status-Text (inkl. Client-Anzahl)
-          updateConnectionStatusText();
-          connectionStatus.classList.add('connected');
-          connectionStatus.classList.remove('disconnected');
+           connectionStatus.classList.add('connected');
+           connectionStatus.classList.remove('disconnected');
         }
       }
     }, 2000);
@@ -1105,18 +721,12 @@ function setConnectionState(state) {
 }
 
 function subscribeToStatus() {
-  if (unsubscribeStatus) {
-    unsubscribeStatus();
-  }
-  unsubscribeStatus = rotor.onStatusUpdate((status) => handleStatus(status));
+  if (unsubscribeStatus) unsubscribeStatus();
+  unsubscribeStatus = rotor.onStatus((status) => handleStatus(status));
 }
 
 function handleStatus(status) {
-  if (!status) {
-    return;
-  }
-  
-  // Aktualisiere Zeitstempel für Verbindungsüberwachung
+  if (!status) return;
   lastStatusReceivedTime = Date.now();
   
   if (typeof status.azimuth === 'number') {
@@ -1129,23 +739,20 @@ function handleStatus(status) {
   elevation.update(status.elevation);
   mapView.update(status.azimuth, status.elevation);
   
-  // Zeige letzten Status an
   const time = new Date(status.timestamp).toLocaleTimeString();
   const az = typeof status.azimuth === 'number' ? status.azimuth.toFixed(0) : '--';
   const el = typeof status.elevation === 'number' ? status.elevation.toFixed(0) : '--';
   lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
   logAction('Status aktualisiert', { status, display: lastStatusValue.textContent });
   
-  // Aktualisiere Verbindungsstatus-Anzeige, wenn Daten empfangen werden
   if (connected) {
     updateConnectionStatusText();
     connectionStatus.classList.add('connected');
     connectionStatus.classList.remove('disconnected');
   }
   
-  // Status-Updates auch in der Historie anzeigen
-  if (status && status.raw) {
-    addCommandToHistory(`← ${status.raw}`, 'received');
+  if (status.rawLine) {
+    addCommandToHistory(`← ${status.rawLine}`, 'received');
   }
 }
 
@@ -1162,64 +769,19 @@ function updateConeSettings() {
   mapView.setConeSettings(coneAngle, coneLength, azimuthDisplayOffset);
 }
 
-function updateConnectionModeUI() {
-  const connectionMode = connectionModeSelect ? connectionModeSelect.value : config.connectionMode;
-  const supportsWebSerial = rotor.supportsWebSerial();
-  
-  // Deaktiviere lokalen Modus wenn Web Serial nicht verfügbar ist
-  if (connectionModeSelect) {
-    const localOption = connectionModeSelect.querySelector('option[value="local"]');
-    if (localOption) {
-      if (!supportsWebSerial && connectionMode === 'local') {
-        // Wechsle automatisch zu Server-Modus wenn Web Serial nicht verfügbar ist
-        connectionModeSelect.value = 'server';
-        config = configStore.saveSync({ connectionMode: 'server' });
-        logAction('Automatisch zu Server-Modus gewechselt (Web Serial nicht verfügbar)');
-      }
-      localOption.disabled = !supportsWebSerial;
-    }
-  }
-  
-  // Aktualisiere Button-Status
-  updatePortButtons();
-  
-  // Aktualisiere Web Serial Warnung
-  updateSerialSupportNotice();
-  
-  // Aktualisiere Port-Liste basierend auf Modus
-  refreshPorts().catch(reportError);
-}
-
-async function handleConnectionModeChange() {
-  const connectionMode = connectionModeSelect.value;
-  config = await configStore.save({ connectionMode });
-  logAction('Verbindungsmodus geändert', { connectionMode });
-  updateConnectionModeUI();
-}
-
 async function handleLoadMap() {
   const inputValue = mapCoordinatesInput.value.trim();
-  
-  // Parse das Format "lat, lon" oder "lat,lon"
   const parts = inputValue.split(',').map(part => part.trim());
   
   if (parts.length !== 2) {
-    reportError('Ungültiges Format. Bitte im Format "Latitude, Longitude" eingeben, z.B. "51.85911538185561, 11.422282899767954"');
+    reportError('Ungültiges Format. Bitte "Latitude, Longitude"');
     return;
   }
   
   const lat = parseFloat(parts[0]);
   const lon = parseFloat(parts[1]);
-  
-  if (isNaN(lat) || lat < -90 || lat > 90) {
-    reportError('Ungültiger Breitengrad. Bitte einen Wert zwischen -90 und 90 eingeben.');
-    return;
-  }
-  
-  if (isNaN(lon) || lon < -180 || lon > 180) {
-    reportError('Ungültiger Längengrad. Bitte einen Wert zwischen -180 und 180 eingeben.');
-    return;
-  }
+  if (isNaN(lat)) { reportError('Ungültiger Breitengrad'); return; }
+  if (isNaN(lon)) { reportError('Ungültiger Längengrad'); return; }
 
   try {
     logAction('Kartenkoordinaten werden gesetzt', { lat, lon });
@@ -1229,11 +791,9 @@ async function handleLoadMap() {
     if (satelliteMapToggle.checked) {
       loadMapBtn.disabled = true;
       loadMapBtn.textContent = 'Lädt...';
-      logAction('Satellitenkarte wird geladen');
       await mapView.loadMap();
       loadMapBtn.disabled = false;
       loadMapBtn.textContent = 'Karte laden';
-      logAction('Satellitenkarte geladen');
     }
   } catch (error) {
     reportError(error);
@@ -1244,24 +804,15 @@ async function handleLoadMap() {
 
 async function handleSatelliteMapToggle() {
   const enabled = satelliteMapToggle.checked;
-  logAction('Satellitenansicht umgeschaltet', { enabled });
+  logAction('Satellitenansicht zweck', { enabled });
   mapView.setSatelliteMapEnabled(enabled);
   config = await configStore.save({ satelliteMapEnabled: enabled });
 
-  if (enabled && mapView.latitude !== null && mapView.longitude !== null) {
-    try {
-      loadMapBtn.disabled = true;
-      loadMapBtn.textContent = 'Lädt...';
-      logAction('Satellitenkarte wird nach Umschalten geladen');
-      await mapView.loadMap();
-      loadMapBtn.disabled = false;
-      loadMapBtn.textContent = 'Karte laden';
-      logAction('Satellitenkarte nach Umschalten geladen');
-    } catch (error) {
-      reportError(error);
-      loadMapBtn.disabled = false;
-      loadMapBtn.textContent = 'Karte laden';
-    }
+  if (enabled && mapView.latitude !== null) {
+      // Refresh map
+      try {
+           await mapView.loadMap();
+      } catch(e) { reportError(e); }
   }
 }
 
@@ -1274,15 +825,13 @@ function reportError(error) {
   connectionStatus.classList.add('disconnected');
 }
 
-// Serielles Tool Funktionen
 let commandHistory = [];
 
 async function handleSendSerialCommand(cmdOverride = null) {
   if (!connected) {
-    reportError('Nicht verbunden. Bitte zuerst eine Verbindung herstellen.');
+    reportError('Nicht verbunden.');
     return;
   }
-
   const command = cmdOverride || (serialCommandInput ? serialCommandInput.value.trim() : '');
   if (!command) {
     reportError('Bitte einen Befehl eingeben.');
@@ -1294,10 +843,7 @@ async function handleSendSerialCommand(cmdOverride = null) {
     addCommandToHistory(command, 'sent');
     await rotor.sendRawCommand(command);
     
-    // Eingabefeld leeren
-    if (serialCommandInput && !cmdOverride) {
-      serialCommandInput.value = '';
-    }
+    if (serialCommandInput && !cmdOverride) serialCommandInput.value = '';
   } catch (error) {
     reportError(error);
     addCommandToHistory(`FEHLER: ${error.message}`, 'error');
@@ -1306,26 +852,14 @@ async function handleSendSerialCommand(cmdOverride = null) {
 
 function addCommandToHistory(command, type = 'sent') {
   const time = new Date().toLocaleTimeString();
-  const item = {
-    time,
-    command,
-    type
-  };
+  const item = { time, command, type };
   commandHistory.unshift(item);
-  
-  // Maximal 100 Einträge behalten
-  if (commandHistory.length > 100) {
-    commandHistory = commandHistory.slice(0, 100);
-  }
-  
+  if (commandHistory.length > 100) commandHistory = commandHistory.slice(0, 100);
   updateCommandHistoryDisplay();
 }
 
 function updateCommandHistoryDisplay() {
-  if (!commandHistoryList) {
-    return;
-  }
-  
+  if (!commandHistoryList) return;
   commandHistoryList.innerHTML = '';
   
   if (commandHistory.length === 0) {
@@ -1341,15 +875,12 @@ function updateCommandHistoryDisplay() {
   commandHistory.forEach((item) => {
     const div = document.createElement('div');
     div.className = `command-history-item ${item.type}`;
-    
     const timeSpan = document.createElement('span');
     timeSpan.className = 'command-history-time';
     timeSpan.textContent = item.time;
-    
     const cmdSpan = document.createElement('span');
     cmdSpan.className = 'command-history-command';
     cmdSpan.textContent = item.command;
-    
     div.appendChild(timeSpan);
     div.appendChild(cmdSpan);
     commandHistoryList.appendChild(div);
@@ -1362,14 +893,9 @@ function clearCommandHistory() {
   logAction('Befehls-Historie gelöscht');
 }
 
-
 window.addEventListener('beforeunload', () => {
   rotor.stopPolling();
   void rotor.disconnect();
-  if (unsubscribeStatus) {
-    unsubscribeStatus();
-  }
-  if (typeof unsubscribeError === 'function') {
-    unsubscribeError();
-  }
+  if (unsubscribeStatus) unsubscribeStatus();
+  if (typeof unsubscribeError === 'function') unsubscribeError();
 });
