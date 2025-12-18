@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "author": "Tim",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-arduino-uno", "id": "uno", "top": 60, "left": 40, "attrs": {} },
+    { "type": "wokwi-lcd1602", "id": "lcd1", "top": -236.57, "left": 73.6, "attrs": {} },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot1",
+      "top": -174.1,
+      "left": -29,
+      "attrs": { "value": "0.35" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rBL",
+      "top": -35,
+      "left": 210.35,
+      "rotate": 270,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledMoving",
+      "top": 366,
+      "left": 215.4,
+      "rotate": 180,
+      "attrs": { "color": "green", "label": "MOVING" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledMode",
+      "top": 356,
+      "left": 253.8,
+      "rotate": 180,
+      "attrs": { "color": "blue", "label": "P45 MODE" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledError",
+      "top": 366,
+      "left": 292.2,
+      "rotate": 180,
+      "attrs": { "color": "red", "label": "ERROR" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rMoving",
+      "top": 331.2,
+      "left": 201.05,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rMode",
+      "top": 340.8,
+      "left": 239.45,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rError",
+      "top": 331.2,
+      "left": 277.85,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnLeft",
+      "top": 380.6,
+      "left": 0,
+      "attrs": { "color": "grey", "label": "LEFT (A3)" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnRight",
+      "top": 371,
+      "left": 115.2,
+      "attrs": { "color": "grey", "label": "RIGHT (A4)" }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer1",
+      "top": 213.6,
+      "left": 481.8,
+      "attrs": { "volume": "0.1", "label": "A5" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txtMotor",
+      "top": -3.6,
+      "left": 486.4,
+      "attrs": { "text": "MOTOR DRIVER (ULN2003)" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txtPins",
+      "top": 28.8,
+      "left": 489.6,
+      "attrs": { "text": "IN1 -> Pin 7\nIN3 -> Pin 9\nIN2 -> Pin 8\nIN4 -> Pin 10" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "txtPwr",
+      "top": 124.8,
+      "left": 489.6,
+      "attrs": { "text": "VCC -> 5V (Extern)\nGND -> GND" }
+    }
+  ],
+  "connections": [
+    [ "uno:5V", "lcd1:VDD", "red", [ "v-97.9", "h-84.8", "v-245.8", "h-0.1" ] ],
+    [ "uno:GND.1", "lcd1:VSS", "black", [ "v-136.2", "h-49.9" ] ],
+    [ "uno:GND.1", "lcd1:RW", "black", [ "v-136.2", "h-11.5", "v-38.4" ] ],
+    [ "uno:12", "lcd1:RS", "green", [ "h-1.7", "v-145.8", "h-38.7" ] ],
+    [ "uno:11", "lcd1:E", "green", [ "h-1.6", "v-155.4", "h-28.8" ] ],
+    [ "uno:5V", "pot1:VCC", "red", [ "v-97.9", "h-180.8", "v-259.2" ] ],
+    [ "uno:GND.1", "pot1:GND", "black", [ "v-136.2", "h-155.5" ] ],
+    [ "pot1:SIG", "lcd1:V0", "orange", [ "v19.2", "h114.8", "v-19.2" ] ],
+    [ "uno:5V", "rBL:1", "red", [ "v-97.9", "h-84.8", "v-153.6" ] ],
+    [ "rBL:2", "lcd1:A", "red", [ "h60" ] ],
+    [ "lcd1:K", "uno:GND.1", "black", [ "v9.6", "v0", "v28.8", "h-94.1" ] ],
+    [ "uno:A0", "rMoving:1", "blue", [ "v17.3", "h42" ] ],
+    [ "rMoving:2", "ledMoving:A", "blue", [ "h50" ] ],
+    [ "ledMoving:C", "uno:GND.3", "black", [ "h9.2", "v67.2", "h-30.6" ] ],
+    [ "uno:A1", "rMode:1", "blue", [ "h1.7", "v44.15" ] ],
+    [ "rMode:2", "ledMode:A", "blue", [ "h50" ] ],
+    [ "ledMode:C", "uno:GND.3", "black", [ "h9.2", "v67.2", "h-69" ] ],
+    [ "uno:A2", "rError:1", "blue", [ "h1.8", "v84.15" ] ],
+    [ "rError:2", "ledError:A", "blue", [ "h50" ] ],
+    [ "ledError:C", "uno:GND.3", "black", [ "h9.2", "v67.2", "h-107.4" ] ],
+    [ "uno:6", "lcd1:D4", "green", [ "v-21", "h-27.3" ] ],
+    [ "uno:5", "lcd1:D5", "green", [ "v-30.6", "h-8" ] ],
+    [ "uno:4", "lcd1:D6", "green", [ "v-40.2", "h-7.9" ] ],
+    [ "uno:2", "lcd1:D7", "green", [ "v-49.8", "h-7.7" ] ],
+    [ "uno:A3", "btnLeft:1.l", "gold", [ "v26.9", "h-276.5" ] ],
+    [ "uno:A4", "btnRight:1.l", "gold", [ "v36.5", "h-170.8" ] ],
+    [ "uno:A5", "buzzer1:1", "purple", [ "v50", "h240" ] ],
+    [ "buzzer1:2", "uno:GND.3", "black", [ "v153.6", "h-299.8" ] ],
+    [ "btnRight:2.l", "uno:GND.3", "black", [ "v48.2", "h103.8" ] ],
+    [ "btnLeft:2.l", "uno:GND.3", "black", [ "h0", "v38.6", "h211.2" ] ]
+  ],
+  "dependencies": {}
+}
