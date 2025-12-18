@@ -67,6 +67,8 @@ class RotorConnection:
         self.baud_rate: int = 9600
         self.read_thread: Optional[threading.Thread] = None
         self.read_active = False
+        self.polling_active = False
+        self.polling_thread: Optional[threading.Thread] = None
         self.buffer = ""
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
@@ -101,8 +103,11 @@ class RotorConnection:
             self.port = port
             self.baud_rate = baud_rate
             self.read_active = True
+            self.polling_active = True
             self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
             self.read_thread.start()
+            self.polling_thread = threading.Thread(target=self._polling_loop, daemon=True)
+            self.polling_thread.start()
             print(f"[RotorConnection] Connected to {port} at {baud_rate} baud")
         except Exception as e:
             self.serial = None
@@ -111,8 +116,15 @@ class RotorConnection:
     def disconnect(self) -> None:
         """Disconnect from the port."""
         self.read_active = False
+        self.polling_active = False
+        
         if self.read_thread and self.read_thread.is_alive():
             self.read_thread.join(timeout=2.0)
+        self.read_thread = None
+
+        if self.polling_thread and self.polling_thread.is_alive():
+            self.polling_thread.join(timeout=2.0)
+        self.polling_thread = None
         self.read_thread = None
         
         if self.serial:
@@ -145,6 +157,17 @@ class RotorConnection:
             raise RuntimeError(f"Failed to send command: {e}")
 
 
+
+    def _polling_loop(self) -> None:
+        """Background thread to poll the rotor for status."""
+        while self.polling_active and self.serial and self.serial.is_open:
+            try:
+                # Send C2 every 1 second
+                self.send_command("C2")
+                time.sleep(1.0)
+            except Exception as e:
+                print(f"[RotorConnection] Polling error: {e}")
+                time.sleep(2.0)
 
     def _read_loop(self) -> None:
         """Background thread to read data from the serial port."""
@@ -186,13 +209,14 @@ class RotorConnection:
         }
         
         # Parse AZ=xxx
-        az_match = re.search(r'AZ\s*=\\s*(\d+)', line, re.IGNORECASE)
+        # Expected format: AZ=123 EL=045
+        az_match = re.search(r'AZ\s*=\s*(\d+)', line, re.IGNORECASE)
         if az_match:
             status["azimuthRaw"] = int(az_match.group(1))
             status["azimuth"] = status["azimuthRaw"] # Legacy field
         
         # Parse EL=xxx
-        el_match = re.search(r'EL\s*=\\s*(\d+)', line, re.IGNORECASE)
+        el_match = re.search(r'EL\s*=\s*(\d+)', line, re.IGNORECASE)
         if el_match:
             status["elevationRaw"] = int(el_match.group(1))
             status["elevation"] = status["elevationRaw"] # Legacy field
