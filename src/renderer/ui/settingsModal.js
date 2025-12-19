@@ -206,10 +206,7 @@ class SettingsModal {
     if (settingsPollingInput) settingsPollingInput.value = config.pollingIntervalMs || 1000;
     if (settingsSimulationToggle) settingsSimulationToggle.checked = config.simulation || false;
     if (settingsSimulationModeSelect) settingsSimulationModeSelect.value = config.simulationAzimuthMode || 360;
-    if (settingsConnectionModeSelect) {
-      settingsConnectionModeSelect.value = 'server';
-      settingsConnectionModeSelect.disabled = true;
-    }
+    if (settingsConnectionModeSelect) settingsConnectionModeSelect.value = config.connectionMode || 'local';
 
     // Coordinates tab
     const settingsMapCoordinatesInput = document.getElementById('settingsMapCoordinatesInput');
@@ -282,7 +279,7 @@ class SettingsModal {
     if (settingsPollingInput) config.pollingIntervalMs = Number(settingsPollingInput.value) || 1000;
     if (settingsSimulationToggle) config.simulation = settingsSimulationToggle.checked;
     if (settingsSimulationModeSelect) config.simulationAzimuthMode = Number(settingsSimulationModeSelect.value) || 360;
-    if (settingsConnectionModeSelect) config.connectionMode = 'server';
+    if (settingsConnectionModeSelect) config.connectionMode = settingsConnectionModeSelect.value;
     if (settingsPortSelect && settingsPortSelect.value) {
       const selectedOption = settingsPortSelect.selectedOptions[0];
       if (selectedOption) {
@@ -358,3 +355,4 @@ class SettingsModal {
     this.close();
   }
 }
+

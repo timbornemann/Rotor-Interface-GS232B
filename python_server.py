@@ -1,13 +1,13 @@
 """Simple threaded HTTP server to host the Rotor interface and expose a minimal API.
 
-The server serves the static files from ``src/renderer`` and offers endpoints to
-control the rotor hardware via a central server process. Authentication is not
-used; the API is intentionally kept minimal and closed to legacy or unused
-routes.
+The server serves the static files from ``src/renderer`` and exposes a
+``/api/commands`` endpoint to send and fetch rotor commands. All API
+requests require the correct API key via ``X-API-Key`` header or a
+``key`` query parameter. The key is configurable but may also be left
+hard-coded for quick local use.
 
-The server can manage COM port connections to the rotor controller, allowing
-remote clients to control the rotor via the API without accessing serial
-devices directly from the browser.
+The server can also manage COM port connections to the rotor controller,
+allowing remote clients to control the rotor via the API.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import json
 import re
 import threading
 import time
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -38,9 +39,20 @@ INI_FILE = CONFIG_DIR / "rotor-config.ini"
 DEFAULT_API_KEY = "rotor-secret-key"
 DEFAULT_PORT = 8081
 
+# In-memory store for received commands.
+COMMAND_LOG: List[Dict[str, Any]] = []
+COMMAND_LOCK = threading.Lock()
+
 # Rotor connection state
 ROTOR_CONNECTION: Optional[Any] = None
 ROTOR_LOCK = threading.Lock()
+ROTOR_STATUS: Optional[Dict[str, Any]] = None
+
+
+def iso_timestamp() -> str:
+    """Return a simple UTC ISO timestamp."""
+
+    return datetime.now(tz=timezone.utc).isoformat()
 
 
 class RotorConnection:
@@ -55,23 +67,19 @@ class RotorConnection:
         self.buffer = ""
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
-        self.write_lock = threading.Lock()
-        self.polling_interval_ms = 1000
-        self.poll_thread: Optional[threading.Thread] = None
-        self.poll_active = False
 
     def is_connected(self) -> bool:
         """Check if connected to a port."""
         return self.serial is not None and self.serial.is_open
 
-    def connect(self, port: str, baud_rate: int = 9600, polling_interval_ms: int = 1000) -> None:
+    def connect(self, port: str, baud_rate: int = 9600) -> None:
         """Connect to a COM port."""
         if not SERIAL_AVAILABLE:
             raise RuntimeError("pyserial is not installed. Install with: pip install pyserial")
-
+        
         if self.is_connected():
             self.disconnect()
-
+        
         try:
             self.serial = serial.Serial(
                 port=port,
@@ -84,11 +92,9 @@ class RotorConnection:
             )
             self.port = port
             self.baud_rate = baud_rate
-            self.polling_interval_ms = max(100, int(polling_interval_ms))
             self.read_active = True
             self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
             self.read_thread.start()
-            self._start_status_polling()
             print(f"[RotorConnection] Connected to {port} at {baud_rate} baud")
         except Exception as e:
             self.serial = None
@@ -96,7 +102,6 @@ class RotorConnection:
 
     def disconnect(self) -> None:
         """Disconnect from the port."""
-        self._stop_status_polling()
         self.read_active = False
         if self.read_thread and self.read_thread.is_alive():
             self.read_thread.join(timeout=2.0)
@@ -115,57 +120,16 @@ class RotorConnection:
         print("[RotorConnection] Disconnected")
 
     def send_command(self, command: str) -> None:
-        """Send a command to the rotor.
-
-        Commands are normalized to uppercase and always terminated with ``\r``.
-        """
+        """Send a command to the rotor."""
         if not self.is_connected():
             raise RuntimeError("Not connected to rotor")
-
-        normalized = command.strip().upper()
-        if not normalized:
-            raise RuntimeError("Command must not be empty")
-
-        command_with_cr = normalized if normalized.endswith('\r') else f"{normalized}\r"
+        
+        command_with_cr = command if command.endswith('\r') else f"{command}\r"
         try:
-            with self.write_lock:
-                self.serial.write(command_with_cr.encode('utf-8'))
+            self.serial.write(command_with_cr.encode('utf-8'))
             print(f"[RotorConnection] Sent: {command_with_cr!r}")
         except Exception as e:
             raise RuntimeError(f"Failed to send command: {e}")
-
-    def _start_status_polling(self) -> None:
-        """Start a background loop that sends C2 status requests."""
-        self._stop_status_polling()
-        if not self.serial:
-            return
-
-        self.poll_active = True
-        self.poll_thread = threading.Thread(target=self._poll_status_loop, daemon=True)
-        self.poll_thread.start()
-
-    def _stop_status_polling(self) -> None:
-        """Stop the background status polling loop."""
-        self.poll_active = False
-        if self.poll_thread and self.poll_thread.is_alive():
-            self.poll_thread.join(timeout=2.0)
-        self.poll_thread = None
-
-    def _poll_status_loop(self) -> None:
-        """Continuously send C2 to keep the status fresh on the server."""
-        # Trigger an immediate status request before entering the loop
-        try:
-            self.send_command("C2")
-        except Exception as e:  # noqa: BLE001 - log error, keep loop running
-            print(f"[RotorConnection] Initial status poll failed: {e}")
-
-        while self.poll_active and self.is_connected():
-            try:
-                self.send_command("C2")
-            except Exception as e:  # noqa: BLE001 - log and continue polling
-                if self.poll_active:
-                    print(f"[RotorConnection] Status poll error: {e}")
-            time.sleep(self.polling_interval_ms / 1000.0)
 
     def _read_loop(self) -> None:
         """Background thread to read data from the serial port."""
@@ -260,35 +224,24 @@ class RotorHandler(SimpleHTTPRequestHandler):
 baudRate=9600
 pollingIntervalMs=1000
 simulation=false
-connectionMode=server
+connectionMode=local
 
 [Coordinates]
 ; Map display coordinates
 mapLatitude=null
 mapLongitude=null
 satelliteMapEnabled=false
-mapZoomLevel=15
-mapZoomMin=0
-mapZoomMax=20
 
 [Cone]
 ; Cone visualization settings
 coneAngle=10
 coneLength=1000
 azimuthDisplayOffset=0
-coneAngleMin=1
-coneAngleMax=90
-coneLengthMin=0
-coneLengthMax=100000
-azimuthDisplayOffsetMin=-180
-azimuthDisplayOffsetMax=180
 
 [Speed]
 ; Rotor movement speeds in degrees per second
 azimuthSpeedDegPerSec=4
 elevationSpeedDegPerSec=2
-speedMinDegPerSec=0.5
-speedMaxDegPerSec=20
 
 [Ramp]
 ; Softstart/Softstop PI controller settings
@@ -298,16 +251,6 @@ rampKi=0.05
 rampSampleTimeMs=400
 rampMaxStepDeg=8
 rampToleranceDeg=1.5
-rampKpMin=0
-rampKpMax=5
-rampKiMin=0
-rampKiMax=5
-rampSampleTimeMsMin=100
-rampSampleTimeMsMax=2000
-rampMaxStepDegMin=0.1
-rampMaxStepDegMax=45
-rampToleranceDegMin=0.1
-rampToleranceDegMax=10
 
 [Mode]
 ; Azimuth rotation mode
@@ -356,6 +299,13 @@ elevationOffset=0
     def do_GET(self) -> None:
         global ROTOR_CONNECTION
         parsed = urlparse(self.path)
+        
+        # Legacy endpoint
+        if parsed.path == "/api/commands":
+            with COMMAND_LOCK:
+                commands = list(COMMAND_LOG)
+            self._send_json({"commands": commands})
+            return
         
         # New rotor API endpoints
         if parsed.path == "/api/rotor/ports":
@@ -451,12 +401,30 @@ elevationOffset=0
         global ROTOR_CONNECTION
         parsed = urlparse(self.path)
         
+        # Legacy endpoint
+        if parsed.path == "/api/commands":
+            payload = self._read_json_body()
+            command = payload.get("command")
+            meta = payload.get("meta", {})
+            if not isinstance(command, str) or not command.strip():
+                self._send_json({"error": "command must be a non-empty string"}, HTTPStatus.BAD_REQUEST)
+                return
+
+            entry = {
+                "received_at": iso_timestamp(),
+                "command": command.strip(),
+                "meta": meta if isinstance(meta, dict) else {},
+            }
+            with COMMAND_LOCK:
+                COMMAND_LOG.append(entry)
+            self._send_json({"status": "ok", "entry": entry}, HTTPStatus.CREATED)
+            return
+        
         # New rotor API endpoints
         if parsed.path == "/api/rotor/connect":
             payload = self._read_json_body()
             port = payload.get("port")
             baud_rate = payload.get("baudRate", 9600)
-            polling_interval_ms = payload.get("pollingIntervalMs", 1000)
             
             if not isinstance(port, str) or not port.strip():
                 self._send_json({"error": "port must be a non-empty string"}, HTTPStatus.BAD_REQUEST)
@@ -466,8 +434,8 @@ elevationOffset=0
                 with ROTOR_LOCK:
                     if ROTOR_CONNECTION is None:
                         ROTOR_CONNECTION = RotorConnection()
-                    ROTOR_CONNECTION.connect(port.strip(), int(baud_rate), int(polling_interval_ms))
-                self._send_json({"status": "ok", "port": port, "baudRate": baud_rate, "pollingIntervalMs": polling_interval_ms})
+                    ROTOR_CONNECTION.connect(port.strip(), int(baud_rate))
+                self._send_json({"status": "ok", "port": port, "baudRate": baud_rate})
             except Exception as e:
                 self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
             return
@@ -499,6 +467,15 @@ elevationOffset=0
                         return
                     ROTOR_CONNECTION.send_command(command.strip())
                 
+                # Also log to command log
+                entry = {
+                    "received_at": iso_timestamp(),
+                    "command": command.strip(),
+                    "meta": {"source": "api"}
+                }
+                with COMMAND_LOCK:
+                    COMMAND_LOG.append(entry)
+                
                 self._send_json({"status": "ok"})
             except Exception as e:
                 self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
@@ -526,6 +503,7 @@ def run_server(port: int) -> None:
     with ThreadingHTTPServer(("0.0.0.0", port), handler) as httpd:
         print(f"Serving Rotor UI from {SERVER_ROOT} at http://localhost:{port}")
         print("API endpoints (no authentication required):")
+        print("  - /api/commands (legacy)")
         print("  - /api/rotor/ports - List available COM ports")
         print("  - /api/rotor/connect - Connect to a COM port")
         print("  - /api/rotor/disconnect - Disconnect from COM port")

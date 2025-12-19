@@ -327,10 +327,7 @@ function updateUIFromConfig() {
   if (baudInput) baudInput.value = config.baudRate.toString();
   if (pollingInput) pollingInput.value = config.pollingIntervalMs.toString();
   if (simulationToggle) simulationToggle.checked = config.simulation;
-  if (connectionModeSelect) {
-    connectionModeSelect.value = 'server';
-    connectionModeSelect.disabled = true;
-  }
+  if (connectionModeSelect) connectionModeSelect.value = config.connectionMode || 'local';
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
@@ -616,16 +613,26 @@ async function init() {
 
 function updateSerialSupportNotice() {
   if (!serialSupportNotice) return;
-  serialSupportNotice.classList.add('hidden');
+  const isLocalMode = (connectionModeSelect ? connectionModeSelect.value : config.connectionMode) === 'local';
+  const supportsWebSerial = rotor.supportsWebSerial();
+  
+  if (!supportsWebSerial && isLocalMode) {
+    serialSupportNotice.classList.remove('hidden');
+  } else {
+    serialSupportNotice.classList.add('hidden');
+  }
 }
 
 function updatePortButtons() {
+  const isServerMode = (connectionModeSelect ? connectionModeSelect.value : config.connectionMode) === 'server';
+  const supportsWebSerial = rotor.supportsWebSerial();
+  
   if (requestPortBtn) {
-    requestPortBtn.disabled = true;
-    requestPortBtn.style.display = 'none';
+    requestPortBtn.disabled = isServerMode || !supportsWebSerial;
+    requestPortBtn.style.display = isServerMode ? 'none' : '';
   }
   if (refreshPortsBtn) {
-    refreshPortsBtn.style.display = '';
+    refreshPortsBtn.style.display = isServerMode ? '' : 'none';
   }
 }
 
@@ -643,7 +650,7 @@ async function handleRequestPort() {
 async function refreshPorts() {
   try {
     logAction('Portliste wird aktualisiert');
-    const connectionMode = 'server';
+    const connectionMode = connectionModeSelect ? connectionModeSelect.value : config.connectionMode;
     const ports = await rotor.listPorts();
     portSelect.innerHTML = '';
     
@@ -652,6 +659,7 @@ async function refreshPorts() {
     
     let hasRelevantPorts = false;
     let serverPortCount = 0;
+    let localPortCount = 0;
     let simulatedPortCount = 0;
     
     ports.forEach((port) => {
@@ -683,17 +691,27 @@ async function refreshPorts() {
         hasRelevantPorts = true;
         serverPortCount++;
         console.log('[refreshPorts] Server-Port hinzugefügt:', port.path);
+      } else if (connectionMode === 'local' && !port.serverPort) {
+        // Lokaler Modus: nur lokale Web Serial Ports anzeigen
+        const option = document.createElement('option');
+        option.value = port.path;
+        option.textContent = port.friendlyName || port.path;
+        portSelect.appendChild(option);
+        hasRelevantPorts = true;
+        localPortCount++;
+        console.log('[refreshPorts] Lokaler Port hinzugefügt:', port.path);
       } else {
         console.log('[refreshPorts] Port übersprungen:', { 
           connectionMode, 
           serverPort: port.serverPort,
-          reason: 'Server-Modus aktiv'
+          reason: connectionMode === 'server' ? 'nicht serverPort' : 'serverPort im lokalen Modus'
         });
       }
     });
 
     console.log('[refreshPorts] Port-Zusammenfassung:', { 
       serverPortCount, 
+      localPortCount, 
       simulatedPortCount,
       hasRelevantPorts,
       totalOptions: portSelect.options.length
@@ -735,6 +753,7 @@ async function refreshPorts() {
       selected: portSelect.value, 
       connectionMode, 
       serverPortCount,
+      localPortCount,
       totalPorts: ports.length
     });
   } catch (error) {
@@ -759,7 +778,7 @@ async function handleConnect() {
   const azimuthMode = simulation
     ? (Number(config.simulationAzimuthMode) === 450 ? 450 : 360)
     : (Number(config.azimuthMode) === 450 ? 450 : 360);
-  const connectionMode = 'server';
+  const connectionMode = config.connectionMode || 'local';
 
   if (!path) {
     logAction('Verbindungsversuch ohne Port');
@@ -768,17 +787,15 @@ async function handleConnect() {
   }
 
   // Verwende manuelle Modus-Auswahl statt automatischer Erkennung
-  const useServer = !simulation;
+  const useServer = connectionMode === 'server' && !simulation;
 
   try {
     logAction('Verbindung wird aufgebaut', { path, baudRate, pollingIntervalMs, simulation, azimuthMode, connectionMode, useServer });
     applyLimitsToRotor();
     applyOffsetsToRotor();
-    await rotor.connect({ path, baudRate, simulation, useServer, azimuthMode, pollingIntervalMs });
+    await rotor.connect({ path, baudRate, simulation, useServer, azimuthMode });
     await rotor.setMode(azimuthMode);
-    if (!useServer) {
-      rotor.startPolling(pollingIntervalMs);
-    }
+    rotor.startPolling(pollingIntervalMs);
     connected = true;
     config = await configStore.save({
       baudRate,
@@ -1042,11 +1059,23 @@ function updateConeSettings() {
 }
 
 function updateConnectionModeUI() {
+  const connectionMode = connectionModeSelect ? connectionModeSelect.value : config.connectionMode;
+  const supportsWebSerial = rotor.supportsWebSerial();
+  
+  // Deaktiviere lokalen Modus wenn Web Serial nicht verfügbar ist
   if (connectionModeSelect) {
-    connectionModeSelect.value = 'server';
-    connectionModeSelect.disabled = true;
+    const localOption = connectionModeSelect.querySelector('option[value="local"]');
+    if (localOption) {
+      if (!supportsWebSerial && connectionMode === 'local') {
+        // Wechsle automatisch zu Server-Modus wenn Web Serial nicht verfügbar ist
+        connectionModeSelect.value = 'server';
+        config = configStore.saveSync({ connectionMode: 'server' });
+        logAction('Automatisch zu Server-Modus gewechselt (Web Serial nicht verfügbar)');
+      }
+      localOption.disabled = !supportsWebSerial;
+    }
   }
-
+  
   // Aktualisiere Button-Status
   updatePortButtons();
   
@@ -1058,10 +1087,7 @@ function updateConnectionModeUI() {
 }
 
 async function handleConnectionModeChange() {
-  const connectionMode = 'server';
-  if (connectionModeSelect) {
-    connectionModeSelect.value = connectionMode;
-  }
+  const connectionMode = connectionModeSelect.value;
   config = await configStore.save({ connectionMode });
   logAction('Verbindungsmodus geändert', { connectionMode });
   updateConnectionModeUI();
