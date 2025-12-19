@@ -140,6 +140,29 @@ class RotorLogic:
             az: Target azimuth in degrees (or None to keep current).
             el: Target elevation in degrees (or None to keep current).
         """
+        # Smart target selection for overlapping azimuth modes (e.g., 450 degrees)
+        # If we are in 450 mode, a request for "10 degrees" could mean 10 or 370.
+        # We should choose the one closest to our current position to avoid unnecessary rotation.
+        if az is not None and self.config["azimuthMode"] > 360:
+            status = self._get_calibrated_status()
+            if status and status.get("azimuth") is not None:
+                current_az = status["azimuth"]
+                # Candidates: The requested azimuth (normalized 0-360) and the overlapped version
+                # e.g., if az=10, mode=450: candidates are 10 and 370 (10+360)
+                candidates = [az]
+                if az + 360 <= self.config["azimuthMode"]:
+                    candidates.append(az + 360)
+                
+                # Also check if input might be > 360 (unlikely from map, but possible via API)
+                if az > 360 and az - 360 >= 0:
+                     candidates.append(az - 360)
+
+                # Select candidate with shortest linear distance to current position
+                # We use simple abs difference because we can't "wrap" physically across the stop.
+                best_az = min(candidates, key=lambda x: abs(x - current_az))
+                logger.info(f"Smart Azimuth: Input={az}, Current={current_az}, Candidates={candidates} -> Selected={best_az}")
+                az = best_az
+
         self.target_az = float(az) if az is not None else None
         self.target_el = float(el) if el is not None else None
         self.manual_direction = None
