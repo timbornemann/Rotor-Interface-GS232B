@@ -4,7 +4,7 @@ const defaultConfig = {
   baudRate: 9600,
   pollingIntervalMs: 1000,
   simulation: false,
-  connectionMode: 'local', // 'local' or 'server'
+  connectionMode: 'server', // Server-only default
   // Speed limits
   speedMinDegPerSec: 0.5,
   speedMaxDegPerSec: 20,
@@ -287,6 +287,9 @@ class ConfigStore {
       sanitized.azimuthDisplayOffsetMax,
       defaultConfig.azimuthDisplayOffset
     );
+
+    // Enforce server mode (local Web Serial is deprecated)
+    sanitized.connectionMode = 'server';
 
     return sanitized;
   }
