@@ -52,6 +52,8 @@ static float tgtEl = 0;
 static float virElSpeed = VIRT_EL_SPEED_DEFAULT;
 
 static char lastRx[17] = "RX: (ready)     ";
+static char rawCmd[14] = "(ready)";
+static uint32_t lastCmdTime = 0;
 static uint32_t errLedOffAt = 0;
 static uint32_t lastMicros = 0;
 static bool wasMoving = false; // Für Sound-Erkennung
@@ -110,12 +112,48 @@ static void lcdUpdateRow(uint8_t row, const char* text) {
   lcd.print(buf);
 }
 
+static void updateTopRow() {
+  uint32_t dt = (millis() - lastCmdTime) / 1000;
+  int m = dt / 60;
+  int s = dt % 60;
+  char timeStr[8];
+  if (m > 99) snprintf(timeStr, sizeof(timeStr), "99:59");
+  else snprintf(timeStr, sizeof(timeStr), "%d:%02d", m, s);
+  
+  int timeLen = strlen(timeStr);
+  int cmdLen = strlen(rawCmd);
+  
+  char line[17];
+  // Check if we have space: "RX:"(3) + command + " "(1) + time
+  if (3 + cmdLen + 1 + timeLen <= 16) {
+    int spaces = 16 - (3 + cmdLen + timeLen);
+    // Easier construction:
+    strcpy(line, "RX:");
+    strcat(line, rawCmd);
+    for(int i=0; i<spaces; i++) strcat(line, " ");
+    strcat(line, timeStr);
+  } 
+  else if (3 + cmdLen + timeLen <= 16) {
+    // Fits without space
+    snprintf(line, sizeof(line), "RX:%s%s", rawCmd, timeStr);
+  }
+  else {
+    // Doesn't fit, show only command
+    snprintf(line, sizeof(line), "RX:%s", rawCmd);
+  }
+  
+  lcdUpdateRow(0, line);
+  // Keep lastRx updated so other modes (CALIB) can restore it if needed
+  strncpy(lastRx, line, 16); lastRx[16] = 0;
+}
+
 // =================== PROTOKOLL (PC) ==================
 static void handleCommand(char* cmd) {
   if (currentMode == MotionMode::MANUAL_CALIB) return;
 
-  snprintf(lastRx, sizeof(lastRx), "RX:%-13.13s", cmd);
-  lcdUpdateRow(0, lastRx);
+  strncpy(rawCmd, cmd, 13); rawCmd[13] = 0;
+  lastCmdTime = millis();
+  updateTopRow();
 
   // --- Abfragen (Stumm) ---
   if (!strcmp(cmd, "C")) { sendLine("AZ=" + fmt3(curAz)); return; }
@@ -285,6 +323,7 @@ void loop() {
                (azModeMax>360?"P45":"P36"), 
                (isAnyMoving?'*':' '));
       lcdUpdateRow(1, b);
+      updateTopRow();
     } else {
       char b[17];
       snprintf(b, 17, "RAW: %ld", stepper.currentPosition());
