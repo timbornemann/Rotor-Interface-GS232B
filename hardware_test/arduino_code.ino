@@ -74,8 +74,7 @@ static void playSound(SoundType type) {
       tone(PIN_BUZZER, 150, 400); // Tief & Lang
       break;
     case SND_LIMIT:
-      tone(PIN_BUZZER, 100, 150); delay(150); // Dumpf
-      tone(PIN_BUZZER, 100, 150);
+      tone(PIN_BUZZER, 100, 200); // Dumpf, ohne Delay
       break;
     case SND_ZERO_SET:
       tone(PIN_BUZZER, 880, 100); delay(100);
@@ -282,12 +281,29 @@ void loop() {
     // Limits prüfen
     long curSteps = stepper.currentPosition();
     long maxSteps = azModeMax * STEPS_PER_DEG;
+    
+    // Non-blocking limit sound timer
+    static uint32_t lastLimitSound = 0;
 
-    if (curSteps > maxSteps && stepper.speed() > 0) {
-       stepper.moveTo(maxSteps); playSound(SND_LIMIT);
+    // Check UPPER Limit
+    // Logic: If current position is beyond limit AND target is BEYOND limit (or at limit)
+    // trying to go further out. We force target to limit.
+    // We allow target < maxSteps (escape)!
+    if (curSteps > maxSteps && stepper.targetPosition() > maxSteps) {
+       stepper.moveTo(maxSteps); 
+       if (millis() - lastLimitSound > 500) {
+         playSound(SND_LIMIT);
+         lastLimitSound = millis();
+       }
     }
-    if (curSteps < 0 && stepper.speed() < 0) {
-       stepper.moveTo(0); playSound(SND_LIMIT);
+    
+    // Check LOWER Limit
+    if (curSteps < 0 && stepper.targetPosition() < 0) {
+       stepper.moveTo(0); 
+       if (millis() - lastLimitSound > 500) {
+         playSound(SND_LIMIT);
+         lastLimitSound = millis();
+       }
     }
 
     stepper.run();
