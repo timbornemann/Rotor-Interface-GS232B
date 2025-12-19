@@ -48,6 +48,58 @@ ROTOR_CONNECTION: Optional[Any] = None
 ROTOR_LOCK = threading.Lock()
 ROTOR_STATUS: Optional[Dict[str, Any]] = None
 
+# Client tracking for multi-client awareness
+CLIENTS: Dict[str, Dict[str, Any]] = {}
+CLIENTS_LOCK = threading.Lock()
+CLIENT_TIMEOUT_SECONDS = 30
+
+
+def _now_ts() -> float:
+    return time.time()
+
+
+def _purge_stale_clients(now: Optional[float] = None) -> None:
+    timestamp = now if now is not None else _now_ts()
+    expired = []
+    with CLIENTS_LOCK:
+        for client_id, client in CLIENTS.items():
+            last_seen = client.get("lastSeen")
+            if isinstance(last_seen, (int, float)) and timestamp - last_seen > CLIENT_TIMEOUT_SECONDS:
+                expired.append(client_id)
+        for client_id in expired:
+            CLIENTS.pop(client_id, None)
+
+
+def _touch_client(client_id: str, address: str, user_agent: str, reset_suspend: bool = False) -> Dict[str, Any]:
+    timestamp = _now_ts()
+    with CLIENTS_LOCK:
+        client = CLIENTS.get(client_id)
+        if client is None:
+            client = {
+                "id": client_id,
+                "address": address,
+                "userAgent": user_agent,
+                "connectedAt": timestamp,
+                "lastSeen": timestamp,
+                "suspended": False
+            }
+            CLIENTS[client_id] = client
+        else:
+            client["address"] = address
+            client["userAgent"] = user_agent
+            client["lastSeen"] = timestamp
+            if reset_suspend:
+                client["suspended"] = False
+        return client.copy()
+
+
+def _is_client_suspended(client_id: Optional[str]) -> bool:
+    if not client_id:
+        return False
+    with CLIENTS_LOCK:
+        client = CLIENTS.get(client_id)
+        return bool(client and client.get("suspended"))
+
 
 def iso_timestamp() -> str:
     """Return a simple UTC ISO timestamp."""
@@ -287,6 +339,26 @@ elevationOffset=0
         except json.JSONDecodeError:
             return {}
 
+    def _get_client_id(self, payload: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        header_id = self.headers.get("X-Client-Id")
+        if header_id:
+            return header_id.strip()
+        if payload and isinstance(payload, dict):
+            body_id = payload.get("clientId")
+            if isinstance(body_id, str) and body_id.strip():
+                return body_id.strip()
+        return None
+
+    def _register_client(self, client_id: Optional[str], reset_suspend: bool = False) -> None:
+        if not client_id:
+            return
+        _touch_client(
+            client_id=client_id,
+            address=self.client_address[0],
+            user_agent=self.headers.get("User-Agent", ""),
+            reset_suspend=reset_suspend
+        )
+
     # --- routing ---------------------------------------------------------
     def do_OPTIONS(self) -> None:
         # Minimal CORS support for API usage from the frontend.
@@ -299,6 +371,10 @@ elevationOffset=0
     def do_GET(self) -> None:
         global ROTOR_CONNECTION
         parsed = urlparse(self.path)
+        client_id = self._get_client_id()
+        if client_id:
+            self._register_client(client_id)
+            _purge_stale_clients()
         
         # Legacy endpoint
         if parsed.path == "/api/commands":
@@ -325,6 +401,23 @@ elevationOffset=0
                     })
                 else:
                     self._send_json({"connected": False})
+            return
+
+        if parsed.path == "/api/clients":
+            _purge_stale_clients()
+            with CLIENTS_LOCK:
+                clients = list(CLIENTS.values())
+            clients.sort(key=lambda item: item.get("lastSeen", 0), reverse=True)
+            with ROTOR_LOCK:
+                if ROTOR_CONNECTION and ROTOR_CONNECTION.is_connected():
+                    server_info = {
+                        "connected": True,
+                        "port": ROTOR_CONNECTION.port,
+                        "baudRate": ROTOR_CONNECTION.baud_rate
+                    }
+                else:
+                    server_info = {"connected": False}
+            self._send_json({"clients": clients, "server": server_info})
             return
         
         if parsed.path == "/api/rotor/position":
@@ -400,6 +493,7 @@ elevationOffset=0
     def do_POST(self) -> None:
         global ROTOR_CONNECTION
         parsed = urlparse(self.path)
+        payload = None
         
         # Legacy endpoint
         if parsed.path == "/api/commands":
@@ -423,6 +517,10 @@ elevationOffset=0
         # New rotor API endpoints
         if parsed.path == "/api/rotor/connect":
             payload = self._read_json_body()
+            client_id = self._get_client_id(payload)
+            if _is_client_suspended(client_id):
+                self._send_json({"error": "client suspended"}, HTTPStatus.FORBIDDEN)
+                return
             port = payload.get("port")
             baud_rate = payload.get("baudRate", 9600)
             
@@ -435,6 +533,7 @@ elevationOffset=0
                     if ROTOR_CONNECTION is None:
                         ROTOR_CONNECTION = RotorConnection()
                     ROTOR_CONNECTION.connect(port.strip(), int(baud_rate))
+                self._register_client(client_id, reset_suspend=False)
                 self._send_json({"status": "ok", "port": port, "baudRate": baud_rate})
             except Exception as e:
                 self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
@@ -442,10 +541,16 @@ elevationOffset=0
         
         if parsed.path == "/api/rotor/disconnect":
             try:
+                payload = self._read_json_body()
+                client_id = self._get_client_id(payload)
+                if _is_client_suspended(client_id):
+                    self._send_json({"error": "client suspended"}, HTTPStatus.FORBIDDEN)
+                    return
                 with ROTOR_LOCK:
                     if ROTOR_CONNECTION:
                         ROTOR_CONNECTION.disconnect()
                         ROTOR_CONNECTION = None
+                self._register_client(client_id, reset_suspend=False)
                 self._send_json({"status": "ok"})
             except Exception as e:
                 self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
@@ -454,6 +559,10 @@ elevationOffset=0
         if parsed.path == "/api/rotor/command":
             
             payload = self._read_json_body()
+            client_id = self._get_client_id(payload)
+            if _is_client_suspended(client_id):
+                self._send_json({"error": "client suspended"}, HTTPStatus.FORBIDDEN)
+                return
             command = payload.get("command")
             
             if not isinstance(command, str) or not command.strip():
@@ -471,14 +580,70 @@ elevationOffset=0
                 entry = {
                     "received_at": iso_timestamp(),
                     "command": command.strip(),
-                    "meta": {"source": "api"}
+                    "meta": {"source": "api", "clientId": client_id}
                 }
                 with COMMAND_LOCK:
                     COMMAND_LOG.append(entry)
+                self._register_client(client_id, reset_suspend=False)
                 
                 self._send_json({"status": "ok"})
             except Exception as e:
                 self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if parsed.path == "/api/clients/register":
+            payload = self._read_json_body()
+            client_id = self._get_client_id(payload)
+            if not client_id:
+                self._send_json({"error": "clientId required"}, HTTPStatus.BAD_REQUEST)
+                return
+            client = _touch_client(
+                client_id=client_id,
+                address=self.client_address[0],
+                user_agent=self.headers.get("User-Agent", ""),
+                reset_suspend=True
+            )
+            _purge_stale_clients()
+            self._send_json({"status": "ok", "client": client})
+            return
+
+        if parsed.path == "/api/clients/heartbeat":
+            payload = self._read_json_body()
+            client_id = self._get_client_id(payload)
+            if not client_id:
+                self._send_json({"error": "clientId required"}, HTTPStatus.BAD_REQUEST)
+                return
+            client = _touch_client(
+                client_id=client_id,
+                address=self.client_address[0],
+                user_agent=self.headers.get("User-Agent", ""),
+                reset_suspend=False
+            )
+            _purge_stale_clients()
+            self._send_json({"status": "ok", "client": client})
+            return
+
+        if parsed.path == "/api/clients/suspend":
+            payload = self._read_json_body()
+            client_id = self._get_client_id(payload)
+            target_id = payload.get("targetClientId") if isinstance(payload, dict) else None
+            suspended = payload.get("suspended") if isinstance(payload, dict) else None
+            if not isinstance(target_id, str) or not target_id.strip():
+                self._send_json({"error": "targetClientId required"}, HTTPStatus.BAD_REQUEST)
+                return
+            if not isinstance(suspended, bool):
+                self._send_json({"error": "suspended must be boolean"}, HTTPStatus.BAD_REQUEST)
+                return
+            with CLIENTS_LOCK:
+                target = CLIENTS.get(target_id)
+                if not target:
+                    self._send_json({"error": "client not found"}, HTTPStatus.NOT_FOUND)
+                    return
+                target["suspended"] = suspended
+            if client_id:
+                self._register_client(client_id, reset_suspend=False)
+            _purge_stale_clients()
+            self._send_json({"status": "ok"})
             return
 
         if parsed.path == "/api/config/ini":
@@ -510,6 +675,10 @@ def run_server(port: int) -> None:
         print("  - /api/rotor/command - Send command to rotor")
         print("  - /api/rotor/status - Get current status")
         print("  - /api/rotor/position - Get position with cone settings (C2 status)")
+        print("  - /api/clients - List active clients")
+        print("  - /api/clients/register - Register client session")
+        print("  - /api/clients/heartbeat - Update client heartbeat")
+        print("  - /api/clients/suspend - Suspend/resume a client")
         print("  - /api/config/ini - Read INI configuration file (read-only)")
         if not SERIAL_AVAILABLE:
             print("WARNING: COM port functionality disabled (pyserial not installed)")

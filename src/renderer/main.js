@@ -402,6 +402,8 @@ async function init() {
   await rotor.setSpeed(getSpeedConfigFromState());
 
   updateSerialSupportNotice();
+  void rotor.registerServerClient();
+  rotor.startClientHeartbeat();
   
   // Warnung aktualisieren wenn Modus wechselt
   if (connectionModeSelect) {
@@ -429,11 +431,13 @@ async function init() {
   if (simulationToggle) {
     simulationToggle.addEventListener('change', () => {
       refreshPorts().catch(reportError);
+      updateServerStatusSync();
     });
   }
 
   await refreshPorts();
   subscribeToStatus();
+  updateServerStatusSync();
 
   logAction('Initialisierung abgeschlossen', {
     baudRate: config.baudRate,
@@ -946,6 +950,8 @@ async function handleRampSettingsChange() {
 
 let lastStatusReceivedTime = null;
 let statusCheckInterval = null;
+let serverStatusInterval = null;
+let serverStatusInFlight = false;
 
 function setConnectionState(state) {
   connected = state;
@@ -996,6 +1002,77 @@ function setConnectionState(state) {
   
   connectionStatus.classList.toggle('connected', state);
   connectionStatus.classList.toggle('disconnected', !state);
+}
+
+async function syncServerConnectionState() {
+  const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
+  if (isFileProtocol || serverStatusInFlight) {
+    return;
+  }
+  const connectionMode = connectionModeSelect ? connectionModeSelect.value : config.connectionMode;
+  const isSimulation = (simulationToggle ? simulationToggle.checked : config.simulation);
+  if (connectionMode !== 'server' || isSimulation) {
+    return;
+  }
+
+  serverStatusInFlight = true;
+  try {
+    await rotor.registerServerClient();
+    const response = await fetch(`${window.location.origin}/api/rotor/status`, {
+      headers: rotor.buildServerHeaders()
+    });
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    if (data.connected) {
+      if (portSelect && data.port) {
+        let option = Array.from(portSelect.options).find((opt) => opt.value === data.port);
+        if (!option) {
+          option = document.createElement('option');
+          option.value = data.port;
+          option.textContent = `Server ${data.port}`;
+          option.dataset.serverPort = 'true';
+          portSelect.appendChild(option);
+        }
+        portSelect.value = data.port;
+      }
+      if (!connected) {
+        const baudRate = Number(data.baudRate || config.baudRate) || 9600;
+        const azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
+        const path = data.port || config.portPath || portSelect?.value;
+        await rotor.connect({ path, baudRate, simulation: false, useServer: true, azimuthMode });
+        rotor.startPolling(Number(config.pollingIntervalMs) || 1000);
+        setConnectionState(true);
+      }
+    } else if (connected) {
+      await rotor.disconnect();
+      setConnectionState(false);
+    }
+  } catch (error) {
+    console.warn('[main] Server-Status konnte nicht synchronisiert werden', error);
+  } finally {
+    serverStatusInFlight = false;
+  }
+}
+
+function updateServerStatusSync() {
+  const connectionMode = connectionModeSelect ? connectionModeSelect.value : config.connectionMode;
+  const isSimulation = (simulationToggle ? simulationToggle.checked : config.simulation);
+  if (connectionMode !== 'server' || isSimulation) {
+    if (serverStatusInterval) {
+      clearInterval(serverStatusInterval);
+      serverStatusInterval = null;
+    }
+    return;
+  }
+  if (serverStatusInterval) {
+    return;
+  }
+  void syncServerConnectionState();
+  serverStatusInterval = setInterval(() => {
+    void syncServerConnectionState();
+  }, 2000);
 }
 
 function subscribeToStatus() {
@@ -1084,6 +1161,7 @@ function updateConnectionModeUI() {
   
   // Aktualisiere Port-Liste basierend auf Modus
   refreshPorts().catch(reportError);
+  updateServerStatusSync();
 }
 
 async function handleConnectionModeChange() {
