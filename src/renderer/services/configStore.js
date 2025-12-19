@@ -4,7 +4,6 @@ const defaultConfig = {
   baudRate: 9600,
   pollingIntervalMs: 1000,
   simulation: false,
-  connectionMode: 'server', // Forced to server
   // Speed limits
   speedMinDegPerSec: 0.5,
   speedMaxDegPerSec: 20,
@@ -79,18 +78,10 @@ class ConfigStore {
   }
 
   sanitizeConfig(config) {
-    // Reuse existing sanitization logic but ensure connectionMode is server
-    const sanitized = { ...config, connectionMode: 'server' };
-    
-    // (We could keep the detailed sanitization logic here or rely on server validation)
-    // For UI consistency, we keep basic limits logic locally for immediate feedback
-    // but simplified to essential bounds check if needed.
-    // Copy-pasting the robust sanitization from original file is safer.
+    const sanitized = { ...config };
     
     sanitized.speedMinDegPerSec = this.sanitizeNumber(config.speedMinDegPerSec, 0.1, 100, defaultConfig.speedMinDegPerSec);
     sanitized.speedMaxDegPerSec = this.sanitizeNumber(config.speedMaxDegPerSec, sanitized.speedMinDegPerSec, 200, defaultConfig.speedMaxDegPerSec);
-    
-    // ... [Abbreviated sanitization for brevity, server also validates] ...
     
     return sanitized;
   }
@@ -101,7 +92,7 @@ class ConfigStore {
         const resp = await fetch(`${this.apiBase}/api/settings`);
         if (resp.ok) {
             const serverConfig = await resp.json();
-            return { ...defaultConfig, ...serverConfig, connectionMode: 'server' };
+            return { ...defaultConfig, ...serverConfig };
         }
     } catch(e) {
         console.warn('Failed to load settings from server', e);
@@ -116,14 +107,7 @@ class ConfigStore {
   }
 
   async save(partial) {
-      // Fetch current state first to ensure clean merge? 
-      // Or just merge with defaults?
-      // Since we don't have sync access to latest state, we relay on partial update
-      // But server overwrite logic implies we should send full config or server supports PATCH?
-      // python_server `SettingsManager.update` calls `dict.update`, so partial is fine.
-      
       const toSend = { ...partial };
-      // Sanitize? 
       
       try {
           const resp = await fetch(`${this.apiBase}/api/settings`, {

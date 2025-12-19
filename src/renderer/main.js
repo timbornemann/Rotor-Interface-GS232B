@@ -541,14 +541,12 @@ async function handleConnect() {
     applyOffsetsToRotor();
     applyScaleFactorsToRotor();
     
-    // We update config first so connection uses latest settings
     config = await configStore.save({
       baudRate,
       pollingIntervalMs,
-      simulation: false, // Ensure this is false
+      simulation: false,
       portPath: path,
-      azimuthMode,
-      connectionMode: 'server'
+      azimuthMode
     });
 
     await rotor.connect({ path, baudRate, simulation: false, azimuthMode });

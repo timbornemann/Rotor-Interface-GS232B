@@ -16,7 +16,6 @@ DEFAULT_CONFIG = {
     "baudRate": 9600,
     "pollingIntervalMs": 1000,
     "simulation": False,
-    "connectionMode": "server",  # Always server mode
     
     # Coordinates
     "mapLatitude": None,
@@ -92,7 +91,6 @@ DEFAULT_INI_TEMPLATE = """; Rotor Control Configuration
 baudRate=9600
 pollingIntervalMs=1000
 simulation=false
-connectionMode=server
 
 [Coordinates]
 ; Map display coordinates
@@ -234,9 +232,6 @@ class SettingsManager:
             # Merge: defaults -> INI -> JSON (JSON has highest priority)
             self.cache.update(ini_config)
             self.cache.update(json_config)
-            
-            # Ensure connectionMode is always 'server'
-            self.cache["connectionMode"] = "server"
 
     def get_all(self) -> Dict[str, Any]:
         """Get all settings as a dictionary."""
@@ -246,10 +241,6 @@ class SettingsManager:
     def update(self, new_settings: Dict[str, Any]):
         """Update settings and save to JSON."""
         with self.lock:
-            # Prevent changing connectionMode
-            if "connectionMode" in new_settings:
-                new_settings["connectionMode"] = "server"
-            
             self.cache.update(new_settings)
             
             # Save to JSON for persistence

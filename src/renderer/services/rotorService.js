@@ -32,29 +32,18 @@ class RotorService {
   // --- API Wrappers ---
   
   async listPorts() {
-    // Only fetch from server
     try {
       const resp = await fetch(`${this.apiBase}/api/rotor/ports`);
       if (!resp.ok) throw new Error(`Server Error: ${resp.status}`);
       const data = await resp.json();
       return data.ports.map(p => ({
           path: p.path,
-          friendlyName: p.friendlyName,
-          serverPort: true,
-          simulated: false
+          friendlyName: p.friendlyName
       }));
     } catch (e) {
       console.error("Failed to list ports", e);
       return [];
     }
-  }
-  
-  async requestPortAccess() {
-    throw new Error("Local port access is disabled. Please use Server ports.");
-  }
-  
-  supportsWebSerial() {
-    return false; // Disabled by design
   }
 
   async connect(config) {
@@ -72,7 +61,7 @@ class RotorService {
         
         this.isConnected = true;
         this.startPolling();
-        console.log("Connected to Server Port");
+        console.log("Connected");
         
     } catch (e) {
         this.emitError(e);
@@ -183,16 +172,11 @@ class RotorService {
   }
 
   // --- Polling ---
-  // The server handles C2 polling to the rotor hardware (every 1s).
-  // The frontend only fetches the cached status from the server.
-  // This avoids multiple clients flooding the serial connection with C2 requests.
   
   startPolling() {
       if (this.statusPollTimer) clearInterval(this.statusPollTimer);
-      // Poll server for cached status every 1000ms
-      // The server already sends C2 to hardware every 1s, so this just syncs UI
       this.statusPollTimer = setInterval(() => this.poll(), 1000);
-      this.poll(); // Initial poll
+      this.poll();
   }
   
   stopPolling() {
@@ -201,20 +185,14 @@ class RotorService {
   }
   
   async poll() {
-      // Don't poll if we know we are disconnected logic is handled by main.js calling stopPolling()
       try {
           const resp = await fetch(`${this.apiBase}/api/rotor/status`);
           if (resp.ok) {
               const data = await resp.json();
               
               if (data.status) {
-                  // Transform to format expected by UI
-                  // UI expects status.azimuth, status.elevation (calibrated)
-                  // and status.azimuthRaw (raw) lines for history
-                  
                   const s = data.status;
                   
-                  // Construct object compatible with main.js handlers
                   const newStatus = {
                       azimuth: s.calibrated.azimuth, 
                       elevation: s.calibrated.elevation,
@@ -229,7 +207,7 @@ class RotorService {
               }
           }
       } catch (e) {
-          // console.error("Poll error:", e);
+          // Silent fail
       }
   }
 

@@ -198,13 +198,9 @@ class SettingsModal {
     // Connection tab
     const settingsBaudInput = document.getElementById('settingsBaudInput');
     const settingsPollingInput = document.getElementById('settingsPollingInput');
-    // const settingsSimulationToggle = document.getElementById('settingsSimulationToggle'); // Removed
-    const settingsConnectionModeSelect = document.getElementById('settingsConnectionModeSelect');
 
     if (settingsBaudInput) settingsBaudInput.value = config.baudRate || 9600;
     if (settingsPollingInput) settingsPollingInput.value = config.pollingIntervalMs || 1000;
-    // if (settingsSimulationToggle) settingsSimulationToggle.checked = config.simulation || false; // Removed
-    if (settingsConnectionModeSelect) settingsConnectionModeSelect.value = config.connectionMode || 'local';
 
     // Coordinates tab
     const settingsMapCoordinatesInput = document.getElementById('settingsMapCoordinatesInput');
@@ -291,13 +287,10 @@ class SettingsModal {
     // Connection tab
     const settingsBaudInput = document.getElementById('settingsBaudInput');
     const settingsPollingInput = document.getElementById('settingsPollingInput');
-    const settingsConnectionModeSelect = document.getElementById('settingsConnectionModeSelect');
     const settingsPortSelect = document.getElementById('settingsPortSelect');
 
     if (settingsBaudInput) config.baudRate = Number(settingsBaudInput.value) || 9600;
     if (settingsPollingInput) config.pollingIntervalMs = Number(settingsPollingInput.value) || 1000;
-    // Simulation is now strictly determined by port selection
-    if (settingsConnectionModeSelect) config.connectionMode = settingsConnectionModeSelect.value;
     if (settingsPortSelect && settingsPortSelect.value) {
       const selectedOption = settingsPortSelect.selectedOptions[0];
       if (selectedOption) {
