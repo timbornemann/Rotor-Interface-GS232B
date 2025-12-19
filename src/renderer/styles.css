@@ -1053,6 +1053,89 @@ button:active {
   gap: 1rem;
 }
 
+.server-clients-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1.25rem;
+}
+
+.server-clients-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.server-clients-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.server-clients-count {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.server-clients-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.server-clients-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.server-client-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.server-client-item.suspended {
+  border-color: rgba(255, 145, 0, 0.6);
+  background: rgba(255, 145, 0, 0.08);
+}
+
+.server-client-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.server-client-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.server-client-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.server-client-actions button {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.server-clients-empty {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .calibration-wizard {
   gap: 1.25rem;
 }
