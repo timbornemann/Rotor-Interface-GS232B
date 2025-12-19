@@ -5,10 +5,17 @@ INI serves as factory defaults, JSON stores user overrides.
 """
 
 import json
+import sys
 import configparser
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
+
+def log(message: str) -> None:
+    """Print message with timestamp prefix."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}", file=sys.stdout, flush=True)
 
 # Complete default configuration with all UI-relevant values
 DEFAULT_CONFIG = {
@@ -180,9 +187,9 @@ class SettingsManager:
         try:
             with open(self.ini_file, 'w', encoding='utf-8') as f:
                 f.write(DEFAULT_INI_TEMPLATE)
-            print(f"[Settings] Generated default INI: {self.ini_file}")
+            log(f"[Settings] Generated default INI: {self.ini_file}")
         except Exception as e:
-            print(f"[Settings] Error generating default INI: {e}")
+            log(f"[Settings] Error generating default INI: {e}")
 
     def _load(self):
         """Load all settings into cache."""
@@ -192,7 +199,7 @@ class SettingsManager:
             
             # 1. Generate INI if missing
             if not self.ini_file.exists():
-                print(f"[Settings] INI file not found, generating defaults...")
+                log(f"[Settings] INI file not found, generating defaults...")
                 self._generate_default_ini()
             
             # 2. Load INI (Base Hardware Config)
@@ -218,7 +225,7 @@ class SettingsManager:
                             val = value
                         ini_config[key] = val
             except Exception as e:
-                print(f"[Settings] Error loading INI: {e}")
+                log(f"[Settings] Error loading INI: {e}")
 
             # 3. Load JSON (Web/User Overrides)
             json_config = {}
@@ -227,7 +234,7 @@ class SettingsManager:
                     with open(self.json_file, 'r', encoding='utf-8') as f:
                         json_config = json.load(f)
                 except Exception as e:
-                    print(f"[Settings] Error loading JSON: {e}")
+                    log(f"[Settings] Error loading JSON: {e}")
 
             # Merge: defaults -> INI -> JSON (JSON has highest priority)
             self.cache.update(ini_config)
@@ -248,4 +255,4 @@ class SettingsManager:
                 with open(self.json_file, 'w', encoding='utf-8') as f:
                     json.dump(self.cache, f, indent=2)
             except Exception as e:
-                print(f"[Settings] Error saving JSON: {e}")
+                log(f"[Settings] Error saving JSON: {e}")

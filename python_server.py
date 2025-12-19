@@ -22,6 +22,7 @@ import argparse
 import configparser
 import json
 import re
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -31,14 +32,19 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
+def log(message: str) -> None:
+    """Print message with timestamp prefix."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}", file=sys.stdout, flush=True)
+
 try:
     import serial
     import serial.tools.list_ports
     SERIAL_AVAILABLE = True
 except ImportError:
     SERIAL_AVAILABLE = False
-    print("WARNING: pyserial not installed. COM port functionality will be disabled.")
-    print("Install with: pip install pyserial")
+    log("WARNING: pyserial not installed. COM port functionality will be disabled.")
+    log("Install with: pip install pyserial")
 
 from rotor_logic import RotorLogic
 from settings_manager import SettingsManager
@@ -114,7 +120,7 @@ class RotorConnection:
             self.read_thread.start()
             self.polling_thread = threading.Thread(target=self._polling_loop, daemon=True)
             self.polling_thread.start()
-            print(f"[RotorConnection] Connected to {port} at {baud_rate} baud")
+            log(f"[RotorConnection] Connected to {port} at {baud_rate} baud")
         except Exception as e:
             self.serial = None
             raise RuntimeError(f"Failed to connect to {port}: {e}")
@@ -138,7 +144,7 @@ class RotorConnection:
                 try:
                     self.serial.close()
                 except Exception as e:
-                    print(f"[RotorConnection] Error closing port: {e}")
+                    log(f"[RotorConnection] Error closing port: {e}")
         self.serial = None
         self.port = None
         self.buffer = ""
@@ -147,7 +153,7 @@ class RotorConnection:
         self.buffer = ""
         with self.status_lock:
             self.status = None
-        print("[RotorConnection] Disconnected")
+        log("[RotorConnection] Disconnected")
 
     def send_command(self, command: str) -> None:
         """Send a command to the rotor."""
@@ -158,7 +164,7 @@ class RotorConnection:
         try:
             with self.write_lock:
                  self.serial.write(command_with_cr.encode('utf-8'))
-            print(f"[RotorConnection] Sent: {command_with_cr!r}")
+            log(f"[RotorConnection] Sent: {command_with_cr!r}")
         except Exception as e:
             raise RuntimeError(f"Failed to send command: {e}")
 
@@ -168,12 +174,12 @@ class RotorConnection:
         """Background thread to poll the rotor for status."""
         while self.polling_active and self.serial and self.serial.is_open:
             try:
-                # Send C2 every 1 second
+                # Send C2 every 500ms (2x per second)
                 self.send_command("C2")
-                time.sleep(1.0)
+                time.sleep(0.5)
             except Exception as e:
-                print(f"[RotorConnection] Polling error: {e}")
-                time.sleep(2.0)
+                log(f"[RotorConnection] Polling error: {e}")
+                time.sleep(1.0)
 
     def _read_loop(self) -> None:
         """Background thread to read data from the serial port."""
@@ -195,7 +201,7 @@ class RotorConnection:
                                 if line:
                                     self._process_status_line(line)
                     except Exception as e:
-                        print(f"[RotorConnection] Decode error: {e}")
+                        log(f"[RotorConnection] Decode error: {e}")
                 else:
                     time.sleep(0.1)
             except Exception as e:
@@ -251,7 +257,7 @@ def list_available_ports() -> List[Dict[str, Any]]:
                 "hwid": port_info.hwid
             })
     except Exception as e:
-        print(f"[list_available_ports] Error: {e}")
+        log(f"[list_available_ports] Error: {e}")
     
     return ports
 
@@ -478,12 +484,12 @@ def run_server(port: int) -> None:
     handler = lambda *args, **kwargs: RotorHandler(*args, **kwargs)
     
     with ThreadingHTTPServer(("0.0.0.0", port), handler) as httpd:
-        print(f"Serving Rotor UI from {SERVER_ROOT} at http://localhost:{port}")
-        print("API V2 enabled (Server-Side Logic)")
+        log(f"Serving Rotor UI from {SERVER_ROOT} at http://localhost:{port}")
+        log("API V2 enabled (Server-Side Logic)")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            print("Shutting down...")
+            log("Shutting down...")
             if ROTOR_LOGIC:
                 ROTOR_LOGIC.stop()
             if ROTOR_CONNECTION:

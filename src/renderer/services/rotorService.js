@@ -175,7 +175,9 @@ class RotorService {
   
   startPolling() {
       if (this.statusPollTimer) clearInterval(this.statusPollTimer);
-      this.statusPollTimer = setInterval(() => this.poll(), 1000);
+      // Poll every 200ms for smooth UI updates
+      // Server updates its cache every 1s, but we can query more frequently
+      this.statusPollTimer = setInterval(() => this.poll(), 200);
       this.poll();
   }
   
