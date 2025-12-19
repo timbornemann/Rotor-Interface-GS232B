@@ -37,20 +37,20 @@ const mapView = new MapView(document.getElementById('mapCanvas'));
 // Setup click handler for map
 mapView.setOnClick(async (azimuth, elevation) => {
   if (!connected) {
-    logAction('Klick auf Karte verworfen, nicht verbunden', { azimuth, elevation });
+    logAction('Klick auf Karte verworfen, nicht verbunden', { azimuth });
     return;
   }
   
-  // Validiere gegen Limits
-  if (!validateTargets({ az: azimuth, el: elevation })) {
-    logAction('Klick auf Karte verworfen, Ziel außerhalb Limits', { azimuth, elevation });
+  // Validiere gegen Limits (nur Azimut)
+  if (!validateTargets({ az: azimuth })) {
+    logAction('Klick auf Karte verworfen, Ziel außerhalb Limits', { azimuth });
     return;
   }
   
-  logAction('Klick auf Karte - Rotor wird bewegt', { azimuth: azimuth.toFixed(1), elevation: elevation.toFixed(1) });
+  logAction('Klick auf Karte - Rotor wird bewegt (nur Azimut)', { azimuth: azimuth.toFixed(1) });
   try {
-    // RotorService.setAzEl berücksichtigt bereits die kürzeste Richtung und Limits
-    await rotor.setAzEl({ az: azimuth, el: elevation });
+    // Nur Azimut anfahren, Elevation ignorieren (da in der Karte ungenau)
+    await rotor.setAzimuth(azimuth);
   } catch (error) {
     reportError(error);
   }
