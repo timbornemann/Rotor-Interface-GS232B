@@ -1,0 +1,219 @@
+"""API route handlers for the rotor interface.
+
+Contains all route handler functions for the REST API endpoints.
+"""
+
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler
+from typing import TYPE_CHECKING
+
+from server.api.middleware import send_json, read_json_body
+from server.connection.port_scanner import list_available_ports
+
+if TYPE_CHECKING:
+    from server.core.state import ServerState
+
+
+# --- Settings Routes ---
+
+def handle_get_settings(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/settings - Get all configuration.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    send_json(handler, state.settings.get_all())
+
+
+def handle_post_settings(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/settings - Update configuration.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    payload = read_json_body(handler)
+    state.settings.update(payload)
+    
+    # Update RotorLogic config too
+    if state.rotor_logic:
+        state.rotor_logic.update_config(state.settings.get_all())
+    
+    send_json(handler, {"status": "ok", "settings": state.settings.get_all()})
+
+
+# --- Port Routes ---
+
+def handle_get_ports(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/rotor/ports - List available COM ports.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    ports = list_available_ports()
+    send_json(handler, {"ports": ports})
+
+
+# --- Status Routes ---
+
+def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/rotor/status - Get current rotor status.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    with state.rotor_lock:
+        if state.rotor_connection and state.rotor_connection.is_connected():
+            # Get raw status from connection
+            status = state.rotor_connection.get_status()
+            
+            config = state.settings.get_all()
+            azimuth_raw = status.get("azimuthRaw") if status else None
+            elevation_raw = status.get("elevationRaw") if status else None
+            
+            # Calculate calibrated values
+            calibrated = {"azimuth": None, "elevation": None}
+            if azimuth_raw is not None:
+                scale = config.get("azimuthScaleFactor", 1.0) or 1.0
+                offset = config.get("azimuthOffset", 0.0) or 0.0
+                calibrated["azimuth"] = (azimuth_raw + offset) / scale
+            
+            if elevation_raw is not None:
+                scale = config.get("elevationScaleFactor", 1.0) or 1.0
+                offset = config.get("elevationOffset", 0.0) or 0.0
+                calibrated["elevation"] = (elevation_raw + offset) / scale
+
+            send_json(handler, {
+                "connected": True,
+                "port": state.rotor_connection.port,
+                "baudRate": state.rotor_connection.baud_rate,
+                "status": {
+                    "rawLine": status.get("raw") if status else None,
+                    "timestamp": status.get("timestamp") if status else None,
+                    "rph": {
+                        "azimuth": azimuth_raw,
+                        "elevation": elevation_raw
+                    },
+                    "calibrated": calibrated
+                },
+                "clientCount": state.client_count
+            })
+        else:
+            send_json(handler, {"connected": False, "clientCount": 0})
+
+
+# --- Connection Routes ---
+
+def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/connect - Connect to a COM port.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    payload = read_json_body(handler)
+    port = payload.get("port")
+    baud_rate = payload.get("baudRate", 9600)
+    
+    if not port:
+        send_json(handler, {"error": "port required"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    with state.rotor_lock:
+        try:
+            if state.rotor_connection.is_connected():
+                if state.rotor_connection.port == port:
+                    state.client_count += 1
+                    send_json(handler, {"status": "ok", "message": "Already connected"})
+                    return
+                else:
+                    send_json(
+                        handler, 
+                        {"error": "Already connected to another port"}, 
+                        HTTPStatus.BAD_REQUEST
+                    )
+                    return
+            
+            state.rotor_connection.connect(port, int(baud_rate))
+            state.client_count = 1
+            send_json(handler, {"status": "ok"})
+        except Exception as e:
+            send_json(handler, {"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_disconnect(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/disconnect - Disconnect from COM port.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    with state.rotor_lock:
+        if state.rotor_connection and state.rotor_connection.is_connected():
+            state.client_count = max(0, state.client_count - 1)
+            if state.client_count == 0:
+                state.rotor_connection.disconnect()
+                send_json(handler, {"status": "ok", "message": "Disconnected"})
+            else:
+                send_json(handler, {
+                    "status": "ok", 
+                    "message": "Client disconnected", 
+                    "remaining": state.client_count
+                })
+        else:
+            send_json(handler, {"status": "ok", "message": "Not connected"})
+
+
+# --- Control Routes ---
+
+def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/set_target - Set target azimuth/elevation.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    payload = read_json_body(handler)
+    az = payload.get("az")
+    el = payload.get("el")
+    
+    if state.rotor_logic:
+        state.rotor_logic.set_target(az, el)
+        send_json(handler, {"status": "ok"})
+    else:
+        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/manual - Start manual movement.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    payload = read_json_body(handler)
+    direction = payload.get("direction")
+    
+    if state.rotor_logic:
+        state.rotor_logic.manual_move(direction)
+        send_json(handler, {"status": "ok"})
+    else:
+        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_stop(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/stop - Stop all motion.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    if state.rotor_logic:
+        state.rotor_logic.stop_motion()
+        send_json(handler, {"status": "ok"})
+    else:
+        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+

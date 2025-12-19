@@ -55,6 +55,7 @@ static char lastRx[17] = "RX: (ready)     ";
 static char rawCmd[14] = "(ready)";
 static uint32_t lastCmdTime = 0;
 static uint32_t errLedOffAt = 0;
+static uint32_t c2LedOffAt = 0; // Timer für blaue LED
 static uint32_t lastMicros = 0;
 static bool wasMoving = false; // Für Sound-Erkennung
 
@@ -151,13 +152,21 @@ static void updateTopRow() {
 static void handleCommand(char* cmd) {
   if (currentMode == MotionMode::MANUAL_CALIB) return;
 
+  // New C2 Logic: Blink LED, remove from display
+  if (!strcmp(cmd, "C2")) { 
+     digitalWrite(LED_MODE, HIGH);
+     c2LedOffAt = millis() + 100; // 100ms blink
+     sendLine("AZ=" + fmt3(curAz) + " EL=" + fmt3(curEl)); 
+     return; 
+  }
+
   strncpy(rawCmd, cmd, 13); rawCmd[13] = 0;
   lastCmdTime = millis();
   updateTopRow();
 
   // --- Abfragen (Stumm) ---
   if (!strcmp(cmd, "C")) { sendLine("AZ=" + fmt3(curAz)); return; }
-  if (!strcmp(cmd, "C2")) { sendLine("AZ=" + fmt3(curAz) + " EL=" + fmt3(curEl)); return; }
+  // C2 handled above
   if (!strcmp(cmd, "B")) { sendLine("EL=" + fmt3(curEl)); return; }
 
   // --- Befehle (Mit Sound) ---
@@ -173,10 +182,10 @@ static void handleCommand(char* cmd) {
     stepper.moveTo(-100000); Serial.write('\r'); 
   }
   else if (!strcmp(cmd, "P36")) { 
-    azModeMax = 360; digitalWrite(LED_MODE, LOW); Serial.write('\r'); 
+    azModeMax = 360; Serial.write('\r'); 
   }
   else if (!strcmp(cmd, "P45")) { 
-    azModeMax = MAX_AZ_LIMIT; digitalWrite(LED_MODE, HIGH); Serial.write('\r'); 
+    azModeMax = MAX_AZ_LIMIT; Serial.write('\r'); 
   }
   else if (cmd[0] == 'X') { 
     speedLevel = cmd[1]-'0'; 
@@ -220,7 +229,7 @@ void setup() {
   stepper.setAcceleration(300);
   stepper.setCurrentPosition(0);
   
-  digitalWrite(LED_MODE, HIGH);
+  digitalWrite(LED_MODE, LOW);
   lastMicros = micros();
 
   playSound(SND_STARTUP);
@@ -343,4 +352,5 @@ void loop() {
   }
   
   if (errLedOffAt && millis() > errLedOffAt) { digitalWrite(LED_ERROR, LOW); errLedOffAt = 0; }
+  if (c2LedOffAt && millis() > c2LedOffAt) { digitalWrite(LED_MODE, LOW); c2LedOffAt = 0; }
 }

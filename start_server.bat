@@ -17,9 +17,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Prüfe ob python_server.py existiert
-if not exist "python_server.py" (
-    echo FEHLER: python_server.py wurde nicht gefunden!
+REM Prüfe ob das server Verzeichnis existiert
+if not exist "server" (
+    echo FEHLER: server/ Verzeichnis wurde nicht gefunden!
     echo Bitte starten Sie die Datei aus dem Projektverzeichnis.
     echo.
     pause
@@ -36,7 +36,7 @@ echo ========================================
 echo.
 
 REM Starte den Server mit Standard-Parametern
-python python_server.py --port 8081
+REM Nutzt das neue modulare Package
+python -m server.main --port 8081
 
 pause
-
