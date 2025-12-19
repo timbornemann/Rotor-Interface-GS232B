@@ -22,7 +22,7 @@ global.navigator = {};
 global.TextEncoder = global.TextEncoder || require('util').TextEncoder;
 global.TextDecoder = global.TextDecoder || require('util').TextDecoder;
 
-const { RotorService, SimulationSerialConnection } = require('../src/renderer/services/rotorService.js');
+const { RotorService } = require('../src/renderer/services/rotorService.js');
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -40,15 +40,6 @@ test('planAzimuthTarget picks shortest wrap-around path in 450° mode', () => {
   assert.strictEqual(plan.commandValue, 10);
 });
 
-test('SimulationSerialConnection clamps azimuth targets to 450° soft limit', () => {
-  const sim = new SimulationSerialConnection({ modeMaxAz: 450 });
-  sim.setSoftLimits({ azimuthMin: 0, azimuthMax: 450 });
-  sim.azimuthRaw = 430;
-
-  const target = sim.planRawAzimuthTarget(470);
-
-  assert.strictEqual(target, 450);
-});
 
 test('planAzimuthTarget prefers CW wrap when crossing 0° in 360° mode', () => {
   const rotor = new RotorService();

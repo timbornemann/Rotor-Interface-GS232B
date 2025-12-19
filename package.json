@@ -1,7 +1,7 @@
 {
   "name": "rotor-interface-gs232b",
   "version": "1.0.0",
-  "description": "Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors mit Web Serial oder Simulation.",
+  "description": "Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors.",
   "private": true,
   "scripts": {
     "serve": "npx http-server src/renderer -p 4173 -c-1",

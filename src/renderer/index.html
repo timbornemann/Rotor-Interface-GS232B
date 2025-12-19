@@ -215,247 +215,412 @@
 
   <!-- Settings Modal -->
   <div id="settingsModal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content settings-modal">
       <div class="modal-header">
         <h2>Einstellungen</h2>
-        <button id="closeSettingsBtn" class="modal-close" type="button">×</button>
+        <button id="closeSettingsBtn" class="modal-close" type="button" aria-label="Schließen">×</button>
       </div>
-      <div class="modal-body">
-        <div class="settings-tabs">
-          <button class="tab-button active" data-tab="connection">Verbindung</button>
-          <button class="tab-button" data-tab="coordinates">Koordinaten</button>
-          <button class="tab-button" data-tab="cone">Kegel</button>
-          <button class="tab-button" data-tab="speed">Geschwindigkeit</button>
-          <button class="tab-button" data-tab="ramp">Softstart/Softstop</button>
-          <button class="tab-button" data-tab="calibration">Kalibrierung</button>
-          <button class="tab-button" data-tab="mode">Modus</button>
-        </div>
+      
+      <div class="settings-layout">
+        <!-- Sidebar Navigation -->
+        <nav class="settings-nav">
+          <button class="settings-nav-item active" data-tab="connection">
+            <span class="nav-icon">🔌</span>
+            <span class="nav-label">Verbindung</span>
+          </button>
+          <button class="settings-nav-item" data-tab="display">
+            <span class="nav-icon">🖥️</span>
+            <span class="nav-label">Anzeige</span>
+          </button>
+          <button class="settings-nav-item" data-tab="map">
+            <span class="nav-icon">🗺️</span>
+            <span class="nav-label">Karte</span>
+          </button>
+          <button class="settings-nav-item" data-tab="speed">
+            <span class="nav-icon">⚡</span>
+            <span class="nav-label">Geschwindigkeit</span>
+          </button>
+          <button class="settings-nav-item" data-tab="ramp">
+            <span class="nav-icon">📈</span>
+            <span class="nav-label">Rampe</span>
+          </button>
+          <button class="settings-nav-item" data-tab="calibration">
+            <span class="nav-icon">🎯</span>
+            <span class="nav-label">Kalibrierung</span>
+          </button>
+        </nav>
 
-        <div class="tab-content active" id="tab-connection">
-          <div class="settings-group">
-            <label>
-              Port
-              <select id="settingsPortSelect"></select>
-            </label>
-            <button id="settingsRequestPortBtn" class="secondary" type="button">Port hinzufügen</button>
-            <button id="settingsRefreshPortsBtn" class="secondary" type="button">Ports aktualisieren</button>
-
-            <label>
-              Baudrate
-              <input id="settingsBaudInput" type="number" min="1200" max="115200" step="100" value="9600" />
-            </label>
-            <label>
-              Polling (ms)
-              <input id="settingsPollingInput" type="number" min="250" max="5000" step="250" value="1000" />
-            </label>
-
-
-          </div>
-        </div>
-
-        <div class="tab-content" id="tab-coordinates">
-          <div class="settings-group">
-            <label>
-              Koordinaten (Latitude, Longitude)
-              <input id="settingsMapCoordinatesInput" type="text"
-                placeholder="z.B. 51.85911538185561, 11.422282899767954" />
-            </label>
-            <button id="settingsLoadMapBtn" class="primary" type="button">Karte laden</button>
-            <label class="checkbox">
-              <input id="settingsSatelliteMapToggle" type="checkbox" />
-              Satellitenkarte anzeigen
-            </label>
-          </div>
-        </div>
-
-        <div class="tab-content" id="tab-cone">
-          <div class="settings-group">
-            <label>
-              Kegel-Winkel (Grad)
-              <input id="settingsConeAngleInput" type="number" min="1" max="90" step="1" value="10" />
-            </label>
-            <label>
-              Kegel-Länge (Meter)
-              <input id="settingsConeLengthInput" type="number" min="0" max="100000" step="10" value="1000" />
-            </label>
-            <label>
-              Azimut-Korrektur (Grad)
-              <input id="settingsAzimuthDisplayOffsetInput" type="number" min="-180" max="180" step="0.1" value="0" />
-            </label>
-          </div>
-        </div>
-
-        <div class="tab-content" id="tab-speed">
-          <div class="settings-group">
-            <label>
-              Azimut-Geschwindigkeit (deg/s)
-              <div class="speed-inputs">
-                <input id="settingsAzSpeedRange" type="range" min="0.5" max="20" step="0.5" value="4" />
-                <input id="settingsAzSpeedInput" type="number" min="0.5" max="20" step="0.5" value="4" />
+        <!-- Settings Content -->
+        <div class="settings-content">
+          <!-- Connection Tab -->
+          <section class="settings-section active" id="tab-connection">
+            <h3 class="section-title">Verbindungseinstellungen</h3>
+            
+            <div class="settings-card">
+              <h4 class="card-title">Serieller Port</h4>
+              <div class="form-group">
+                <label for="settingsPortSelect">COM-Port</label>
+                <div class="input-with-action">
+                  <select id="settingsPortSelect"></select>
+                  <button id="settingsRefreshPortsBtn" class="icon-btn" type="button" title="Ports aktualisieren">🔄</button>
+                </div>
               </div>
-            </label>
-            <label>
-              Elevations-Geschwindigkeit (deg/s)
-              <div class="speed-inputs">
-                <input id="settingsElSpeedRange" type="range" min="0.5" max="20" step="0.5" value="2" />
-                <input id="settingsElSpeedInput" type="number" min="0.5" max="20" step="0.5" value="2" />
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="settingsBaudInput">Baudrate</label>
+                  <select id="settingsBaudInput">
+                    <option value="4800">4800</option>
+                    <option value="9600" selected>9600</option>
+                    <option value="19200">19200</option>
+                    <option value="38400">38400</option>
+                    <option value="57600">57600</option>
+                    <option value="115200">115200</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="settingsPollingInput">Polling-Intervall</label>
+                  <div class="input-unit">
+                    <input id="settingsPollingInput" type="number" min="250" max="5000" step="250" value="1000" />
+                    <span class="unit">ms</span>
+                  </div>
+                </div>
               </div>
-            </label>
-            <div class="speed-stages-grid">
-              <div>
-                <h4>Azimut (ERC-DUO Stufen)</h4>
-                <label>
-                  Low-Speed Stufe
-                  <select id="settingsAzLowSpeedSelect">
-                    <option value="1">1 (langsam)</option>
-                    <option value="2">2</option>
-                    <option value="3" selected>3</option>
-                    <option value="4">4 (schnell)</option>
-                  </select>
-                </label>
-                <label>
-                  High-Speed Stufe
-                  <select id="settingsAzHighSpeedSelect">
-                    <option value="1">1 (langsam)</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4" selected>4 (schnell)</option>
-                  </select>
-                </label>
-                <label>
-                  Speed-Angle Code (0=0°, 1=10°, 2=20°, 3=30°)
-                  <select id="settingsAzSpeedAngleSelect">
-                    <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3" selected>3</option>
-                  </select>
-                </label>
+            </div>
+
+          </section>
+
+          <!-- Display Tab -->
+          <section class="settings-section" id="tab-display">
+            <h3 class="section-title">Anzeigeeinstellungen</h3>
+            
+            <div class="settings-card">
+              <h4 class="card-title">Rotor-Modus</h4>
+              <div class="form-group">
+                <label for="settingsModeSelect">Azimut-Bereich</label>
+                <select id="settingsModeSelect">
+                  <option value="360">360° (Standard)</option>
+                  <option value="450">450° (Erweitert)</option>
+                </select>
+                <p class="help-text">450° ermöglicht Überlappung für kontinuierliche Verfolgung.</p>
               </div>
-              <div>
-                <h4>Elevation (ERC-DUO Stufen)</h4>
-                <label>
-                  Low-Speed Stufe
-                  <select id="settingsElLowSpeedSelect">
-                    <option value="1">1 (langsam)</option>
-                    <option value="2">2</option>
-                    <option value="3" selected>3</option>
-                    <option value="4">4 (schnell)</option>
-                  </select>
-                </label>
-                <label>
-                  High-Speed Stufe
-                  <select id="settingsElHighSpeedSelect">
-                    <option value="1">1 (langsam)</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4" selected>4 (schnell)</option>
-                  </select>
-                </label>
-                <label>
-                  Speed-Angle Code (0=0°, 1=10°, 2=20°, 3=30°)
-                  <select id="settingsElSpeedAngleSelect">
-                    <option value="0">0</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3" selected>3</option>
-                  </select>
+              <div class="form-group">
+                <label class="toggle-label">
+                  <input id="settingsElevationDisplayToggle" type="checkbox" class="toggle-input" checked />
+                  <span class="toggle-switch"></span>
+                  <span class="toggle-text">Elevation-Anzeige aktivieren</span>
                 </label>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div class="tab-content" id="tab-ramp">
-          <div class="settings-group">
-            <div class="ramp-header">
-              <h3>Softstart/Softstop (PI)</h3>
-              <label class="checkbox">
-                <input id="settingsRampEnabledToggle" type="checkbox" />
-                Aktivieren
-              </label>
+            <div class="settings-card">
+              <h4 class="card-title">Kegel-Visualisierung</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="settingsConeAngleInput">Öffnungswinkel</label>
+                  <div class="input-unit">
+                    <input id="settingsConeAngleInput" type="number" min="1" max="90" step="1" value="10" />
+                    <span class="unit">°</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="settingsConeLengthInput">Kegel-Reichweite</label>
+                  <div class="input-unit">
+                    <input id="settingsConeLengthInput" type="number" min="0" max="100000" step="10" value="1000" />
+                    <span class="unit">m</span>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="settingsAzimuthDisplayOffsetInput">Azimut-Korrektur</label>
+                <div class="input-unit">
+                  <input id="settingsAzimuthDisplayOffsetInput" type="number" min="-180" max="180" step="0.1" value="0" />
+                  <span class="unit">°</span>
+                </div>
+                <p class="help-text">Korrigiert die Ausrichtung der Karte zum wahren Norden.</p>
+              </div>
             </div>
-            <div class="ramp-grid">
-              <label>
-                PI-Verstärkung (Kp)
-                <input id="settingsRampKpInput" type="number" min="0" max="5" step="0.01" value="0.4" />
-                <span class="input-help">Anfangsschub des Softstarts: höher = reagiert schneller.</span>
-              </label>
-              <label>
-                Integrator (Ki)
-                <input id="settingsRampKiInput" type="number" min="0" max="5" step="0.01" value="0.05" />
-                <span class="input-help">Gleicht Restfehler aus und hilft beim sanften Stoppen.</span>
-              </label>
-              <label>
-                Regler-Abtastzeit (ms)
-                <input id="settingsRampSampleInput" type="number" min="100" max="2000" step="50" value="400" />
-                <span class="input-help">Zeit zwischen einzelnen PI-Schritten.</span>
-              </label>
-              <label>
-                Schrittbegrenzung (°)
-                <input id="settingsRampMaxStepInput" type="number" min="0.1" max="45" step="0.1" value="8" />
-                <span class="input-help">Begrenzt die pro Schritt erlaubte Winkeländerung.</span>
-              </label>
-              <label>
-                Ziel-Toleranz (°)
-                <input id="settingsRampToleranceInput" type="number" min="0.1" max="10" step="0.1" value="1.5" />
-                <span class="input-help">Abstand, innerhalb dessen die Position als erreicht gilt.</span>
-              </label>
+          </section>
+
+          <!-- Map Tab -->
+          <section class="settings-section" id="tab-map">
+            <h3 class="section-title">Karteneinstellungen</h3>
+            
+            <div class="settings-card">
+              <h4 class="card-title">Standort</h4>
+              <div class="form-group">
+                <label for="settingsMapCoordinatesInput">Koordinaten (Lat, Lon)</label>
+                <input id="settingsMapCoordinatesInput" type="text" 
+                  placeholder="z.B. 51.8591, 11.4223" />
+                <p class="help-text">GPS-Koordinaten des Antennenstandorts.</p>
+              </div>
+              <div class="form-group">
+                <label class="toggle-label">
+                  <input id="settingsSatelliteMapToggle" type="checkbox" class="toggle-input" />
+                  <span class="toggle-switch"></span>
+                  <span class="toggle-text">Satellitenkarte anzeigen</span>
+                </label>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div class="tab-content" id="tab-calibration">
-          <div class="settings-group">
-            <h3 style="margin-top: 0;">Offsets</h3>
-            <label>
-              Azimut-Offset (deg)
-              <input id="settingsAzOffsetInput" type="number" step="0.1" value="0" />
-            </label>
-            <label>
-              Elevation-Offset (deg)
-              <input id="settingsElOffsetInput" type="number" step="0.1" value="0" />
-            </label>
-
-            <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
-              <h3>Skalierungsfaktoren</h3>
-              <label>
-                Azimut-Faktor
-                <input id="settingsAzScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
-                <small style="display: block; margin-top: 0.25rem; opacity: 0.7; font-size: 0.85em;">
-                  z.B. 0.5 wenn Motor doppelt so weit dreht
-                </small>
-              </label>
-              <label>
-                Elevation-Faktor
-                <input id="settingsElScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
-                <small style="display: block; margin-top: 0.25rem; opacity: 0.7; font-size: 0.85em;">
-                  z.B. 0.5 wenn Motor doppelt so weit dreht
-                </small>
-              </label>
+            <div class="settings-card">
+              <h4 class="card-title">Zoom</h4>
+              <div class="form-row three-col">
+                <div class="form-group">
+                  <label for="settingsMapZoomLevel">Standard-Zoom</label>
+                  <input id="settingsMapZoomLevel" type="number" min="1" max="25" step="1" value="15" />
+                </div>
+                <div class="form-group">
+                  <label for="settingsMapZoomMin">Minimum</label>
+                  <input id="settingsMapZoomMin" type="number" min="1" max="25" step="1" value="5" />
+                </div>
+                <div class="form-group">
+                  <label for="settingsMapZoomMax">Maximum</label>
+                  <input id="settingsMapZoomMax" type="number" min="1" max="25" step="1" value="25" />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </section>
 
-        <div class="tab-content" id="tab-mode">
-          <div class="settings-group">
-            <label>
-              Azimut-Modus
-              <select id="settingsModeSelect">
-                <option value="360">360 deg</option>
-                <option value="450">450 deg</option>
-              </select>
-            </label>
-            <label class="checkbox">
-              <input id="settingsElevationDisplayToggle" type="checkbox" />
-              Elevation-Anzeige aktivieren
-            </label>
-          </div>
+          <!-- Speed Tab -->
+          <section class="settings-section" id="tab-speed">
+            <h3 class="section-title">Geschwindigkeitseinstellungen</h3>
+            
+            <div class="settings-card">
+              <h4 class="card-title">Drehgeschwindigkeit</h4>
+              <div class="form-group">
+                <label for="settingsAzSpeedInput">Azimut-Geschwindigkeit</label>
+                <div class="range-with-value">
+                  <input id="settingsAzSpeedRange" type="range" min="0.5" max="20" step="0.5" value="4" />
+                  <div class="input-unit compact">
+                    <input id="settingsAzSpeedInput" type="number" min="0.5" max="20" step="0.5" value="4" />
+                    <span class="unit">°/s</span>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="settingsElSpeedInput">Elevations-Geschwindigkeit</label>
+                <div class="range-with-value">
+                  <input id="settingsElSpeedRange" type="range" min="0.5" max="20" step="0.5" value="2" />
+                  <div class="input-unit compact">
+                    <input id="settingsElSpeedInput" type="number" min="0.5" max="20" step="0.5" value="2" />
+                    <span class="unit">°/s</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h4 class="card-title">ERC-DUO Stufen</h4>
+              <div class="speed-stages-grid">
+                <div class="speed-stage-column">
+                  <h5>Azimut</h5>
+                  <div class="form-group">
+                    <label for="settingsAzLowSpeedSelect">Low-Speed</label>
+                    <select id="settingsAzLowSpeedSelect">
+                      <option value="1">1 (langsam)</option>
+                      <option value="2">2</option>
+                      <option value="3" selected>3</option>
+                      <option value="4">4 (schnell)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="settingsAzHighSpeedSelect">High-Speed</label>
+                    <select id="settingsAzHighSpeedSelect">
+                      <option value="1">1 (langsam)</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4" selected>4 (schnell)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="settingsAzSpeedAngleSelect">Speed-Angle</label>
+                    <select id="settingsAzSpeedAngleSelect">
+                      <option value="0">0 (0°)</option>
+                      <option value="1">1 (10°)</option>
+                      <option value="2">2 (20°)</option>
+                      <option value="3" selected>3 (30°)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="speed-stage-column">
+                  <h5>Elevation</h5>
+                  <div class="form-group">
+                    <label for="settingsElLowSpeedSelect">Low-Speed</label>
+                    <select id="settingsElLowSpeedSelect">
+                      <option value="1">1 (langsam)</option>
+                      <option value="2">2</option>
+                      <option value="3" selected>3</option>
+                      <option value="4">4 (schnell)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="settingsElHighSpeedSelect">High-Speed</label>
+                    <select id="settingsElHighSpeedSelect">
+                      <option value="1">1 (langsam)</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4" selected>4 (schnell)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="settingsElSpeedAngleSelect">Speed-Angle</label>
+                    <select id="settingsElSpeedAngleSelect">
+                      <option value="0">0 (0°)</option>
+                      <option value="1">1 (10°)</option>
+                      <option value="2">2 (20°)</option>
+                      <option value="3" selected>3 (30°)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Ramp Tab -->
+          <section class="settings-section" id="tab-ramp">
+            <h3 class="section-title">Softstart/Softstop</h3>
+            
+            <div class="settings-card">
+              <div class="card-header-with-toggle">
+                <h4 class="card-title">PI-Regler</h4>
+                <label class="toggle-label compact">
+                  <input id="settingsRampEnabledToggle" type="checkbox" class="toggle-input" />
+                  <span class="toggle-switch"></span>
+                </label>
+              </div>
+              <p class="help-text">Aktiviert sanftes Anfahren und Abbremsen des Rotors.</p>
+              
+              <div class="ramp-settings">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="settingsRampKpInput">Verstärkung (Kp)</label>
+                    <input id="settingsRampKpInput" type="number" min="0" max="5" step="0.01" value="0.4" />
+                    <p class="help-text">Reaktionsgeschwindigkeit</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="settingsRampKiInput">Integrator (Ki)</label>
+                    <input id="settingsRampKiInput" type="number" min="0" max="5" step="0.01" value="0.05" />
+                    <p class="help-text">Restfehler-Korrektur</p>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="settingsRampSampleInput">Abtastzeit</label>
+                    <div class="input-unit">
+                      <input id="settingsRampSampleInput" type="number" min="100" max="2000" step="50" value="400" />
+                      <span class="unit">ms</span>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="settingsRampMaxStepInput">Max. Schritt</label>
+                    <div class="input-unit">
+                      <input id="settingsRampMaxStepInput" type="number" min="0.1" max="45" step="0.1" value="8" />
+                      <span class="unit">°</span>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="settingsRampToleranceInput">Toleranz</label>
+                    <div class="input-unit">
+                      <input id="settingsRampToleranceInput" type="number" min="0.1" max="10" step="0.1" value="1.5" />
+                      <span class="unit">°</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Calibration Tab -->
+          <section class="settings-section" id="tab-calibration">
+            <h3 class="section-title">Kalibrierung</h3>
+            
+            <div class="settings-card">
+              <h4 class="card-title">Positions-Offsets</h4>
+              <p class="help-text">Korrigiert Abweichungen zwischen Anzeige und tatsächlicher Position.</p>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="settingsAzOffsetInput">Azimut-Offset</label>
+                  <div class="input-unit">
+                    <input id="settingsAzOffsetInput" type="number" step="0.1" value="0" />
+                    <span class="unit">°</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="settingsElOffsetInput">Elevation-Offset</label>
+                  <div class="input-unit">
+                    <input id="settingsElOffsetInput" type="number" step="0.1" value="0" />
+                    <span class="unit">°</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h4 class="card-title">Skalierungsfaktoren</h4>
+              <p class="help-text">Korrigiert mechanische Übersetzungsverhältnisse. Wert &lt; 1 wenn Motor zu weit dreht.</p>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="settingsAzScaleFactorInput">Azimut-Faktor</label>
+                  <input id="settingsAzScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
+                </div>
+                <div class="form-group">
+                  <label for="settingsElScaleFactorInput">Elevation-Faktor</label>
+                  <input id="settingsElScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h4 class="card-title">Soft-Limits</h4>
+              <p class="help-text">Begrenzt den Bewegungsbereich des Rotors zum Schutz der Hardware.</p>
+              <div class="limits-grid">
+                <div class="limit-column">
+                  <h5>Azimut</h5>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="settingsAzMinLimit">Min</label>
+                      <div class="input-unit">
+                        <input id="settingsAzMinLimit" type="number" step="1" value="0" />
+                        <span class="unit">°</span>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label for="settingsAzMaxLimit">Max</label>
+                      <div class="input-unit">
+                        <input id="settingsAzMaxLimit" type="number" step="1" value="450" />
+                        <span class="unit">°</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="limit-column">
+                  <h5>Elevation</h5>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="settingsElMinLimit">Min</label>
+                      <div class="input-unit">
+                        <input id="settingsElMinLimit" type="number" step="1" value="0" />
+                        <span class="unit">°</span>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label for="settingsElMaxLimit">Max</label>
+                      <div class="input-unit">
+                        <input id="settingsElMaxLimit" type="number" step="1" value="90" />
+                        <span class="unit">°</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
+
       <div class="modal-footer">
-        <button id="settingsSaveBtn" class="primary" type="button">Speichern</button>
-        <button id="settingsCancelBtn" class="secondary" type="button">Abbrechen</button>
+        <button id="settingsCancelBtn" class="btn-secondary" type="button">Abbrechen</button>
+        <button id="settingsSaveBtn" class="btn-primary" type="button">Speichern</button>
       </div>
     </div>
   </div>

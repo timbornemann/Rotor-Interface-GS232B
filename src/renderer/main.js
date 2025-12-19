@@ -9,9 +9,6 @@ if ('serviceWorker' in navigator) {
 }
 
 // Alle Klassen werden über Script-Tags geladen
-// SIMULATED_PORT_ID is defined in rotorService.js
-// const SIMULATED_PORT_ID = 'SIMULATED-ROTOR'; // Removed to avoid syntax error
-
 const rotor = createRotorService(); // createRotorService is global from rotorService.js
 window.rotorService = rotor; // Make available globally for settings modal
 
@@ -21,7 +18,6 @@ const manualPortBtn = document.getElementById('manualPortBtn');
 // Elements from settings modal may be null here, so we check them inside update functions or modal logic
 const baudInput = document.getElementById('baudInput');
 const pollingInput = document.getElementById('pollingInput');
-// const simulationToggle = document.getElementById('simulationToggle'); // Removed
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const connectionStatus = document.getElementById('connectionStatus');
@@ -349,7 +345,6 @@ function updateOffsetInputsFromConfig() {
 function updateUIFromConfig() {
   if (baudInput) baudInput.value = config.baudRate.toString();
   if (pollingInput) pollingInput.value = config.pollingIntervalMs.toString();
-  // if (simulationToggle) simulationToggle.checked = config.simulation; // Removed
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
@@ -523,9 +518,6 @@ async function handleConnect() {
   const baudRate = Number(config.baudRate) || 9600;
   const pollingIntervalMs = Number(config.pollingIntervalMs) || 1000;
   const selectedOption = portSelect.selectedOptions[0];
-  
-  // No simulation support
-  const simulation = false;
   const path = portSelect.value;
   const azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
 
@@ -544,12 +536,11 @@ async function handleConnect() {
     config = await configStore.save({
       baudRate,
       pollingIntervalMs,
-      simulation: false,
       portPath: path,
       azimuthMode
     });
 
-    await rotor.connect({ path, baudRate, simulation: false, azimuthMode });
+    await rotor.connect({ path, baudRate, azimuthMode });
     await rotor.setMode(azimuthMode);
     rotor.startPolling();
     connected = true;
@@ -686,7 +677,6 @@ function updateConnectionStatusText() {
     connectionStatus.textContent = 'Getrennt';
     return;
   }
-  // const isSimulation = config.simulation || portSelect.value === SIMULATED_PORT_ID;
   const portInfo = portSelect.selectedOptions[0]?.textContent || '';
   let statusText = `Verbunden (${portInfo})`;
   connectionStatus.textContent = statusText;

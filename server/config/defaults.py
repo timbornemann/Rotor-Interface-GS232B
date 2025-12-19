@@ -8,9 +8,9 @@ DEFAULT_CONFIG = {
     # Connection
     "baudRate": 9600,
     "pollingIntervalMs": 1000,
-    "simulation": False,
+    "portPath": None,
     
-    # Coordinates
+    # Coordinates/Map
     "mapLatitude": None,
     "mapLongitude": None,
     "satelliteMapEnabled": False,
@@ -35,8 +35,16 @@ DEFAULT_CONFIG = {
     "speedMinDegPerSec": 0.5,
     "speedMaxDegPerSec": 20,
     
+    # ERC-DUO Speed Stages
+    "azimuthLowSpeedStage": 3,
+    "azimuthHighSpeedStage": 4,
+    "elevationLowSpeedStage": 3,
+    "elevationHighSpeedStage": 4,
+    "azimuthSpeedAngleCode": 3,
+    "elevationSpeedAngleCode": 3,
+    
     # Ramp (Soft Start/Stop PI controller)
-    "rampEnabled": True,
+    "rampEnabled": False,
     "rampKp": 0.4,
     "rampKi": 0.05,
     "rampSampleTimeMs": 400,
@@ -83,7 +91,6 @@ DEFAULT_INI_TEMPLATE = """; Rotor Control Configuration
 ; Serial port connection settings
 baudRate=9600
 pollingIntervalMs=1000
-simulation=false
 
 [Coordinates]
 ; Map display coordinates

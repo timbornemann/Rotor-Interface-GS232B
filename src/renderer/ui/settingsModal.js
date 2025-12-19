@@ -1,309 +1,259 @@
+/**
+ * Settings Modal Controller
+ * Handles all settings UI interactions and data management.
+ */
 class SettingsModal {
   constructor() {
     this.modal = document.getElementById('settingsModal');
     this.closeBtn = document.getElementById('closeSettingsBtn');
     this.saveBtn = document.getElementById('settingsSaveBtn');
     this.cancelBtn = document.getElementById('settingsCancelBtn');
-    this.tabButtons = document.querySelectorAll('.tab-button');
-    this.tabContents = document.querySelectorAll('.tab-content');
+    this.navItems = document.querySelectorAll('.settings-nav-item');
+    this.sections = document.querySelectorAll('.settings-section');
     this.currentConfig = null;
     this.onSaveCallback = null;
     
-    // Only init if all required elements exist
+    // Settings field definitions for easy maintenance
+    this.settingsFields = {
+      // Connection
+      portPath: { id: 'settingsPortSelect', type: 'select' },
+      baudRate: { id: 'settingsBaudInput', type: 'select', parse: Number },
+      pollingIntervalMs: { id: 'settingsPollingInput', type: 'number' },
+      
+      // Display/Mode
+      azimuthMode: { id: 'settingsModeSelect', type: 'select', parse: Number },
+      elevationDisplayEnabled: { id: 'settingsElevationDisplayToggle', type: 'checkbox' },
+      coneAngle: { id: 'settingsConeAngleInput', type: 'number' },
+      coneLength: { id: 'settingsConeLengthInput', type: 'number' },
+      azimuthDisplayOffset: { id: 'settingsAzimuthDisplayOffsetInput', type: 'number' },
+      
+      // Map
+      satelliteMapEnabled: { id: 'settingsSatelliteMapToggle', type: 'checkbox' },
+      mapZoomLevel: { id: 'settingsMapZoomLevel', type: 'number' },
+      mapZoomMin: { id: 'settingsMapZoomMin', type: 'number' },
+      mapZoomMax: { id: 'settingsMapZoomMax', type: 'number' },
+      
+      // Speed
+      azimuthSpeedDegPerSec: { id: 'settingsAzSpeedInput', type: 'number' },
+      elevationSpeedDegPerSec: { id: 'settingsElSpeedInput', type: 'number' },
+      azimuthLowSpeedStage: { id: 'settingsAzLowSpeedSelect', type: 'select', parse: Number },
+      azimuthHighSpeedStage: { id: 'settingsAzHighSpeedSelect', type: 'select', parse: Number },
+      elevationLowSpeedStage: { id: 'settingsElLowSpeedSelect', type: 'select', parse: Number },
+      elevationHighSpeedStage: { id: 'settingsElHighSpeedSelect', type: 'select', parse: Number },
+      azimuthSpeedAngleCode: { id: 'settingsAzSpeedAngleSelect', type: 'select', parse: Number },
+      elevationSpeedAngleCode: { id: 'settingsElSpeedAngleSelect', type: 'select', parse: Number },
+      
+      // Ramp
+      rampEnabled: { id: 'settingsRampEnabledToggle', type: 'checkbox' },
+      rampKp: { id: 'settingsRampKpInput', type: 'number' },
+      rampKi: { id: 'settingsRampKiInput', type: 'number' },
+      rampSampleTimeMs: { id: 'settingsRampSampleInput', type: 'number' },
+      rampMaxStepDeg: { id: 'settingsRampMaxStepInput', type: 'number' },
+      rampToleranceDeg: { id: 'settingsRampToleranceInput', type: 'number' },
+      
+      // Calibration
+      azimuthOffset: { id: 'settingsAzOffsetInput', type: 'number' },
+      elevationOffset: { id: 'settingsElOffsetInput', type: 'number' },
+      azimuthScaleFactor: { id: 'settingsAzScaleFactorInput', type: 'number' },
+      elevationScaleFactor: { id: 'settingsElScaleFactorInput', type: 'number' },
+      
+      // Limits
+      azimuthMinLimit: { id: 'settingsAzMinLimit', type: 'number' },
+      azimuthMaxLimit: { id: 'settingsAzMaxLimit', type: 'number' },
+      elevationMinLimit: { id: 'settingsElMinLimit', type: 'number' },
+      elevationMaxLimit: { id: 'settingsElMaxLimit', type: 'number' },
+    };
+    
+    // Initialize when DOM is ready
     if (this.modal && this.closeBtn && this.saveBtn && this.cancelBtn) {
       this.init();
     } else {
       console.warn('[SettingsModal] Some required elements not found, initialization delayed');
-      // Try again when DOM is ready
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => this.init());
       } else {
-        // DOM already loaded, try init after a short delay
-        setTimeout(() => {
-          if (this.modal && this.closeBtn && this.saveBtn && this.cancelBtn) {
-            this.init();
-          } else {
-            console.error('[SettingsModal] Required elements still not found after delay');
-          }
-        }, 100);
+        setTimeout(() => this.init(), 100);
       }
     }
   }
 
   init() {
-    // Check if required elements exist
     if (!this.modal || !this.closeBtn || !this.saveBtn || !this.cancelBtn) {
       console.error('[SettingsModal] Cannot initialize - required elements missing');
       return;
     }
 
-    // Tab switching
-    if (this.tabButtons && this.tabButtons.length > 0) {
-      this.tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          const tabName = button.dataset.tab;
-          this.switchTab(tabName);
-        });
+    // Navigation switching
+    this.navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const tabName = item.dataset.tab;
+        this.switchSection(tabName);
       });
-    }
+    });
 
     // Close handlers
-    if (this.closeBtn) {
-      this.closeBtn.addEventListener('click', () => this.close());
-    }
-    if (this.cancelBtn) {
-      this.cancelBtn.addEventListener('click', () => this.close());
-    }
-    if (this.modal) {
-      this.modal.addEventListener('click', (e) => {
-        if (e.target === this.modal) {
-          this.close();
-        }
-      });
-    }
+    this.closeBtn.addEventListener('click', () => this.close());
+    this.cancelBtn.addEventListener('click', () => this.close());
+    this.modal.addEventListener('click', (e) => {
+      if (e.target === this.modal) {
+        this.close();
+      }
+    });
 
     // Save handler
-    if (this.saveBtn) {
-      this.saveBtn.addEventListener('click', () => this.save());
+    this.saveBtn.addEventListener('click', () => this.save());
+
+    // Range/Number sync for speed inputs
+    this.setupRangeSync('settingsAzSpeedRange', 'settingsAzSpeedInput');
+    this.setupRangeSync('settingsElSpeedRange', 'settingsElSpeedInput');
+
+    // Port refresh button
+    const refreshBtn = document.getElementById('settingsRefreshPortsBtn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => this.refreshPorts());
     }
 
-    // Speed range sync
-    const azSpeedRange = document.getElementById('settingsAzSpeedRange');
-    const azSpeedInput = document.getElementById('settingsAzSpeedInput');
-    const elSpeedRange = document.getElementById('settingsElSpeedRange');
-    const elSpeedInput = document.getElementById('settingsElSpeedInput');
+    // Keyboard handling
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) {
+        this.close();
+      }
+    });
 
-    if (azSpeedRange && azSpeedInput) {
-      azSpeedRange.addEventListener('input', () => {
-        azSpeedInput.value = azSpeedRange.value;
+    console.log('[SettingsModal] Initialized successfully');
+  }
+
+  setupRangeSync(rangeId, inputId) {
+    const range = document.getElementById(rangeId);
+    const input = document.getElementById(inputId);
+    
+    if (range && input) {
+      range.addEventListener('input', () => {
+        input.value = range.value;
       });
-      azSpeedInput.addEventListener('input', () => {
-        azSpeedRange.value = azSpeedInput.value;
-      });
-    }
-
-    if (elSpeedRange && elSpeedInput) {
-      elSpeedRange.addEventListener('input', () => {
-        elSpeedInput.value = elSpeedRange.value;
-      });
-      elSpeedInput.addEventListener('input', () => {
-        elSpeedRange.value = elSpeedInput.value;
-      });
-    }
-
-    // Port refresh handlers
-    const settingsRequestPortBtn = document.getElementById('settingsRequestPortBtn');
-    const settingsRefreshPortsBtn = document.getElementById('settingsRefreshPortsBtn');
-
-    if (settingsRequestPortBtn) {
-      settingsRequestPortBtn.addEventListener('click', async () => {
-        try {
-          // Access rotor from global scope (set in main.js)
-          if (typeof window.rotorService !== 'undefined') {
-            await window.rotorService.requestPortAccess();
-            await this.refreshPorts();
-          }
-        } catch (error) {
-          console.error('[SettingsModal] Error requesting port:', error);
-        }
-      });
-    }
-
-    if (settingsRefreshPortsBtn) {
-      settingsRefreshPortsBtn.addEventListener('click', () => this.refreshPorts());
-    }
-
-    // Map load handler
-    const settingsLoadMapBtn = document.getElementById('settingsLoadMapBtn');
-    if (settingsLoadMapBtn) {
-      settingsLoadMapBtn.addEventListener('click', () => {
-        const input = document.getElementById('settingsMapCoordinatesInput');
-        if (input && input.value.trim()) {
-          // This will be handled by the save callback
-        }
+      input.addEventListener('input', () => {
+        range.value = input.value;
       });
     }
   }
 
+  switchSection(tabName) {
+    // Update nav items
+    this.navItems.forEach(item => {
+      item.classList.toggle('active', item.dataset.tab === tabName);
+    });
+
+    // Update sections
+    this.sections.forEach(section => {
+      section.classList.toggle('active', section.id === `tab-${tabName}`);
+    });
+  }
+
   async refreshPorts() {
-    const settingsPortSelect = document.getElementById('settingsPortSelect');
-    if (!settingsPortSelect) return;
+    const portSelect = document.getElementById('settingsPortSelect');
+    if (!portSelect) return;
 
     try {
-      // Access rotor from global scope (set in main.js)
       if (typeof window.rotorService === 'undefined') {
         console.warn('[SettingsModal] Rotor service not available');
         return;
       }
 
       const ports = await window.rotorService.listPorts();
-      settingsPortSelect.innerHTML = '';
+      portSelect.innerHTML = '';
       
       ports.forEach((port) => {
         const option = document.createElement('option');
         option.value = port.path;
         option.textContent = port.friendlyName || port.path;
-        if (port.simulated) {
-          option.dataset.simulated = 'true';
-        }
-        if (port.serverPort) {
-          option.dataset.serverPort = 'true';
-        }
-        settingsPortSelect.appendChild(option);
+        if (port.simulated) option.dataset.simulated = 'true';
+        if (port.serverPort) option.dataset.serverPort = 'true';
+        portSelect.appendChild(option);
       });
+
+      // Restore selected port
+      if (this.currentConfig && this.currentConfig.portPath) {
+        const option = Array.from(portSelect.options).find(opt => opt.value === this.currentConfig.portPath);
+        if (option) {
+          portSelect.value = this.currentConfig.portPath;
+        }
+      }
     } catch (error) {
       console.error('[SettingsModal] Error refreshing ports:', error);
     }
   }
 
-  switchTab(tabName) {
-    // Update buttons
-    this.tabButtons.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tabName);
-    });
-
-    // Update content
-    this.tabContents.forEach(content => {
-      content.classList.toggle('active', content.id === `tab-${tabName}`);
-    });
-  }
-
   async open(config, onSave) {
     this.currentConfig = { ...config };
     this.onSaveCallback = onSave;
-    this.loadConfigIntoModal(config);
     
-    // Refresh ports in modal
+    // Load config into form fields
+    this.loadConfigIntoForm(config);
+    
+    // Refresh ports
     await this.refreshPorts();
     
-    // Set selected port if available
-    const settingsPortSelect = document.getElementById('settingsPortSelect');
-    if (settingsPortSelect && config.portPath) {
-      const option = Array.from(settingsPortSelect.options).find(opt => opt.value === config.portPath);
-      if (option) {
-        settingsPortSelect.value = config.portPath;
-      }
-    }
+    // Reset to first section
+    this.switchSection('connection');
     
+    // Show modal
     this.modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
   }
 
   close() {
     this.modal.classList.add('hidden');
+    document.body.style.overflow = '';
     this.currentConfig = null;
     this.onSaveCallback = null;
   }
 
-  loadConfigIntoModal(config) {
-    // Connection tab
-    const settingsBaudInput = document.getElementById('settingsBaudInput');
-    const settingsPollingInput = document.getElementById('settingsPollingInput');
-
-    if (settingsBaudInput) settingsBaudInput.value = config.baudRate || 9600;
-    if (settingsPollingInput) settingsPollingInput.value = config.pollingIntervalMs || 1000;
-
-    // Coordinates tab
-    const settingsMapCoordinatesInput = document.getElementById('settingsMapCoordinatesInput');
-    const settingsSatelliteMapToggle = document.getElementById('settingsSatelliteMapToggle');
-    
-    if (settingsMapCoordinatesInput) {
-      if (config.mapLatitude !== null && config.mapLatitude !== undefined &&
-          config.mapLongitude !== null && config.mapLongitude !== undefined) {
-        settingsMapCoordinatesInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
+  loadConfigIntoForm(config) {
+    // Handle coordinates specially (combined field)
+    const coordsInput = document.getElementById('settingsMapCoordinatesInput');
+    if (coordsInput) {
+      if (config.mapLatitude != null && config.mapLongitude != null) {
+        coordsInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
       } else {
-        settingsMapCoordinatesInput.value = '';
+        coordsInput.value = '';
       }
     }
-    if (settingsSatelliteMapToggle) settingsSatelliteMapToggle.checked = config.satelliteMapEnabled || false;
 
-    // Cone tab
-    const settingsConeAngleInput = document.getElementById('settingsConeAngleInput');
-    const settingsConeLengthInput = document.getElementById('settingsConeLengthInput');
-    const settingsAzimuthDisplayOffsetInput = document.getElementById('settingsAzimuthDisplayOffsetInput');
+    // Load all other fields from definition
+    for (const [key, field] of Object.entries(this.settingsFields)) {
+      const element = document.getElementById(field.id);
+      if (!element) continue;
 
-    if (settingsConeAngleInput) settingsConeAngleInput.value = config.coneAngle || 10;
-    if (settingsConeLengthInput) settingsConeLengthInput.value = config.coneLength || 1000;
-    if (settingsAzimuthDisplayOffsetInput) settingsAzimuthDisplayOffsetInput.value = config.azimuthDisplayOffset || 0;
+      const value = config[key];
+      if (value === undefined || value === null) continue;
 
-    // Speed tab
-    const settingsAzSpeedRange = document.getElementById('settingsAzSpeedRange');
-    const settingsAzSpeedInput = document.getElementById('settingsAzSpeedInput');
-    const settingsElSpeedRange = document.getElementById('settingsElSpeedRange');
-    const settingsElSpeedInput = document.getElementById('settingsElSpeedInput');
-    const settingsAzLowSpeedSelect = document.getElementById('settingsAzLowSpeedSelect');
-    const settingsAzHighSpeedSelect = document.getElementById('settingsAzHighSpeedSelect');
-    const settingsElLowSpeedSelect = document.getElementById('settingsElLowSpeedSelect');
-    const settingsElHighSpeedSelect = document.getElementById('settingsElHighSpeedSelect');
-    const settingsAzSpeedAngleSelect = document.getElementById('settingsAzSpeedAngleSelect');
-    const settingsElSpeedAngleSelect = document.getElementById('settingsElSpeedAngleSelect');
+      if (field.type === 'checkbox') {
+        element.checked = Boolean(value);
+      } else if (field.type === 'select') {
+        element.value = String(value);
+      } else {
+        element.value = value;
+      }
+    }
 
-    if (settingsAzSpeedRange) settingsAzSpeedRange.value = config.azimuthSpeedDegPerSec || 4;
-    if (settingsAzSpeedInput) settingsAzSpeedInput.value = config.azimuthSpeedDegPerSec || 4;
-    if (settingsElSpeedRange) settingsElSpeedRange.value = config.elevationSpeedDegPerSec || 2;
-    if (settingsElSpeedInput) settingsElSpeedInput.value = config.elevationSpeedDegPerSec || 2;
-    if (settingsAzLowSpeedSelect) settingsAzLowSpeedSelect.value = config.azimuthLowSpeedStage || 3;
-    if (settingsAzHighSpeedSelect) settingsAzHighSpeedSelect.value = config.azimuthHighSpeedStage || 4;
-    if (settingsElLowSpeedSelect) settingsElLowSpeedSelect.value = config.elevationLowSpeedStage || 3;
-    if (settingsElHighSpeedSelect) settingsElHighSpeedSelect.value = config.elevationHighSpeedStage || 4;
-    if (settingsAzSpeedAngleSelect) settingsAzSpeedAngleSelect.value = config.azimuthSpeedAngleCode ?? 3;
-    if (settingsElSpeedAngleSelect) settingsElSpeedAngleSelect.value = config.elevationSpeedAngleCode ?? 3;
-
-    // Ramp tab
-    const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');
-    const settingsRampKpInput = document.getElementById('settingsRampKpInput');
-    const settingsRampKiInput = document.getElementById('settingsRampKiInput');
-    const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
-    const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
-    const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
-
-    if (settingsRampEnabledToggle) settingsRampEnabledToggle.checked = config.rampEnabled || false;
-    if (settingsRampKpInput) settingsRampKpInput.value = config.rampKp || 0.4;
-    if (settingsRampKiInput) settingsRampKiInput.value = config.rampKi || 0.05;
-    if (settingsRampSampleInput) settingsRampSampleInput.value = config.rampSampleTimeMs || 400;
-    if (settingsRampMaxStepInput) settingsRampMaxStepInput.value = config.rampMaxStepDeg || 8;
-    if (settingsRampToleranceInput) settingsRampToleranceInput.value = config.rampToleranceDeg || 1.5;
-
-    // Calibration tab
-    const settingsAzOffsetInput = document.getElementById('settingsAzOffsetInput');
-    const settingsElOffsetInput = document.getElementById('settingsElOffsetInput');
-    const settingsAzScaleFactorInput = document.getElementById('settingsAzScaleFactorInput');
-    const settingsElScaleFactorInput = document.getElementById('settingsElScaleFactorInput');
-
-    if (settingsAzOffsetInput) settingsAzOffsetInput.value = config.azimuthOffset || 0;
-    if (settingsElOffsetInput) settingsElOffsetInput.value = config.elevationOffset || 0;
-    if (settingsAzScaleFactorInput) settingsAzScaleFactorInput.value = config.azimuthScaleFactor ?? 1.0;
-    if (settingsElScaleFactorInput) settingsElScaleFactorInput.value = config.elevationScaleFactor ?? 1.0;
-
-    // Mode tab
-    const settingsModeSelect = document.getElementById('settingsModeSelect');
-    const settingsElevationDisplayToggle = document.getElementById('settingsElevationDisplayToggle');
-    if (settingsModeSelect) settingsModeSelect.value = config.azimuthMode || 360;
-    if (settingsElevationDisplayToggle) settingsElevationDisplayToggle.checked = config.elevationDisplayEnabled !== false;
+    // Sync range inputs with their number inputs
+    const azSpeedRange = document.getElementById('settingsAzSpeedRange');
+    const elSpeedRange = document.getElementById('settingsElSpeedRange');
+    if (azSpeedRange && config.azimuthSpeedDegPerSec != null) {
+      azSpeedRange.value = config.azimuthSpeedDegPerSec;
+    }
+    if (elSpeedRange && config.elevationSpeedDegPerSec != null) {
+      elSpeedRange.value = config.elevationSpeedDegPerSec;
+    }
   }
 
-  getConfigFromModal() {
+  getConfigFromForm() {
     const config = {};
 
-    // Connection tab
-    const settingsBaudInput = document.getElementById('settingsBaudInput');
-    const settingsPollingInput = document.getElementById('settingsPollingInput');
-    const settingsPortSelect = document.getElementById('settingsPortSelect');
-
-    if (settingsBaudInput) config.baudRate = Number(settingsBaudInput.value) || 9600;
-    if (settingsPollingInput) config.pollingIntervalMs = Number(settingsPollingInput.value) || 1000;
-    if (settingsPortSelect && settingsPortSelect.value) {
-      const selectedOption = settingsPortSelect.selectedOptions[0];
-      if (selectedOption) {
-        config.portPath = settingsPortSelect.value;
-      }
-    }
-
-    // Coordinates tab
-    const settingsMapCoordinatesInput = document.getElementById('settingsMapCoordinatesInput');
-    const settingsSatelliteMapToggle = document.getElementById('settingsSatelliteMapToggle');
-
-    if (settingsMapCoordinatesInput && settingsMapCoordinatesInput.value.trim()) {
-      const parts = settingsMapCoordinatesInput.value.split(',').map(part => part.trim());
+    // Handle coordinates specially
+    const coordsInput = document.getElementById('settingsMapCoordinatesInput');
+    if (coordsInput && coordsInput.value.trim()) {
+      const parts = coordsInput.value.split(',').map(part => part.trim());
       if (parts.length === 2) {
         const lat = parseFloat(parts[0]);
         const lon = parseFloat(parts[1]);
@@ -313,77 +263,81 @@ class SettingsModal {
         }
       }
     }
-    if (settingsSatelliteMapToggle) config.satelliteMapEnabled = settingsSatelliteMapToggle.checked;
 
-    // Cone tab
-    const settingsConeAngleInput = document.getElementById('settingsConeAngleInput');
-    const settingsConeLengthInput = document.getElementById('settingsConeLengthInput');
-    const settingsAzimuthDisplayOffsetInput = document.getElementById('settingsAzimuthDisplayOffsetInput');
+    // Extract all fields from definition
+    for (const [key, field] of Object.entries(this.settingsFields)) {
+      const element = document.getElementById(field.id);
+      if (!element) continue;
 
-    if (settingsConeAngleInput) config.coneAngle = Number(settingsConeAngleInput.value) || 10;
-    if (settingsConeLengthInput) config.coneLength = Number(settingsConeLengthInput.value) || 1000;
-    if (settingsAzimuthDisplayOffsetInput) config.azimuthDisplayOffset = Number(settingsAzimuthDisplayOffsetInput.value) || 0;
+      let value;
+      if (field.type === 'checkbox') {
+        value = element.checked;
+      } else if (field.type === 'select') {
+        value = field.parse ? field.parse(element.value) : element.value;
+      } else if (field.type === 'number') {
+        value = Number(element.value);
+        if (isNaN(value)) continue;
+      } else {
+        value = element.value;
+      }
 
-    // Speed tab
-    const settingsAzSpeedInput = document.getElementById('settingsAzSpeedInput');
-    const settingsElSpeedInput = document.getElementById('settingsElSpeedInput');
-    const settingsAzLowSpeedSelect = document.getElementById('settingsAzLowSpeedSelect');
-    const settingsAzHighSpeedSelect = document.getElementById('settingsAzHighSpeedSelect');
-    const settingsElLowSpeedSelect = document.getElementById('settingsElLowSpeedSelect');
-    const settingsElHighSpeedSelect = document.getElementById('settingsElHighSpeedSelect');
-    const settingsAzSpeedAngleSelect = document.getElementById('settingsAzSpeedAngleSelect');
-    const settingsElSpeedAngleSelect = document.getElementById('settingsElSpeedAngleSelect');
-
-    if (settingsAzSpeedInput) config.azimuthSpeedDegPerSec = Number(settingsAzSpeedInput.value) || 4;
-    if (settingsElSpeedInput) config.elevationSpeedDegPerSec = Number(settingsElSpeedInput.value) || 2;
-    if (settingsAzLowSpeedSelect) config.azimuthLowSpeedStage = Number(settingsAzLowSpeedSelect.value) || 3;
-    if (settingsAzHighSpeedSelect) config.azimuthHighSpeedStage = Number(settingsAzHighSpeedSelect.value) || 4;
-    if (settingsElLowSpeedSelect) config.elevationLowSpeedStage = Number(settingsElLowSpeedSelect.value) || 3;
-    if (settingsElHighSpeedSelect) config.elevationHighSpeedStage = Number(settingsElHighSpeedSelect.value) || 4;
-    if (settingsAzSpeedAngleSelect) config.azimuthSpeedAngleCode = Number(settingsAzSpeedAngleSelect.value);
-    if (settingsElSpeedAngleSelect) config.elevationSpeedAngleCode = Number(settingsElSpeedAngleSelect.value);
-
-    // Ramp tab
-    const settingsRampEnabledToggle = document.getElementById('settingsRampEnabledToggle');
-    const settingsRampKpInput = document.getElementById('settingsRampKpInput');
-    const settingsRampKiInput = document.getElementById('settingsRampKiInput');
-    const settingsRampSampleInput = document.getElementById('settingsRampSampleInput');
-    const settingsRampMaxStepInput = document.getElementById('settingsRampMaxStepInput');
-    const settingsRampToleranceInput = document.getElementById('settingsRampToleranceInput');
-
-    if (settingsRampEnabledToggle) config.rampEnabled = settingsRampEnabledToggle.checked;
-    if (settingsRampKpInput) config.rampKp = Number(settingsRampKpInput.value) || 0.4;
-    if (settingsRampKiInput) config.rampKi = Number(settingsRampKiInput.value) || 0.05;
-    if (settingsRampSampleInput) config.rampSampleTimeMs = Number(settingsRampSampleInput.value) || 400;
-    if (settingsRampMaxStepInput) config.rampMaxStepDeg = Number(settingsRampMaxStepInput.value) || 8;
-    if (settingsRampToleranceInput) config.rampToleranceDeg = Number(settingsRampToleranceInput.value) || 1.5;
-
-    // Calibration tab
-    const settingsAzOffsetInput = document.getElementById('settingsAzOffsetInput');
-    const settingsElOffsetInput = document.getElementById('settingsElOffsetInput');
-    const settingsAzScaleFactorInput = document.getElementById('settingsAzScaleFactorInput');
-    const settingsElScaleFactorInput = document.getElementById('settingsElScaleFactorInput');
-
-    if (settingsAzOffsetInput) config.azimuthOffset = Number(settingsAzOffsetInput.value) || 0;
-    if (settingsElOffsetInput) config.elevationOffset = Number(settingsElOffsetInput.value) || 0;
-    if (settingsAzScaleFactorInput) config.azimuthScaleFactor = Number(settingsAzScaleFactorInput.value) || 1.0;
-    if (settingsElScaleFactorInput) config.elevationScaleFactor = Number(settingsElScaleFactorInput.value) || 1.0;
-
-    // Mode tab
-    const settingsModeSelect = document.getElementById('settingsModeSelect');
-    const settingsElevationDisplayToggle = document.getElementById('settingsElevationDisplayToggle');
-    if (settingsModeSelect) config.azimuthMode = Number(settingsModeSelect.value) || 360;
-    if (settingsElevationDisplayToggle) config.elevationDisplayEnabled = settingsElevationDisplayToggle.checked;
+      config[key] = value;
+    }
 
     return config;
   }
 
+  validate(config) {
+    const errors = [];
+
+    // Validate zoom levels
+    if (config.mapZoomMin > config.mapZoomMax) {
+      errors.push('Minimum Zoom darf nicht größer als Maximum sein');
+    }
+    if (config.mapZoomLevel < config.mapZoomMin || config.mapZoomLevel > config.mapZoomMax) {
+      errors.push('Standard-Zoom muss zwischen Min und Max liegen');
+    }
+
+    // Validate limits
+    if (config.azimuthMinLimit > config.azimuthMaxLimit) {
+      errors.push('Azimut-Minimum darf nicht größer als Maximum sein');
+    }
+    if (config.elevationMinLimit > config.elevationMaxLimit) {
+      errors.push('Elevation-Minimum darf nicht größer als Maximum sein');
+    }
+
+    // Validate speed settings
+    if (config.azimuthLowSpeedStage > config.azimuthHighSpeedStage) {
+      errors.push('Azimut Low-Speed darf nicht größer als High-Speed sein');
+    }
+    if (config.elevationLowSpeedStage > config.elevationHighSpeedStage) {
+      errors.push('Elevation Low-Speed darf nicht größer als High-Speed sein');
+    }
+
+    return errors;
+  }
+
+  showError(message) {
+    // Simple error display - could be enhanced with a toast system
+    alert(message);
+  }
+
   save() {
-    const config = this.getConfigFromModal();
+    const config = this.getConfigFromForm();
+    
+    // Validate
+    const errors = this.validate(config);
+    if (errors.length > 0) {
+      this.showError('Validierungsfehler:\n' + errors.join('\n'));
+      return;
+    }
+
+    // Merge with current config to preserve any unedited values
+    const mergedConfig = { ...this.currentConfig, ...config };
+
     if (this.onSaveCallback) {
-      this.onSaveCallback(config);
+      this.onSaveCallback(mergedConfig);
     }
     this.close();
   }
 }
-
