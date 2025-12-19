@@ -1,6 +1,6 @@
 # Rotor-Interface GS232B
 
-Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors – wahlweise direkt im Browser (Simulation & Web Serial) oder per mitgeliefertem Python-Server für den Netzwerkzugriff. Die Anwendung kommt ohne Build-Tooling aus: HTML/CSS/JavaScript reichen.
+Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors – wahlweise als Simulation im Browser oder per mitgeliefertem Python-Server für den Netzwerkzugriff. Direkter Web-Serial-Zugriff durch den Browser ist deaktiviert; sämtliche Hardware-Kommunikation läuft über den Server. Die Anwendung kommt ohne Build-Tooling aus: HTML/CSS/JavaScript reichen.
 
 ---
 
@@ -11,7 +11,6 @@ Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors
 - [Voraussetzungen](#voraussetzungen)
 - [Schnellstart](#schnellstart)
   - [Simulation im Browser](#simulation-im-browser)
-  - [Web-Serial-Zugriff](#web-serial-zugriff)
   - [Python-Server (Netzwerkbetrieb)](#python-server-netzwerkbetrieb)
   - [Alternative Dev-Server](#alternative-dev-server)
 - [Bedienung](#bedienung)
@@ -30,8 +29,7 @@ Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors
 ## Hauptfunktionen
 
 - **Direktstart ohne Installation:** `src/renderer/index.html` per Doppelklick öffnen; Simulation läuft sofort.
-- **Web Serial:** Zugriff auf echte USB-/COM-Ports in Chromium-Browsern (HTTPS oder `http://localhost`).
-- **Python-Server für Remote-Zugriff:** Stellt API & COM-Port-Handling bereit, damit die Web-App im Netzwerk genutzt werden kann.
+- **Server für Hardware-Zugriff:** Stellt API & COM-Port-Handling bereit, damit die Web-App im Netzwerk genutzt werden kann.
 - **Simulation inklusive:** Realistische Rotor-Simulation ohne angeschlossene Hardware.
 - **Live-Visualisierung:** Kompass, Radar-/Kartenansicht und Status aktualisieren sich mit jedem Polling.
 - **Komplette Steuerung:** R/L/A, U/D/E, Stop sowie Goto-Azimut/Elevation, 360°/450°-Modus, Geschwindigkeitsvorgaben.
@@ -49,20 +47,19 @@ src/
     styles.css      # Globales Styling
     main.js         # Bootstrapping & App-Logik
     assets/         # Icons & statische Assets
-    services/       # Infrastruktur (Config-Store, INI-Handler, Rotor-Service WebSerial/Server)
+    services/       # Infrastruktur (Config-Store, INI-Handler, Rotor-Service für Server & Simulation)
     ui/             # UI-Komponenten (Kompass, Karte, Controls, History, Settings)
-python_server.py   # Optionaler HTTP-Server + REST-API inkl. COM-Port-Management
+python_server.py   # HTTP-Server + REST-API inkl. COM-Port-Management
 rotor-config.ini   # Beispielkonfiguration für den Server
 ```
 
-Kernidee: Die UI ist komplett clientseitig. Für Web Serial wird nur ein einfacher Webserver benötigt. Wenn die Anwendung von einem anderen Rechner aus genutzt wird, schaltet sie automatisch in den **Server-Modus** und spricht die API des Python-Servers an.
+Kernidee: Die UI ist komplett clientseitig, die Hardware-Ansteuerung übernimmt ausschließlich der Python-Server. Bei Netzwerkzugriff nutzt die Oberfläche automatisch den **Server-Modus** und spricht die API des Python-Servers an.
 
 ---
 
 ## Voraussetzungen
 
-- **Browser:** Aktueller Chrome/Edge (oder ein anderer Chromium-Browser) für Web Serial. Für die reine Simulation genügt jeder moderne Browser.
-- **Web Serial:** Erfordert HTTPS oder `http://localhost` und eine aktive User-Geste zum Öffnen des Ports.
+- **Browser:** Jeder moderne Browser für die Simulation; die Server-API kann von beliebigen HTTP-Clients angesprochen werden.
 - **Python-Server:** Python 3.9+ und optional `pyserial` für COM-Port-Zugriff (`pip install -r requirements.txt`).
 - **Node/npm (optional):** Nur falls der alternative Dev-Server (`npm run serve`) genutzt wird; zur Laufzeit nicht nötig.
 
@@ -74,19 +71,6 @@ Kernidee: Die UI ist komplett clientseitig. Für Web Serial wird nur ein einfach
 
 1. `src/renderer/index.html` per Doppelklick öffnen (oder `file://...` laden).
 2. Simulation ist sofort aktiv; alle Bedienelemente funktionieren ohne Hardware.
-
-### Web-Serial-Zugriff
-
-Web Serial benötigt einen lokalen Webserver:
-
-```bash
-cd src/renderer
-python -m http.server 4173
-# oder: php -S localhost:4173
-# oder: npm run serve
-```
-
-Danach `http://localhost:4173` im Browser öffnen und über **Port hinzufügen** einen COM-/USB-Port auswählen.
 
 ### Python-Server (Netzwerkbetrieb)
 
@@ -109,7 +93,7 @@ Aufruf im Browser: `http://localhost:8081` oder aus dem LAN `http://<SERVER-IP>:
 - **PHP:** `php -S localhost:4173` in `src/renderer`
 - **npm/http-server:** `npm install` & `npm run serve`
 
-Hinweis: Die App benötigt kein Node.js zur Laufzeit – der Server wird nur für Web Serial oder Netzbetrieb verwendet.
+Hinweis: Die App benötigt kein Node.js zur Laufzeit – der Server wird nur für den Hardwarezugriff im Netzbetrieb verwendet.
 
 ---
 
@@ -118,8 +102,7 @@ Hinweis: Die App benötigt kein Node.js zur Laufzeit – der Server wird nur fü
 ### Ports & Verbindungen
 
 - **Simulation aktivieren:** Checkbox „Simulation“ wählen oder den simulierten Port in der Portliste auswählen.
-- **Web Serial:** Über „Port hinzufügen“ einen Port freigeben, dann verbinden. Baudrate und Polling-Intervall lassen sich vor der Verbindung setzen.
-- **Server-Modus:** Ports tragen den Präfix `[Server]`, Befehle/Status laufen über die API des Python-Servers.
+- **Server-Modus (Standard):** Ports tragen den Präfix `[Server]`, Befehle/Status laufen ausschließlich über die API des Python-Servers.
 
 ### Steuerung & Modi
 
@@ -143,12 +126,10 @@ Hinweis: Die App benötigt kein Node.js zur Laufzeit – der Server wird nur fü
 
 Der Python-Server stellt eine schlanke REST-API bereit (ohne Authentifizierung; nur in vertrauenswürdigen Netzen einsetzen):
 
-- `POST /api/commands` – Kommando speichern/weiterleiten
-- `GET /api/commands` – bisherige Kommandos abrufen
 - `GET /api/rotor/ports` – verfügbare COM-Ports auflisten
-- `POST /api/rotor/connect` / `.../disconnect` – Port verbinden/trennen
-- `POST /api/rotor/command` – GS-232B Befehl senden
-- `GET /api/rotor/status` – letzten Status abrufen
+- `POST /api/rotor/connect` / `.../disconnect` – Port verbinden/trennen (inkl. Polling-Intervall)
+- `POST /api/rotor/command` – GS-232B Befehl senden (Server normalisiert & ergänzt `\r`)
+- `GET /api/rotor/status` – letzten Status abrufen (Server pollt den Rotor selbständig)
 - `GET /api/rotor/position` – (falls verfügbar) Position zurückgeben
 
 Detailbeschreibung inkl. Beispiel-Requests: siehe **API_Dokumentation.md**.
@@ -157,9 +138,9 @@ Detailbeschreibung inkl. Beispiel-Requests: siehe **API_Dokumentation.md**.
 
 ## Konfiguration
 
-- **Port/Key:** Standard-Port ist `8081`, API-Key ist in `python_server.py` hinterlegt (`DEFAULT_API_KEY`).
+- **Port:** Standard-Port ist `8081` (per `--port` änderbar).
 - **INI-Datei:** `rotor-config.ini` kann als Vorlage genutzt werden; `iniHandler.js` liest/aktualisiert die Werte im Client.
-- **Polling:** Intervall in der UI einstellbar; History & CSV basieren auf diesen Polling-Werten.
+- **Polling:** Das Server-Polling-Intervall ist in der UI einstellbar und wird beim Verbinden an den Server übergeben; die UI fragt nur den Server-Status ab.
 
 ---
 

@@ -518,6 +518,7 @@ class ServerConnection extends SerialConnection {
   async open(options) {
     const port = options?.port;
     const baudRate = options?.baudRate || 9600;
+    const pollingIntervalMs = options?.pollingIntervalMs || 1000;
     
     if (!port) {
       throw new Error('Port ist erforderlich für Server-Verbindung');
@@ -529,7 +530,7 @@ class ServerConnection extends SerialConnection {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ port, baudRate })
+        body: JSON.stringify({ port, baudRate, pollingIntervalMs })
       });
 
       if (!response.ok) {
@@ -570,7 +571,7 @@ class ServerConnection extends SerialConnection {
       console.log('[RotorService][Server] Verbunden', { port, baudRate });
       
       // Starte Status-Polling
-      this.startStatusPolling();
+      this.startStatusPolling(pollingIntervalMs);
     } catch (error) {
       console.error('[RotorService][Server] Verbindungsfehler', error);
       throw error;
@@ -632,7 +633,7 @@ class ServerConnection extends SerialConnection {
     }
   }
 
-  startStatusPolling() {
+  startStatusPolling(pollIntervalMs = 500) {
     if (this.statusPollTimer) {
       clearInterval(this.statusPollTimer);
     }
@@ -664,7 +665,7 @@ class ServerConnection extends SerialConnection {
 
     // Sofort abfragen, dann alle 500ms
     pollStatus();
-    this.statusPollTimer = setInterval(pollStatus, 500);
+    this.statusPollTimer = setInterval(pollStatus, Math.max(250, pollIntervalMs));
   }
 }
 
@@ -837,7 +838,7 @@ class RotorService {
   constructor() {
     this.serial = null;
     this.simulationMode = true;
-    this.connectionMode = 'local'; // 'local', 'server', 'simulation'
+    this.connectionMode = 'server'; // 'server' oder 'simulation'
     this.apiBase = window.location.origin;
     this.maxAzimuthRange = 360;
     this.azimuthOffset = 0;
@@ -946,21 +947,6 @@ class RotorService {
       console.log('[RotorService] Überspringe Server-Ports Abfrage (file:// Protokoll - lokaler Modus)');
     }
     
-    // Web Serial Ports (nur wenn verfügbar)
-    if (supportsWebSerial()) {
-      const grantedPorts = await navigator.serial.getPorts();
-      grantedPorts.forEach((port) => {
-        const id = this.ensurePortId(port);
-        this.portRegistry.set(id, port);
-        ports.push({
-          path: id,
-          friendlyName: formatPortLabel(port, id),
-          simulated: false,
-          serverPort: false
-        });
-      });
-    }
-    
     console.log('[RotorService] Gefundene Ports', { ports: ports.map((port) => ({ ...port })) });
     ports.push({
       path: SIMULATED_PORT_ID,
@@ -988,7 +974,7 @@ class RotorService {
     const requestedMode = Number(config.azimuthMode) === 450 ? 450 : 360;
     const useSimulation =
       Boolean(config.simulation) || config.path === SIMULATED_PORT_ID;
-    const useServer = Boolean(config.useServer) || (config.path && !useSimulation && !supportsWebSerial());
+    const useServer = !useSimulation;
 
     console.log('[RotorService] Verbindungsaufbau gestartet', { config, useSimulation, useServer });
     await this.disconnect();
@@ -1003,33 +989,13 @@ class RotorService {
       this.simulationMode = false;
       this.connectionMode = 'server';
       this.serial = new ServerConnection(this.apiBase);
-    } else {
-      const port = this.portRegistry.get(config.path);
-      if (!port) {
-        console.error('[RotorService] Port nicht im Registry gefunden', { 
-          path: config.path,
-          registryKeys: Array.from(this.portRegistry.keys())
-        });
-        throw new Error('Der ausgewaehlte Port ist nicht mehr verfügbar.\n\n' +
-                       'Bitte:\n' +
-                       '1. Klicken Sie auf "Port hinzufügen"\n' +
-                       '2. Wählen Sie den Port erneut aus\n' +
-                       '3. Versuchen Sie erneut zu verbinden');
-      }
-      console.log('[RotorService] Verwende Web Serial Port', { 
-        path: config.path,
-        portInfo: port.getInfo ? port.getInfo() : 'keine Info verfügbar'
-      });
-      this.simulationMode = false;
-      this.connectionMode = 'local';
-      this.serial = new WebSerialConnection(port);
     }
 
     this.serial.onData((line) => this.handleSerialLine(line));
     this.serial.onError((error) => this.emitError(error));
 
     if (useServer) {
-      await this.serial.open({ port: config.path, baudRate: config.baudRate });
+      await this.serial.open({ port: config.path, baudRate: config.baudRate, pollingIntervalMs: config.pollingIntervalMs });
     } else {
       await this.serial.open({ baudRate: config.baudRate, modeMaxAz: requestedMode });
     }
@@ -1648,6 +1614,10 @@ class RotorService {
   }
 
   startPolling(intervalMs = 1000) {
+    if (this.connectionMode === 'server') {
+      console.log('[RotorService] Polling vom Client im Server-Modus deaktiviert');
+      return;
+    }
     this.stopPolling();
     if (!this.serial || !this.serial.isOpen()) {
       return;
