@@ -175,10 +175,21 @@ static void handleCommand(char* cmd) {
     stepper.stop(); tgtEl = curEl; Serial.write('\r'); 
   }
   else if (!strcmp(cmd, "R")) { 
-    stepper.moveTo(100000); Serial.write('\r'); 
+    long maxSteps = azModeMax * STEPS_PER_DEG;
+    if (stepper.currentPosition() < maxSteps) {
+       stepper.moveTo(maxSteps); // Target the limit exactly
+    } else {
+       playSound(SND_LIMIT); 
+    }
+    Serial.write('\r'); 
   }
   else if (!strcmp(cmd, "L")) { 
-    stepper.moveTo(-100000); Serial.write('\r'); 
+    if (stepper.currentPosition() > 0) {
+       stepper.moveTo(0); // Target the limit exactly
+    } else {
+       playSound(SND_LIMIT); 
+    }
+    Serial.write('\r'); 
   }
   else if (!strcmp(cmd, "P36")) { 
     azModeMax = 360; Serial.write('\r'); 
@@ -286,11 +297,11 @@ void loop() {
     static uint32_t lastLimitSound = 0;
 
     // Check UPPER Limit
-    // Logic: If current position is beyond limit AND target is BEYOND limit (or at limit)
-    // trying to go further out. We force target to limit.
-    // We allow target < maxSteps (escape)!
-    if (curSteps > maxSteps && stepper.targetPosition() > maxSteps) {
-       stepper.moveTo(maxSteps); 
+    // Logic: If current position is beyond limit AND target is trying to go even FURTHER out.
+    // We force target to CURRENT position (Hard Stop).
+    // This condition becomes FALSE immediately after stopping (target == curSteps), stopping the sound.
+    if (curSteps > maxSteps && stepper.targetPosition() > curSteps) {
+       stepper.moveTo(curSteps); 
        if (millis() - lastLimitSound > 500) {
          playSound(SND_LIMIT);
          lastLimitSound = millis();
@@ -298,8 +309,8 @@ void loop() {
     }
     
     // Check LOWER Limit
-    if (curSteps < 0 && stepper.targetPosition() < 0) {
-       stepper.moveTo(0); 
+    if (curSteps < 0 && stepper.targetPosition() < curSteps) {
+       stepper.moveTo(curSteps); 
        if (millis() - lastLimitSound > 500) {
          playSound(SND_LIMIT);
          lastLimitSound = millis();
