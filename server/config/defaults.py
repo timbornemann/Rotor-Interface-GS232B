@@ -63,7 +63,6 @@ DEFAULT_CONFIG = {
     
     # Mode
     "azimuthMode": 450,
-    "elevationDisplayEnabled": True,
     
     # Limits
     "azimuthMinLimit": 0,
@@ -142,7 +141,6 @@ rampToleranceDegMax=10
 [Mode]
 ; Azimuth rotation mode
 azimuthMode=450
-elevationDisplayEnabled=true
 
 [Limits]
 ; Soft limits for rotor movement

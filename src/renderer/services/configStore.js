@@ -15,7 +15,6 @@ const defaultConfig = {
   
   // Display/Mode
   azimuthMode: 360,
-  elevationDisplayEnabled: true,
   
   // Cone visualization
   coneAngle: 10,

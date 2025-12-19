@@ -67,7 +67,6 @@
             <polygon points="100,100 95,110 105,110" fill="#ffb347" />
           </g>
         </svg>
-        <img id="elevationLogo" src="./assets/logo.png" alt="Logo" class="elevation-logo hidden" />
       </div>
     </section>
 
@@ -134,79 +133,8 @@
           <div class="last-status-label">Letzter Status:</div>
           <div class="last-status-value" id="lastStatusValue">--</div>
         </div>
-      </section>
-
-      <section class="card limits-card">
-        <div class="card-header">
-          <h2>Soft-Limits &amp; Kalibrierung</h2>
-        </div>
-
-        <div class="limit-grid">
-          <div class="limit-group">
-            <h3>Azimut</h3>
-            <label>
-              Minimum (deg)
-              <input id="azLimitMinInput" type="number" step="1" value="0" />
-            </label>
-            <label>
-              Maximum (deg)
-              <input id="azLimitMaxInput" type="number" step="1" value="360" />
-            </label>
-          </div>
-          <div class="limit-group">
-            <h3>Elevation</h3>
-            <label>
-              Minimum (deg)
-              <input id="elLimitMinInput" type="number" step="1" value="0" />
-            </label>
-            <label>
-              Maximum (deg)
-              <input id="elLimitMaxInput" type="number" step="1" value="90" />
-            </label>
-          </div>
-        </div>
-
-        <div class="calibration-grid"
-          style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
-          <div class="calibration-group">
-            <h3>Offsets</h3>
-            <label>
-              Azimut-Offset (deg)
-              <input id="azOffsetInput" type="number" step="0.1" value="0" />
-            </label>
-            <label>
-              Elevation-Offset (deg)
-              <input id="elOffsetInput" type="number" step="0.1" value="0" />
-            </label>
-          </div>
-          <div class="calibration-group">
-            <h3>Skalierungsfaktoren</h3>
-            <label>
-              Azimut-Faktor
-              <input id="azScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
-              <small style="display: block; margin-top: 0.25rem; opacity: 0.7; font-size: 0.85em;">
-                z.B. 0.5 wenn Motor doppelt so weit dreht
-              </small>
-            </label>
-            <label>
-              Elevation-Faktor
-              <input id="elScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
-              <small style="display: block; margin-top: 0.25rem; opacity: 0.7; font-size: 0.85em;">
-                z.B. 0.5 wenn Motor doppelt so weit dreht
-              </small>
-            </label>
-          </div>
-        </div>
-
-        <div class="calibration-actions">
-          <button id="setAzZeroBtn" class="secondary" type="button">Aktuellen Azimut = 0° setzen</button>
-          <button id="setAzFullBtn" class="secondary" type="button">Aktuellen Azimut = 360° setzen</button>
-          <button id="resetOffsetsBtn" type="button">Offsets zuruecksetzen</button>
-          <button id="applyScaleFactorsBtn" class="primary" type="button">Skalierungsfaktoren speichern</button>
-        </div>
-
-        <div class="limit-actions">
-          <button id="applyLimitsBtn" class="primary" type="button">Limits speichern</button>
+        <div class="logo-container">
+          <img id="mainLogo" src="./assets/logo.png" alt="Logo" class="main-logo" />
         </div>
       </section>
 
@@ -302,13 +230,6 @@
                   <option value="450">450° (Erweitert)</option>
                 </select>
                 <p class="help-text">450° ermöglicht Überlappung für kontinuierliche Verfolgung.</p>
-              </div>
-              <div class="form-group">
-                <label class="toggle-label">
-                  <input id="settingsElevationDisplayToggle" type="checkbox" class="toggle-input" checked />
-                  <span class="toggle-switch"></span>
-                  <span class="toggle-text">Elevation-Anzeige aktivieren</span>
-                </label>
               </div>
             </div>
 

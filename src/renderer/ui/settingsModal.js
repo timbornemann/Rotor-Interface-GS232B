@@ -22,7 +22,6 @@ class SettingsModal {
       
       // Display/Mode
       azimuthMode: { id: 'settingsModeSelect', type: 'select', parse: Number },
-      elevationDisplayEnabled: { id: 'settingsElevationDisplayToggle', type: 'checkbox' },
       coneAngle: { id: 'settingsConeAngleInput', type: 'number' },
       coneLength: { id: 'settingsConeLengthInput', type: 'number' },
       azimuthDisplayOffset: { id: 'settingsAzimuthDisplayOffsetInput', type: 'number' },

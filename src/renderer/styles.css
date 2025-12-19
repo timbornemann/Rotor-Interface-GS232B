@@ -225,40 +225,6 @@ main.dashboard {
   align-items: center;
 }
 
-.limit-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-  margin-top: 0.5rem;
-}
-
-.limit-group h3 {
-  margin: 0 0 0.5rem;
-}
-
-.limit-group label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  color: var(--muted);
-}
-
-.limit-group input {
-  margin-top: 0;
-}
-
-.calibration-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.limit-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 1rem;
-}
 
 #limitWarning {
   margin-top: 0.75rem;
@@ -354,15 +320,6 @@ main.dashboard {
   max-width: 320px;
   max-height: 320px;
   object-fit: contain;
-}
-
-.elevation-logo {
-  width: 100%;
-  height: 100%;
-  max-width: 300px;
-  max-height: 300px;
-  object-fit: contain;
-  opacity: 0.8;
 }
 
 .elevation-indicator {
@@ -586,6 +543,26 @@ main.dashboard {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.logo-container {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 150px;
+}
+
+.main-logo {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.9;
+}
+
 .history-table-wrapper {
   margin-top: 0.5rem;
   flex: 1;
@@ -668,24 +645,95 @@ main.dashboard {
 @media (max-width: 1200px) {
   .dashboard {
     grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Verstecke alle Cards außer map-card und controls-card */
+  .compass-card,
+  .history-card,
+  .serial-tool-card {
+    display: none !important;
   }
   
   .map-card {
     grid-column: 1;
-  }
-  
-  .compass-card {
-    grid-column: 1;
+    order: 1;
+    width: 100%;
   }
   
   .right-column {
     grid-column: 1;
-    flex-direction: row;
-    flex-wrap: wrap;
+    order: 2;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
   }
   
   .right-column > section {
-    flex: 1 1 300px;
+    width: 100%;
+  }
+  
+  /* Reduzierte Rotorsteuerung */
+  .controls-card {
+    order: 2;
+    margin-top: 1rem;
+  }
+  
+  .controls-card .card-header {
+    display: none;
+  }
+  
+  .controls-card .goto-form,
+  .controls-card .route-hint,
+  .controls-card .notice,
+  .controls-card .logo-container {
+    display: none !important;
+  }
+  
+  /* Reduzierte Button-Anzeige */
+  .control-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 0;
+  }
+  
+  /* Verstecke unerwünschte Buttons */
+  .control-grid button[data-command="stop-azimuth"],
+  .control-grid button[data-command="stop-elevation"] {
+    display: none;
+  }
+  
+  /* Alles Stopp Button volle Breite */
+  .control-grid button[data-command="stop"] {
+    grid-column: 1 / -1;
+    margin-top: 0.5rem;
+  }
+  
+  /* Letzter Status ganz unten */
+  .controls-card .last-status {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .controls-card .last-status-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+  
+  .controls-card .last-status-value {
+    font-size: 0.9rem;
+    font-family: 'Courier New', monospace;
+    color: var(--text);
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 }
 
@@ -1095,6 +1143,12 @@ main.dashboard {
   font-weight: 500;
 }
 
+.form-group > label.toggle-label {
+  display: flex;
+  margin-bottom: 0;
+  font-weight: normal;
+}
+
 .form-group input,
 .form-group select {
   width: 100%;
@@ -1200,6 +1254,7 @@ main.dashboard {
   gap: 0.75rem;
   cursor: pointer;
   user-select: none;
+  width: 100%;
 }
 
 .toggle-label.compact {
@@ -1211,16 +1266,20 @@ main.dashboard {
   opacity: 0;
   width: 0;
   height: 0;
+  pointer-events: none;
 }
 
 .toggle-switch {
   position: relative;
+  display: inline-block;
   width: 44px;
+  min-width: 44px;
   height: 24px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .toggle-switch::after {
@@ -1233,6 +1292,7 @@ main.dashboard {
   background: var(--muted);
   border-radius: 50%;
   transition: all 0.2s ease;
+  box-sizing: border-box;
 }
 
 .toggle-input:checked + .toggle-switch {
@@ -1240,7 +1300,7 @@ main.dashboard {
 }
 
 .toggle-input:checked + .toggle-switch::after {
-  left: 23px;
+  transform: translateX(20px);
   background: white;
 }
 
@@ -1251,6 +1311,8 @@ main.dashboard {
 .toggle-text {
   font-size: 0.9rem;
   color: var(--text);
+  flex: 1;
+  line-height: 1.4;
 }
 
 /* Help Text */
@@ -1691,7 +1753,6 @@ main.dashboard {
   }
 
   .compass-card,
-  .limits-card,
   .serial-tool-card {
     display: none !important;
   }
@@ -1703,10 +1764,8 @@ main.dashboard {
   /* Radar in der Mitte - nimmt gesamten verfügbaren Platz zwischen Header und Controls ein */
   .map-card {
     position: fixed !important;
-    top: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    bottom: 0 !important;
     padding: 0 !important;
     margin: 0 !important;
     border-radius: 0 !important;
@@ -1717,12 +1776,16 @@ main.dashboard {
     z-index: 1 !important;
     background: var(--bg) !important;
     width: 100% !important;
-    height: 100% !important;
+    /* Platz zwischen Header (ca. 50-60px) und Controls (ca. 200-250px) */
+    top: 0 !important;
+    bottom: 0 !important;
+    height: 100vh !important;
     min-height: 0 !important;
     max-height: none !important;
     grid-column: auto !important;
-    /* Überschreibe .card Standard-Styles */
-    background: var(--bg) !important;
+    /* Padding für Header und Controls, damit Canvas nicht abgeschnitten wird */
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
   }
 
   .map-card .card-header,
@@ -1732,30 +1795,40 @@ main.dashboard {
 
   .map-card .canvas-wrapper {
     position: absolute !important;
-    top: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    bottom: 0 !important;
     padding: 0 !important;
     margin: 0 !important;
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
     width: 100% !important;
+    /* Platz für Header oben (ca. 50-60px) und Controls unten (ca. 200-250px) lassen */
+    top: 0 !important;
+    bottom: 0 !important;
     height: 100% !important;
     min-height: 0 !important;
     flex: none !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    /* Padding für Header und Controls, damit Canvas nicht abgeschnitten wird */
+    padding-top: 50px !important;
+    padding-bottom: 220px !important;
   }
 
   .map-card canvas {
     display: block !important;
-    width: 100% !important;
-    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
     border-radius: 0 !important;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.03), transparent 70%) !important;
     object-fit: contain !important;
     position: relative !important;
     z-index: 1 !important;
+    /* Sicherstellen, dass Canvas vollständig sichtbar ist und nicht abgeschnitten wird */
+    aspect-ratio: 1 / 1 !important;
   }
   
   /* Sicherstellen, dass map-card sichtbar ist */
@@ -1772,8 +1845,8 @@ main.dashboard {
     right: 0 !important;
     top: auto !important;
     z-index: 100 !important;
-    padding: 1rem 0.85rem !important;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+    padding: 0.85rem 0.75rem !important;
+    padding-bottom: max(0.85rem, env(safe-area-inset-bottom)) !important;
     border-radius: 0 !important;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3) !important;
     background: var(--card) !important;
@@ -1796,34 +1869,61 @@ main.dashboard {
   .controls-card .route-hint,
   .controls-card .notice,
   .controls-card .limit-warning,
-  .controls-card .speed-warning {
+  .controls-card .speed-warning,
+  .controls-card .logo-container {
+    display: none !important;
+  }
+
+  /* Reduzierte Button-Anzeige - konsistent mit 1200px */
+  .control-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 0;
+  }
+
+  /* Verstecke unerwünschte Buttons */
+  .control-grid button[data-command="stop-azimuth"],
+  .control-grid button[data-command="stop-elevation"] {
     display: none;
   }
 
-  .control-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.65rem;
+  /* Alles Stopp Button volle Breite */
+  .control-grid button[data-command="stop"] {
+    grid-column: 1 / -1;
+    margin-top: 0.5rem;
   }
 
   .control-grid button {
-    padding: 0.9rem 0.6rem;
-    font-size: 1.05rem;
-  }
-
-  .control-grid button[data-command="S"] {
-    grid-column: 1 / -1;
+    padding: 0.85rem 0.5rem;
+    font-size: 0.95rem;
+    min-height: 44px; /* Touch-freundlich */
   }
 
   .last-status {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: block;
+  }
+
+  .last-status-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
   }
 
   .last-status-value {
-    font-size: 0.95rem;
+    font-size: 0.85rem;
+    font-family: 'Courier New', monospace;
+    color: var(--text);
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: 100%;
+    box-sizing: border-box;
   }
 }

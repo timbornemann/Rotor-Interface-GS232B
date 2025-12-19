@@ -351,7 +351,6 @@ function updateUIFromConfig() {
   updateModeLabel();
   updateConeSettings();
   
-  if (elevation) elevation.setDisplayEnabled(config.elevationDisplayEnabled !== false);
   
   if (mapCoordinatesInput && config.mapLatitude !== null && config.mapLongitude !== null) {
     mapCoordinatesInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
