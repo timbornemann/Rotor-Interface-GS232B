@@ -1,13 +1,19 @@
-"""Simple threaded HTTP server to host the Rotor interface and expose a minimal API.
+"""Threaded HTTP server for the Rotor Interface.
 
-The server serves the static files from ``src/renderer`` and exposes a
-``/api/commands`` endpoint to send and fetch rotor commands. All API
-requests require the correct API key via ``X-API-Key`` header or a
-``key`` query parameter. The key is configurable but may also be left
-hard-coded for quick local use.
+The server serves static files from ``src/renderer`` and provides a REST API
+for rotor control. All serial communication is handled server-side - the
+frontend only calls API endpoints to control the rotor.
 
-The server can also manage COM port connections to the rotor controller,
-allowing remote clients to control the rotor via the API.
+API Endpoints:
+- GET  /api/settings         - Get all configuration
+- POST /api/settings         - Update configuration
+- GET  /api/rotor/ports      - List available COM ports
+- GET  /api/rotor/status     - Get current rotor status (cached from C2 polling)
+- POST /api/rotor/connect    - Connect to a COM port
+- POST /api/rotor/disconnect - Disconnect from COM port
+- POST /api/rotor/set_target - Set target azimuth/elevation
+- POST /api/rotor/manual     - Start manual movement (R/L/U/D)
+- POST /api/rotor/stop       - Stop all motion
 """
 
 from __future__ import annotations
@@ -399,21 +405,7 @@ class RotorHandler(SimpleHTTPRequestHandler):
                       self._send_json({"status": "ok", "message": "Not connected"})
             return
 
-        if parsed.path == "/api/rotor/command":
-            # Legacy raw command or internal usage
-             payload = self._read_json_body()
-             cmd = payload.get("command")
-             if cmd and ROTOR_CONNECTION:
-                  try:
-                      ROTOR_CONNECTION.send_command(cmd)
-                      self._send_json({"status": "ok"})
-                  except Exception as e:
-                      self._send_json({"error": str(e)}, HTTPStatus.BAD_REQUEST)
-             else:
-                  self._send_json({"error": "No command or not connected"}, HTTPStatus.BAD_REQUEST)
-             return
-
-        # NEW CONTROL ENDPOINTS
+        # CONTROL ENDPOINTS
         if parsed.path == "/api/rotor/set_target":
              payload = self._read_json_body()
              az = payload.get("az")

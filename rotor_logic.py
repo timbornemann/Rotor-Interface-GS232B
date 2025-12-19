@@ -38,7 +38,25 @@ class RotorLogic:
     - Ramp generation (Soft Start/Stop)
     - Speed control
     - Soft limits
+    
+    This class translates abstract direction commands to protocol-specific commands.
+    The frontend sends abstract directions ('left', 'right', 'up', 'down'),
+    and this class converts them to GS-232B protocol commands ('L', 'R', 'U', 'D').
     """
+    
+    # Mapping from abstract directions to protocol commands
+    DIRECTION_MAP = {
+        'left': 'L',
+        'right': 'R',
+        'up': 'U',
+        'down': 'D',
+        # Also accept protocol commands directly for backwards compatibility
+        'L': 'L',
+        'R': 'R',
+        'U': 'U',
+        'D': 'D',
+    }
+    
     def __init__(self, connection_manager):
         self.connection = connection_manager
         self.running = False
@@ -47,7 +65,7 @@ class RotorLogic:
         # State
         self.target_az: Optional[float] = None
         self.target_el: Optional[float] = None
-        self.manual_direction: Optional[str] = None # 'R', 'L', 'U', 'D'
+        self.manual_direction: Optional[str] = None  # Protocol command: 'R', 'L', 'U', 'D'
         self.stopping = False
         self.stop_phase_start = 0
         self.stop_initial_pos: Optional[Dict[str, float]] = None
@@ -128,19 +146,29 @@ class RotorLogic:
             self._send_direct_target(self.target_az, self.target_el)
 
     def manual_move(self, direction: str):
-        """Start manual movement (R, L, U, D)."""
-        if direction not in ['R', 'L', 'U', 'D']:
+        """Start manual movement.
+        
+        Accepts abstract directions ('left', 'right', 'up', 'down') or
+        protocol commands ('L', 'R', 'U', 'D') for backwards compatibility.
+        
+        Args:
+            direction: Abstract direction or protocol command
+        """
+        # Map abstract direction to protocol command
+        protocol_cmd = self.DIRECTION_MAP.get(direction)
+        if protocol_cmd is None:
+            logger.warning(f"Unknown direction: {direction}")
             return
         
-        self.manual_direction = direction
+        self.manual_direction = protocol_cmd
         self.target_az = None
         self.target_el = None
         self.stopping = False
         self.ramp_start_time = time.time()
-        logger.info(f"Manual move started: {direction}")
+        logger.info(f"Manual move started: {direction} -> {protocol_cmd}")
         
         if not self.config["rampEnabled"]:
-            self.connection.send_command(direction)
+            self.connection.send_command(protocol_cmd)
 
     def stop_motion(self):
         """Stop all motion."""

@@ -89,36 +89,14 @@ class RotorService {
   }
   
   // --- Control ---
-  
-  async control(command) {
-     // Legacy support or direct commands
-     // If command is one of our special ones (R, L, U, D, S, A, E), we use manual/stop endpoints
-     // otherwise raw command
-     
-     const cmd = command.toUpperCase().trim();
-     if (['R', 'L', 'U', 'D'].includes(cmd)) {
-         return this.manualMove(cmd);
-     }
-     if (['S', 'A', 'E'].includes(cmd)) {
-         return this.stopMotion();
-     }
-     
-     // Raw command
-     return this.sendRawCommand(command);
-  }
-  
-  async sendRawCommand(command) {
-      await fetch(`${this.apiBase}/api/rotor/command`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ command })
-      });
-  }
+  // Protocol-neutral control methods.
+  // The frontend uses abstract directions, the server handles protocol translation.
 
-  async setAzimuth(az) {
-      return this.setAzEl({ az, el: null });
-  }
-  
+  /**
+   * Set target position (azimuth and/or elevation)
+   * @param {number|null} az - Target azimuth in degrees
+   * @param {number|null} el - Target elevation in degrees
+   */
   async setAzEl({ az, el }) {
       await fetch(`${this.apiBase}/api/rotor/set_target`, {
           method: 'POST',
@@ -127,6 +105,18 @@ class RotorService {
       });
   }
   
+  /**
+   * Set target azimuth only
+   * @param {number} az - Target azimuth in degrees
+   */
+  async setAzimuth(az) {
+      return this.setAzEl({ az, el: null });
+  }
+  
+  /**
+   * Start manual movement in a direction
+   * @param {string} direction - One of: 'left', 'right', 'up', 'down'
+   */
   async manualMove(direction) {
       await fetch(`${this.apiBase}/api/rotor/manual`, {
           method: 'POST',
@@ -135,6 +125,9 @@ class RotorService {
       });
   }
   
+  /**
+   * Stop all rotor motion
+   */
   async stopMotion() {
       await fetch(`${this.apiBase}/api/rotor/stop`, { method: 'POST' });
   }
@@ -190,13 +183,15 @@ class RotorService {
   }
 
   // --- Polling ---
-  
-  // --- Polling ---
+  // The server handles C2 polling to the rotor hardware (every 1s).
+  // The frontend only fetches the cached status from the server.
+  // This avoids multiple clients flooding the serial connection with C2 requests.
   
   startPolling() {
       if (this.statusPollTimer) clearInterval(this.statusPollTimer);
-      // Poll faster for smoother updates (500ms)
-      this.statusPollTimer = setInterval(() => this.poll(), 500);
+      // Poll server for cached status every 1000ms
+      // The server already sends C2 to hardware every 1s, so this just syncs UI
+      this.statusPollTimer = setInterval(() => this.poll(), 1000);
       this.poll(); // Initial poll
   }
   

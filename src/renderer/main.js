@@ -77,10 +77,6 @@ const elScaleFactorInput = document.getElementById('elScaleFactorInput');
 const applyScaleFactorsBtn = document.getElementById('applyScaleFactorsBtn');
 const limitWarning = document.getElementById('limitWarning');
 const speedWarning = document.getElementById('speedWarning');
-const serialCommandInput = document.getElementById('serialCommandInput');
-const sendSerialCommandBtn = document.getElementById('sendSerialCommandBtn');
-const commandHistoryList = document.getElementById('commandHistoryList');
-const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 
 function logAction(message, details = {}) {
   console.log('[UI]', message, details);
@@ -249,14 +245,22 @@ function showSpeedWarning(message) {
 }
 
 const controls = new Controls(document.querySelector('.controls-card'), {
-  onCommand: async (command) => {
+  // Protocol-neutral command handler - uses abstract direction names
+  onCommand: async (direction) => {
     if (!connected) {
-      logAction('Steuerbefehl verworfen, nicht verbunden', { command });
+      logAction('Steuerbefehl verworfen, nicht verbunden', { direction });
       return;
     }
-    logAction('Steuerbefehl senden', { command });
+    logAction('Steuerbefehl senden', { direction });
     try {
-      await rotor.control(command);
+      // Abstract directions: 'left', 'right', 'up', 'down', 'stop', 'stop-azimuth', 'stop-elevation'
+      if (['left', 'right', 'up', 'down'].includes(direction)) {
+        await rotor.manualMove(direction);
+      } else if (['stop', 'stop-azimuth', 'stop-elevation'].includes(direction)) {
+        await rotor.stopMotion();
+      } else {
+        console.warn(`Unknown direction: ${direction}`);
+      }
     } catch (error) {
       reportError(error);
     }
@@ -460,29 +464,6 @@ async function init() {
           logAction('Einstellungen gespeichert', newConfig);
         });
       }
-    });
-  }
-
-  // Serial Tool
-  if (sendSerialCommandBtn) {
-    sendSerialCommandBtn.addEventListener('click', () => void handleSendSerialCommand());
-  }
-  if (serialCommandInput) {
-    serialCommandInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') void handleSendSerialCommand();
-    });
-  }
-  if (clearHistoryBtn) {
-    clearHistoryBtn.addEventListener('click', () => clearCommandHistory());
-  }
-  const quickCmdButtons = document.querySelectorAll('.quick-cmd-btn');
-  if (quickCmdButtons) {
-    quickCmdButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const cmd = btn.dataset.cmd;
-        if (serialCommandInput) serialCommandInput.value = cmd;
-        void handleSendSerialCommand(cmd);
-      });
     });
   }
 
@@ -782,10 +763,6 @@ function handleStatus(status) {
     connectionStatus.classList.add('connected');
     connectionStatus.classList.remove('disconnected');
   }
-  
-  if (status.rawLine) {
-    addCommandToHistory(`← ${status.rawLine}`, 'received');
-  }
 }
 
 function updateModeLabel() {
@@ -855,74 +832,6 @@ function reportError(error) {
   connectionStatus.textContent = `Fehler: ${message}`;
   connectionStatus.classList.remove('connected');
   connectionStatus.classList.add('disconnected');
-}
-
-let commandHistory = [];
-
-async function handleSendSerialCommand(cmdOverride = null) {
-  if (!connected) {
-    reportError('Nicht verbunden.');
-    return;
-  }
-  const command = cmdOverride || (serialCommandInput ? serialCommandInput.value.trim() : '');
-  if (!command) {
-    reportError('Bitte einen Befehl eingeben.');
-    return;
-  }
-
-  try {
-    logAction('Serieller Befehl senden', { command });
-    addCommandToHistory(command, 'sent');
-    await rotor.sendRawCommand(command);
-    
-    if (serialCommandInput && !cmdOverride) serialCommandInput.value = '';
-  } catch (error) {
-    reportError(error);
-    addCommandToHistory(`FEHLER: ${error.message}`, 'error');
-  }
-}
-
-function addCommandToHistory(command, type = 'sent') {
-  const time = new Date().toLocaleTimeString();
-  const item = { time, command, type };
-  commandHistory.unshift(item);
-  if (commandHistory.length > 100) commandHistory = commandHistory.slice(0, 100);
-  updateCommandHistoryDisplay();
-}
-
-function updateCommandHistoryDisplay() {
-  if (!commandHistoryList) return;
-  commandHistoryList.innerHTML = '';
-  
-  if (commandHistory.length === 0) {
-    const emptyMsg = document.createElement('div');
-    emptyMsg.className = 'command-history-item';
-    emptyMsg.textContent = 'Keine Befehle gesendet';
-    emptyMsg.style.color = 'var(--muted)';
-    emptyMsg.style.fontStyle = 'italic';
-    commandHistoryList.appendChild(emptyMsg);
-    return;
-  }
-  
-  commandHistory.forEach((item) => {
-    const div = document.createElement('div');
-    div.className = `command-history-item ${item.type}`;
-    const timeSpan = document.createElement('span');
-    timeSpan.className = 'command-history-time';
-    timeSpan.textContent = item.time;
-    const cmdSpan = document.createElement('span');
-    cmdSpan.className = 'command-history-command';
-    cmdSpan.textContent = item.command;
-    div.appendChild(timeSpan);
-    div.appendChild(cmdSpan);
-    commandHistoryList.appendChild(div);
-  });
-}
-
-function clearCommandHistory() {
-  commandHistory = [];
-  updateCommandHistoryDisplay();
-  logAction('Befehls-Historie gelöscht');
 }
 
 window.addEventListener('beforeunload', () => {
