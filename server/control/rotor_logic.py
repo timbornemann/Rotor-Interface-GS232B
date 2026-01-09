@@ -248,11 +248,12 @@ class RotorLogic:
         """Send direct target command (W or M) without ramping.
         
         Args:
-            az: Target azimuth in real-world degrees.
-            el: Target elevation in real-world degrees.
+            az: Target azimuth in calibrated degrees (from frontend).
+            el: Target elevation in calibrated degrees (from frontend).
         """
-        # Convert Target Degrees (Real) -> Raw Command Values
-        # Raw = (Real * Scale) - Offset
+        # Convert Target Degrees (Calibrated) -> Raw Command Values
+        # Formula: calibrated = (raw + offset) / scale
+        # Inverse: raw = (calibrated * scale) - offset
         
         vals = []
         if az is not None:
@@ -268,6 +269,36 @@ class RotorLogic:
                 vals.append(f"{int(round(curr_az_raw)):03d}")
             
             vals.append(f"{int(round(raw_el)):03d}")
+
+        if len(vals) == 1:
+            self.connection.send_command(f"M{vals[0]}")
+        elif len(vals) == 2:
+            self.connection.send_command(f"W{vals[0]} {vals[1]}")
+    
+    def set_target_raw(self, az: Optional[float], el: Optional[float]) -> None:
+        """Set a target position using raw hardware values (no calibration).
+        
+        Args:
+            az: Target azimuth in raw degrees (hardware position, 0-360/450).
+            el: Target elevation in raw degrees (hardware position, 0-90).
+        """
+        # Send raw values directly to motor without any calibration conversion
+        vals = []
+        if az is not None:
+            # Clamp to valid range
+            az_clamped = max(0, min(az, self.config.get("azimuthMode", 360)))
+            vals.append(f"{int(round(az_clamped)):03d}")
+        
+        if el is not None:
+            # Clamp to valid range
+            el_clamped = max(0, min(el, 90))
+            if len(vals) == 0:
+                # If only EL provided, we need current AZ for the W command
+                status = self.connection.get_status()
+                curr_az_raw = status.get("azimuthRaw", 0) if status else 0
+                vals.append(f"{int(round(curr_az_raw)):03d}")
+            
+            vals.append(f"{int(round(el_clamped)):03d}")
 
         if len(vals) == 1:
             self.connection.send_command(f"M{vals[0]}")

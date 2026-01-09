@@ -190,6 +190,8 @@ class RotorHandler(SimpleHTTPRequestHandler):
 
             if parsed.path == "/api/rotor/set_target":
                 routes.handle_set_target(self, self.state)
+            elif parsed.path == "/api/rotor/set_target_raw":
+                routes.handle_set_target_raw(self, self.state)
                 return
 
             if parsed.path == "/api/rotor/manual":

@@ -41,16 +41,47 @@ mapView.setOnClick(async (azimuth, elevation) => {
     return;
   }
   
-  // Validiere gegen Limits (nur Azimut)
-  if (!validateTargets({ az: azimuth })) {
-    logAction('Klick auf Karte verworfen, Ziel außerhalb Limits', { azimuth });
+  // Karten-Klick gibt kalibrierte Position zurück (was auf der Karte angezeigt wird)
+  // Berechne die kürzeste Raw-Position, die dieser kalibrierten Position entspricht
+  const scale = config.azimuthScaleFactor || 1.0;
+  const offset = config.azimuthOffset || 0.0;
+  
+  // Mögliche Raw-Werte für die angeklickte kalibrierte Position:
+  // raw = (calibrated * scale) - offset
+  // Aber "calibrated" könnte auch calibrated - 360 oder calibrated + 360 sein
+  const candidates = [
+    (azimuth * scale) - offset,           // z.B. 350° → 410°
+    ((azimuth - 360) * scale) - offset,   // z.B. -10° → 50°
+    ((azimuth + 360) * scale) - offset    // z.B. 710° → 770°
+  ];
+  
+  // Wähle den Kandidaten, der im gültigen Bereich liegt und am nächsten zur aktuellen Position ist
+  const maxAz = config.azimuthMode === 450 ? 450 : 360;
+  const currentRaw = rotor.currentStatus?.azimuthRaw || 0;
+  
+  // Filtere ungültige Kandidaten
+  const validCandidates = candidates.filter(raw => raw >= 0 && raw <= maxAz);
+  
+  if (validCandidates.length === 0) {
+    showLimitWarning(`Keine gültige Raw-Position für ${azimuth.toFixed(1)}° (kalibriert) gefunden.`);
+    logAction('Klick auf Karte verworfen, keine gültige Raw-Position', { calibrated: azimuth, candidates });
     return;
   }
   
-  logAction('Klick auf Karte - Rotor wird bewegt (nur Azimut)', { azimuth: azimuth.toFixed(1) });
+  // Wähle den nächstgelegenen Kandidaten zur aktuellen Position
+  const rawAzimuth = validCandidates.reduce((closest, candidate) => {
+    return Math.abs(candidate - currentRaw) < Math.abs(closest - currentRaw) ? candidate : closest;
+  });
+  
+  logAction('Klick auf Karte - Rotor wird bewegt (nur Azimut)', { 
+    calibrated: azimuth.toFixed(1), 
+    raw: rawAzimuth.toFixed(1),
+    currentRaw: currentRaw.toFixed(1),
+    candidates: candidates.map(c => c.toFixed(1))
+  });
   try {
-    // Nur Azimut anfahren, Elevation ignorieren (da in der Karte ungenau)
-    await rotor.setAzimuth(azimuth);
+    // Sende Raw-Wert direkt an Motor
+    await rotor.setAzimuthRaw(rawAzimuth);
   } catch (error) {
     reportError(error);
   }
@@ -271,16 +302,20 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       controls.showRouteHint(null);
       return;
     }
-    if (!validateTargets({ az: azimuth })) {
-      logAction('Azimut-Befehl verworfen, Ziel ausserhalb Limits', { azimuth });
+    // Goto-Eingabe ist ein Raw-Wert (Hardware-Position), wird direkt an Motor gesendet
+    // Validierung: Einfach gegen 0-360/450 für Azimut
+    const maxAz = config.azimuthMode === 450 ? 450 : 360;
+    if (azimuth < 0 || azimuth > maxAz) {
+      showLimitWarning(`Ziel-Azimut ${azimuth}° (Raw) liegt außerhalb des gültigen Bereichs (0…${maxAz}°).`);
+      logAction('Azimut-Befehl verworfen, Ziel ausserhalb Bereich', { raw: azimuth, max: maxAz });
       controls.showRouteHint(null);
       return;
     }
-    logAction('Azimut-Befehl senden', { azimuth });
+    
+    logAction('Azimut-Befehl senden (Raw)', { raw: azimuth });
     try {
-      const plan = await rotor.planAzimuthTarget(azimuth);
-      controls.showRouteHint(plan);
-      await rotor.setAzimuth(azimuth);
+      // Sende Raw-Wert direkt an Motor, ohne Umrechnung
+      await rotor.setAzimuthRaw(azimuth);
     } catch (error) {
       reportError(error);
     }
@@ -291,16 +326,33 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       controls.showRouteHint(null);
       return;
     }
-    if (!validateTargets({ az: azimuth, el: elevation })) {
-      logAction('Azimut/Elevation-Befehl verworfen, Ziel ausserhalb Limits', { azimuth, elevation });
+    // Goto-Eingabe ist ein Raw-Wert (Hardware-Position), wird direkt an Motor gesendet
+    // Validierung: Einfach gegen 0-360/450 für Azimut und 0-90 für Elevation
+    const maxAz = config.azimuthMode === 450 ? 450 : 360;
+    let validationError = null;
+    
+    if (azimuth < 0 || azimuth > maxAz) {
+      validationError = `Ziel-Azimut ${azimuth}° (Raw) liegt außerhalb des gültigen Bereichs (0…${maxAz}°).`;
+    }
+    if (elevation < 0 || elevation > 90) {
+      if (validationError) {
+        validationError += ` Ziel-Elevation ${elevation}° (Raw) liegt außerhalb des gültigen Bereichs (0…90°).`;
+      } else {
+        validationError = `Ziel-Elevation ${elevation}° (Raw) liegt außerhalb des gültigen Bereichs (0…90°).`;
+      }
+    }
+    
+    if (validationError) {
+      showLimitWarning(validationError);
+      logAction('Azimut/Elevation-Befehl verworfen, Ziel ausserhalb Bereich', { raw: { az: azimuth, el: elevation } });
       controls.showRouteHint(null);
       return;
     }
-    logAction('Azimut/Elevation-Befehl senden', { azimuth, elevation });
+    
+    logAction('Azimut/Elevation-Befehl senden (Raw)', { raw: { az: azimuth, el: elevation } });
     try {
-      const plan = await rotor.planAzimuthTarget(azimuth);
-      controls.showRouteHint(plan);
-      await rotor.setAzEl({ az: azimuth, el: elevation });
+      // Sende Raw-Werte direkt an Motor, ohne Umrechnung
+      await rotor.setAzElRaw({ az: azimuth, el: elevation });
     } catch (error) {
       reportError(error);
     }

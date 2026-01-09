@@ -206,6 +206,27 @@ class RotorService {
   }
   
   /**
+   * Set target position using raw hardware values (no calibration)
+   * @param {number|null} az - Target azimuth in raw degrees (hardware position)
+   * @param {number|null} el - Target elevation in raw degrees (hardware position)
+   */
+  async setAzElRaw({ az, el }) {
+      await fetch(`${this.apiBase}/api/rotor/set_target_raw`, {
+          method: 'POST',
+          headers: this.getSessionHeaders(),
+          body: JSON.stringify({ az, el })
+      });
+  }
+  
+  /**
+   * Set target azimuth only using raw hardware value
+   * @param {number} az - Target azimuth in raw degrees (hardware position)
+   */
+  async setAzimuthRaw(az) {
+      return this.setAzElRaw({ az, el: null });
+  }
+  
+  /**
    * Start manual movement in a direction
    * @param {string} direction - One of: 'left', 'right', 'up', 'down'
    */

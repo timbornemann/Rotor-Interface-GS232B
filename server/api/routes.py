@@ -241,6 +241,38 @@ def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None
         )
 
 
+def handle_set_target_raw(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/set_target_raw - Set target using raw hardware values.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    try:
+        payload = read_json_body(handler)
+        az = payload.get("az")
+        el = payload.get("el")
+        
+        if not state.rotor_logic:
+            send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        
+        if not state.rotor_connection or not state.rotor_connection.is_connected():
+            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            return
+        
+        state.rotor_logic.set_target_raw(az, el)
+        send_json(handler, {"status": "ok"})
+    except Exception as e:
+        from server.utils.logging import log
+        log(f"[Routes] Error in handle_set_target_raw: {e}")
+        send_json(
+            handler, 
+            {"error": "Failed to set raw target", "message": str(e)}, 
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
+
+
 def handle_stop(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     """Handle POST /api/rotor/stop - Stop all motion.
     
