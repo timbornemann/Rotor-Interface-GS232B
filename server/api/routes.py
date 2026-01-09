@@ -181,15 +181,29 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
         handler: The HTTP request handler instance.
         state: The server state singleton.
     """
-    payload = read_json_body(handler)
-    az = payload.get("az")
-    el = payload.get("el")
-    
-    if state.rotor_logic:
+    try:
+        payload = read_json_body(handler)
+        az = payload.get("az")
+        el = payload.get("el")
+        
+        if not state.rotor_logic:
+            send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        
+        if not state.rotor_connection or not state.rotor_connection.is_connected():
+            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            return
+        
         state.rotor_logic.set_target(az, el)
         send_json(handler, {"status": "ok"})
-    else:
-        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        from server.utils.logging import log
+        log(f"[Routes] Error in handle_set_target: {e}")
+        send_json(
+            handler, 
+            {"error": "Failed to set target", "message": str(e)}, 
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
@@ -199,14 +213,28 @@ def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None
         handler: The HTTP request handler instance.
         state: The server state singleton.
     """
-    payload = read_json_body(handler)
-    direction = payload.get("direction")
-    
-    if state.rotor_logic:
+    try:
+        payload = read_json_body(handler)
+        direction = payload.get("direction")
+        
+        if not state.rotor_logic:
+            send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        
+        if not state.rotor_connection or not state.rotor_connection.is_connected():
+            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            return
+        
         state.rotor_logic.manual_move(direction)
         send_json(handler, {"status": "ok"})
-    else:
-        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        from server.utils.logging import log
+        log(f"[Routes] Error in handle_manual: {e}")
+        send_json(
+            handler, 
+            {"error": "Failed to start manual movement", "message": str(e)}, 
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 def handle_stop(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
@@ -216,11 +244,21 @@ def handle_stop(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
         handler: The HTTP request handler instance.
         state: The server state singleton.
     """
-    if state.rotor_logic:
+    try:
+        if not state.rotor_logic:
+            send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        
         state.rotor_logic.stop_motion()
         send_json(handler, {"status": "ok"})
-    else:
-        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        from server.utils.logging import log
+        log(f"[Routes] Error in handle_stop: {e}")
+        send_json(
+            handler, 
+            {"error": "Failed to stop motion", "message": str(e)}, 
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 # --- Client Management Routes ---

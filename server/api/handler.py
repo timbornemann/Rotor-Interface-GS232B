@@ -171,44 +171,56 @@ class RotorHandler(SimpleHTTPRequestHandler):
         if not self._check_session():
             return
         
-        if parsed.path == "/api/settings":
-            routes.handle_post_settings(self, self.state)
-            return
+        try:
+            if parsed.path == "/api/settings":
+                routes.handle_post_settings(self, self.state)
+                return
 
-        if parsed.path == "/api/rotor/connect":
-            routes.handle_connect(self, self.state)
-            return
+            if parsed.path == "/api/rotor/connect":
+                routes.handle_connect(self, self.state)
+                return
 
-        if parsed.path == "/api/rotor/disconnect":
-            routes.handle_disconnect(self, self.state)
-            return
+            if parsed.path == "/api/rotor/disconnect":
+                routes.handle_disconnect(self, self.state)
+                return
 
-        if parsed.path == "/api/rotor/set_target":
-            routes.handle_set_target(self, self.state)
-            return
+            if parsed.path == "/api/rotor/set_target":
+                routes.handle_set_target(self, self.state)
+                return
 
-        if parsed.path == "/api/rotor/manual":
-            routes.handle_manual(self, self.state)
-            return
+            if parsed.path == "/api/rotor/manual":
+                routes.handle_manual(self, self.state)
+                return
 
-        if parsed.path == "/api/rotor/stop":
-            routes.handle_stop(self, self.state)
-            return
-        
-        # Client management routes
-        suspend_match = self.SUSPEND_PATTERN.match(parsed.path)
-        if suspend_match:
-            client_id = suspend_match.group(1)
-            routes.handle_suspend_client(self, self.state, client_id)
-            return
-        
-        resume_match = self.RESUME_PATTERN.match(parsed.path)
-        if resume_match:
-            client_id = resume_match.group(1)
-            routes.handle_resume_client(self, self.state, client_id)
-            return
+            if parsed.path == "/api/rotor/stop":
+                routes.handle_stop(self, self.state)
+                return
+            
+            # Client management routes
+            suspend_match = self.SUSPEND_PATTERN.match(parsed.path)
+            if suspend_match:
+                client_id = suspend_match.group(1)
+                routes.handle_suspend_client(self, self.state, client_id)
+                return
+            
+            resume_match = self.RESUME_PATTERN.match(parsed.path)
+            if resume_match:
+                client_id = resume_match.group(1)
+                routes.handle_resume_client(self, self.state, client_id)
+                return
 
-        send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)
+            send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)
+        except Exception as e:
+            # Log the error and send a proper error response
+            import traceback
+            from server.utils.logging import log
+            log(f"[Handler] Error handling POST {parsed.path}: {e}")
+            log(f"[Handler] Traceback: {traceback.format_exc()}")
+            send_json(
+                self, 
+                {"error": "Internal server error", "message": str(e)}, 
+                HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
     def log_message(self, format: str, *args: Any) -> None:
         """Override to suppress logging for status polls.

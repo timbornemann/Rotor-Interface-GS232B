@@ -297,10 +297,21 @@ class WebSocketManager:
             
         self._running = True
         
-        async with websockets.serve(self._handle_client, host, port):
-            log(f"[WebSocket] Server started on ws://{host}:{port}")
-            while self._running:
-                await asyncio.sleep(1)
+        try:
+            async with websockets.serve(self._handle_client, host, port):
+                log(f"[WebSocket] Server started on ws://{host}:{port}")
+                while self._running:
+                    await asyncio.sleep(1)
+        except OSError as e:
+            if e.errno == 10048 or "Address already in use" in str(e):
+                log(f"[WebSocket] ERROR: Port {port} is already in use. WebSocket server disabled.")
+                log("[WebSocket] Please stop any other instances of the server or change the port.")
+            else:
+                log(f"[WebSocket] ERROR: Failed to start server: {e}")
+            self._running = False
+        except Exception as e:
+            log(f"[WebSocket] ERROR: Unexpected error starting server: {e}")
+            self._running = False
     
     def start(self, host: str = "0.0.0.0", port: int = 8082) -> None:
         """Start the WebSocket server in a background thread.
