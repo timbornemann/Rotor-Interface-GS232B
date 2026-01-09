@@ -44,6 +44,7 @@ class RotorConnection:
         self.polling_active = False
         self.polling_thread: Optional[threading.Thread] = None
         self.polling_interval_s: float = polling_interval_ms / 1000.0
+        self.polling_interval_lock = threading.Lock()  # Lock for thread-safe interval updates
         self.buffer = ""
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
@@ -164,8 +165,11 @@ class RotorConnection:
         Args:
             polling_interval_ms: New interval in milliseconds for C2 status polling.
         """
-        self.polling_interval_s = polling_interval_ms / 1000.0
-        log(f"[RotorConnection] Polling interval updated to {polling_interval_ms}ms")
+        old_interval = self.polling_interval_s
+        with self.polling_interval_lock:
+            self.polling_interval_s = polling_interval_ms / 1000.0
+            new_interval = self.polling_interval_s
+        log(f"[RotorConnection] Polling interval changed from {old_interval*1000:.0f}ms to {polling_interval_ms}ms ({new_interval:.3f}s)")
 
     def _polling_loop(self) -> None:
         """Background thread to poll the rotor for status."""
@@ -173,7 +177,28 @@ class RotorConnection:
             try:
                 # Send C2 with configured interval
                 self.send_command("C2")
-                time.sleep(self.polling_interval_s)
+                
+                # Sleep in small chunks to allow interval changes to take effect quickly
+                # This ensures that if the interval is changed, it will be applied within
+                # at most 0.1 seconds instead of waiting for the full sleep duration
+                sleep_chunk = 0.1  # Sleep in 100ms chunks
+                
+                elapsed = 0.0
+                while self.polling_active and self.serial and self.serial.is_open:
+                    # Get current target sleep time (re-read each iteration to catch changes)
+                    with self.polling_interval_lock:
+                        target_sleep = self.polling_interval_s
+                    
+                    # If we've already slept for the target duration, break
+                    if elapsed >= target_sleep:
+                        break
+                    
+                    # Sleep in small chunk
+                    remaining = target_sleep - elapsed
+                    chunk = min(sleep_chunk, remaining)
+                    time.sleep(chunk)
+                    elapsed += chunk
+                        
             except Exception as e:
                 log(f"[RotorConnection] Polling error: {e}")
                 time.sleep(1.0)

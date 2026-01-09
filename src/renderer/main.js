@@ -535,7 +535,52 @@ async function init() {
           } else {
             showSpeedWarning('');
           }
-          config = await configStore.save(newConfig);
+          
+          // Separate server settings from regular settings
+          const serverSettingsKeys = [
+            'serverHttpPort', 'serverWebSocketPort', 'serverPollingIntervalMs',
+            'serverSessionTimeoutS', 'serverMaxClients', 'serverLoggingLevel'
+          ];
+          const serverSettings = {};
+          const regularSettings = {};
+          
+          for (const key in newConfig) {
+            if (serverSettingsKeys.includes(key)) {
+              serverSettings[key] = newConfig[key];
+            } else {
+              regularSettings[key] = newConfig[key];
+            }
+          }
+          
+          // Save regular settings
+          config = await configStore.save(regularSettings);
+          
+          // Save server settings separately if any were changed
+          if (Object.keys(serverSettings).length > 0) {
+            try {
+              const resp = await fetch(`${rotor.apiBase}/api/server/settings`, {
+                method: 'POST',
+                headers: rotor.getSessionHeaders(),
+                body: JSON.stringify(serverSettings)
+              });
+              if (resp.ok) {
+                const result = await resp.json();
+                logAction('Server-Einstellungen gespeichert', serverSettings);
+                if (result.restartRequired) {
+                  showLimitWarning('Server muss neu gestartet werden, damit Port-Änderungen wirksam werden.');
+                }
+              } else {
+                const error = await resp.json();
+                reportError(new Error(`Fehler beim Speichern der Server-Einstellungen: ${error.error || resp.statusText}`));
+              }
+            } catch (error) {
+              reportError(new Error(`Fehler beim Speichern der Server-Einstellungen: ${error.message}`));
+            }
+          }
+          
+          // Merge server settings back into config for local cache
+          config = { ...config, ...serverSettings };
+          
           updateUIFromConfig();
           applyLimitsToRotor();
           applyOffsetsToRotor();
