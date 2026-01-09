@@ -886,7 +886,9 @@ function handleStatus(status) {
   }
   
   if (typeof status.azimuth === 'number') {
-    azValue.textContent = `${status.azimuth.toFixed(0)}deg`;
+    // Normalisiere Azimut auf 0-360 Grad für die Anzeige
+    const normalizedAz = ((status.azimuth % 360) + 360) % 360;
+    azValue.textContent = `${normalizedAz.toFixed(0)}deg`;
   }
   if (typeof status.elevation === 'number') {
     elValue.textContent = `${status.elevation.toFixed(0)}deg`;
@@ -896,8 +898,9 @@ function handleStatus(status) {
   mapView.update(status.azimuth, status.elevation);
   
   const time = new Date(status.timestamp).toLocaleTimeString();
-  const az = typeof status.azimuth === 'number' ? status.azimuth.toFixed(0) : '--';
-  const el = typeof status.elevation === 'number' ? status.elevation.toFixed(0) : '--';
+  // "Letzter Status:" zeigt immer die exakten Raw-Werte der Hardware (ohne Offset/Scale)
+  const az = typeof status.azimuthRaw === 'number' ? status.azimuthRaw.toFixed(0) : '--';
+  const el = typeof status.elevationRaw === 'number' ? status.elevationRaw.toFixed(0) : '--';
   lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
   logAction('Status aktualisiert', { status, display: lastStatusValue.textContent });
   
