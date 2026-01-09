@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GS-232B API Tester</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f9;
+            --card-bg: #ffffff;
+            --primary: #007bff;
+            --success: #28a745;
+            --danger: #dc3545;
+            --text: #333;
+            --border: #ddd;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            display: grid;
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        h2 { margin-top: 0; border-bottom: 2px solid var(--bg-color); padding-bottom: 10px; }
+        
+        .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+        
+        input, select, button {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button { cursor: pointer; background-color: #e0e0e0; transition: background 0.2s; }
+        button:hover { background-color: #d0d0d0; }
+        button.primary { background-color: var(--primary); color: white; border: none; }
+        button.success { background-color: var(--success); color: white; border: none; }
+        button.danger { background-color: var(--danger); color: white; border: none; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        .status-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            text-align: center;
+        }
+        .status-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        .value-large { font-size: 2em; font-weight: bold; color: var(--primary); }
+        .label { font-size: 0.9em; color: #666; }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            max-width: 200px;
+            margin: 0 auto;
+        }
+
+        #log {
+            width: 100%;
+            height: 200px;
+            background: #1e1e1e;
+            color: #00ff00;
+            font-family: monospace;
+            padding: 10px;
+            overflow-y: scroll;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 12px;
+        }
+
+        .indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #ccc;
+            margin-right: 5px;
+        }
+        .indicator.active { background-color: var(--success); }
+        .indicator.error { background-color: var(--danger); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Rotor Interface GS232B Tester</h1>
+
+        <div class="card">
+            <h2>Konfiguration & Verbindung</h2>
+            <div class="row">
+                <label>API URL:</label>
+                <input type="text" id="baseUrl" value="http://localhost:8081" style="flex-grow: 1;">
+            </div>
+            <div class="row">
+                <button onclick="fetchPorts()">Ports laden</button>
+                <select id="portSelect">
+                    <option value="">-- Ports laden --</option>
+                </select>
+                <input type="number" id="baudRate" value="9600" style="width: 80px;">
+                <button class="success" onclick="connect()">Verbinden</button>
+                <button class="danger" onclick="disconnect()">Trennen</button>
+            </div>
+            <div class="row">
+                <span id="connStatus" class="indicator"></span>
+                <span id="connText">Nicht verbunden</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="row" style="justify-content: space-between;">
+                <h2>Aktuelle Position</h2>
+                <div class="row">
+                    <label><input type="checkbox" id="autoPoll" checked> Live Update (500ms)</label>
+                </div>
+            </div>
+            <div class="status-display">
+                <div class="status-box">
+                    <div class="label">Azimuth (Kalibriert)</div>
+                    <div id="dispAz" class="value-large">---</div>
+                    <div class="label">Raw: <span id="rawAz">---</span></div>
+                </div>
+                <div class="status-box">
+                    <div class="label">Elevation (Kalibriert)</div>
+                    <div id="dispEl" class="value-large">---</div>
+                    <div class="label">Raw: <span id="rawEl">---</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Steuerung</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 40px; justify-content: center;">
+                
+                <div>
+                    <h3>Manuell</h3>
+                    <div class="control-grid">
+                        <div></div>
+                        <button onmousedown="startMove('up')" onmouseup="stopMove()">▲</button>
+                        <div></div>
+                        <button onmousedown="startMove('left')" onmouseup="stopMove()">◄</button>
+                        <button class="danger" onclick="stopMove()">■</button>
+                        <button onmousedown="startMove('right')" onmouseup="stopMove()">►</button>
+                        <div></div>
+                        <button onmousedown="startMove('down')" onmouseup="stopMove()">▼</button>
+                        <div></div>
+                    </div>
+                    <p style="text-align: center; font-size: 0.8em; color: #666;">Gedrückt halten</p>
+                </div>
+
+                <div>
+                    <h3>Ziel setzen</h3>
+                    <div class="row">
+                        <label>Az:</label>
+                        <input type="number" id="targetAz" placeholder="0-360" style="width: 70px;">
+                        <label>El:</label>
+                        <input type="number" id="targetEl" placeholder="0-90" style="width: 70px;">
+                    </div>
+                    <div class="row">
+                        <button class="primary" onclick="setTarget()">Go (Kalibriert)</button>
+                        <button onclick="setTargetRaw()">Go (RAW)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>API Log</h2>
+            <div id="log"></div>
+            <button onclick="document.getElementById('log').innerHTML = ''" style="margin-top: 5px; font-size: 0.8em;">Clear Log</button>
+        </div>
+    </div>
+
+    <script>
+        let pollInterval = null;
+
+        // --- Helper: Logging ---
+        function log(msg, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? '#ff6b6b' : (type === 'success' ? '#51cf66' : '#00ff00');
+            logDiv.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // --- Helper: API Fetcher ---
+        async function api(endpoint, method = 'GET', body = null) {
+            const baseUrl = document.getElementById('baseUrl').value.replace(/\/$/, '');
+            const url = `${baseUrl}${endpoint}`;
+            
+            const options = {
+                method: method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (body) options.body = JSON.stringify(body);
+
+            try {
+                const response = await fetch(url, options);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || `HTTP ${response.status}`);
+                }
+                return data;
+            } catch (error) {
+                log(`API Error (${endpoint}): ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // --- Funktionen ---
+
+        async function fetchPorts() {
+            try {
+                const data = await api('/api/rotor/ports');
+                const select = document.getElementById('portSelect');
+                select.innerHTML = '';
+                
+                if (data.ports && data.ports.length > 0) {
+                    data.ports.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.path;
+                        opt.text = `${p.path} (${p.friendlyName || ''})`;
+                        select.appendChild(opt);
+                    });
+                    log(`Ports geladen: ${data.ports.length}`, 'success');
+                } else {
+                    const opt = document.createElement('option');
+                    opt.text = "Keine Ports gefunden";
+                    select.appendChild(opt);
+                }
+            } catch (e) { /* Error logged in api() */ }
+        }
+
+        async function connect() {
+            const port = document.getElementById('portSelect').value;
+            const baud = parseInt(document.getElementById('baudRate').value);
+            
+            if (!port) return alert("Bitte Port wählen");
+
+            try {
+                await api('/api/rotor/connect', 'POST', { port, baudRate: baud });
+                log(`Verbunden mit ${port}`, 'success');
+                updateStatus();
+            } catch (e) { /* handled */ }
+        }
+
+        async function disconnect() {
+            try {
+                await api('/api/rotor/disconnect', 'POST');
+                log("Verbindung getrennt", 'info');
+                updateStatus();
+            } catch (e) { /* handled */ }
+        }
+
+        async function updateStatus() {
+            try {
+                const data = await api('/api/rotor/status');
+                const connected = data.connected;
+                
+                // UI Update Connection
+                const indicator = document.getElementById('connStatus');
+                const text = document.getElementById('connText');
+                
+                if (connected) {
+                    indicator.className = 'indicator active';
+                    text.textContent = `Verbunden (${data.port})`;
+                    
+                    // Positionen
+                    if (data.status) {
+                        // Kalibriert
+                        document.getElementById('dispAz').textContent = data.status.calibrated.azimuth.toFixed(1) + '°';
+                        document.getElementById('dispEl').textContent = data.status.calibrated.elevation.toFixed(1) + '°';
+                        // RAW
+                        document.getElementById('rawAz').textContent = data.status.rph.azimuth;
+                        document.getElementById('rawEl').textContent = data.status.rph.elevation;
+                    }
+                } else {
+                    indicator.className = 'indicator error';
+                    text.textContent = 'Nicht verbunden';
+                    document.getElementById('dispAz').textContent = '---';
+                    document.getElementById('dispEl').textContent = '---';
+                }
+
+            } catch (e) {
+                // Bei Netzwerkfehler
+                document.getElementById('connStatus').className = 'indicator error';
+                document.getElementById('connText').textContent = 'Server nicht erreichbar';
+            }
+        }
+
+        async function startMove(direction) {
+            log(`Starte Bewegung: ${direction}`);
+            try {
+                await api('/api/rotor/manual', 'POST', { direction });
+            } catch (e) { /* handled */ }
+        }
+
+        async function stopMove() {
+            log("Stop", 'info');
+            try {
+                await api('/api/rotor/stop', 'POST');
+            } catch (e) { /* handled */ }
+        }
+
+        async function setTarget() {
+            const az = parseFloat(document.getElementById('targetAz').value);
+            const el = parseFloat(document.getElementById('targetEl').value);
+            
+            if (isNaN(az) && isNaN(el)) return alert("Bitte Azimuth oder Elevation eingeben");
+
+            const body = {};
+            if (!isNaN(az)) body.az = az;
+            if (!isNaN(el)) body.el = el;
+
+            log(`Ziel setzen (Cal): Az=${az}, El=${el}`);
+            try {
+                await api('/api/rotor/set_target', 'POST', body);
+            } catch (e) { /* handled */ }
+        }
+
+        async function setTargetRaw() {
+            const az = parseInt(document.getElementById('targetAz').value);
+            const el = parseInt(document.getElementById('targetEl').value);
+
+            if (isNaN(az) && isNaN(el)) return alert("Bitte Azimuth oder Elevation eingeben");
+
+            const body = {};
+            if (!isNaN(az)) body.az = az;
+            if (!isNaN(el)) body.el = el;
+
+            log(`Ziel setzen (RAW): Az=${az}, El=${el}`);
+            try {
+                await api('/api/rotor/set_target_raw', 'POST', body);
+            } catch (e) { /* handled */ }
+        }
+
+        // --- Init ---
+        // Polling Logik
+        setInterval(() => {
+            const autoPoll = document.getElementById('autoPoll').checked;
+            if (autoPoll) {
+                updateStatus();
+            }
+        }, 500);
+
+        // Initial Ports laden
+        fetchPorts();
+
+    </script>
+</body>
+</html>
