@@ -916,10 +916,16 @@ function reportError(error) {
 }
 
 window.addEventListener('beforeunload', () => {
+  // Stop polling for this client
   rotor.stopPolling();
-  void rotor.disconnect();
+  
+  // Don't disconnect the COM port - it's shared across all clients
+  // The server will handle disconnection when no clients are connected
+  
+  // Clean up event listeners
   if (unsubscribeStatus) unsubscribeStatus();
   if (typeof unsubscribeError === 'function') unsubscribeError();
-  // Disconnect WebSocket
+  
+  // Disconnect WebSocket for this client
   if (wsService) wsService.disconnect();
 });
