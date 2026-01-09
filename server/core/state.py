@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from server.config.settings import SettingsManager
     from server.connection.serial_connection import RotorConnection
     from server.control.rotor_logic import RotorLogic
+    from server.api.websocket import WebSocketManager
+    from server.core.session_manager import SessionManager
 
 
 class ServerState:
@@ -22,7 +24,8 @@ class ServerState:
     - Settings manager
     - Rotor connection
     - Rotor logic controller
-    - Client count
+    - WebSocket manager
+    - Session manager
     - Thread locks
     """
     
@@ -54,9 +57,8 @@ class ServerState:
         self.settings: Optional["SettingsManager"] = None
         self.rotor_connection: Optional["RotorConnection"] = None
         self.rotor_logic: Optional["RotorLogic"] = None
-        
-        # State
-        self.client_count: int = 0
+        self.websocket_manager: Optional["WebSocketManager"] = None
+        self.session_manager: Optional["SessionManager"] = None
         
         # Thread safety
         self.rotor_lock = threading.Lock()
@@ -64,18 +66,22 @@ class ServerState:
     def initialize(
         self,
         config_dir: Optional[Path] = None,
-        server_root: Optional[Path] = None
+        server_root: Optional[Path] = None,
+        websocket_port: int = 8082
     ) -> None:
         """Initialize all server components.
         
         Args:
             config_dir: Directory for configuration files.
             server_root: Directory for static file serving.
+            websocket_port: Port for WebSocket server (default: 8082).
         """
         # Import here to avoid circular imports
         from server.config.settings import SettingsManager
         from server.connection.serial_connection import RotorConnection
         from server.control.rotor_logic import RotorLogic
+        from server.api.websocket import WebSocketManager
+        from server.core.session_manager import SessionManager
         
         if config_dir:
             self.config_dir = Path(config_dir)
@@ -91,11 +97,28 @@ class ServerState:
         # Initialize rotor logic with connection
         self.rotor_logic = RotorLogic(self.rotor_connection)
         self.rotor_logic.update_config(self.settings.get_all())
+        
+        # Initialize WebSocket manager
+        self.websocket_manager = WebSocketManager()
+        
+        # Initialize session manager
+        self.session_manager = SessionManager()
+        
+        # Cross-reference managers
+        self.websocket_manager.set_session_manager(self.session_manager)
+        self.session_manager.set_websocket_manager(self.websocket_manager)
+        
+        # Store websocket port for startup
+        self._websocket_port = websocket_port
 
     def start(self) -> None:
         """Start all background processes."""
         if self.rotor_logic:
             self.rotor_logic.start()
+        if self.websocket_manager:
+            self.websocket_manager.start(port=getattr(self, '_websocket_port', 8082))
+        if self.session_manager:
+            self.session_manager.start()
 
     def stop(self) -> None:
         """Stop all background processes and cleanup."""
@@ -103,6 +126,10 @@ class ServerState:
             self.rotor_logic.stop()
         if self.rotor_connection:
             self.rotor_connection.disconnect()
+        if self.websocket_manager:
+            self.websocket_manager.stop()
+        if self.session_manager:
+            self.session_manager.stop()
 
     def reset(self) -> None:
         """Reset state for testing purposes."""
@@ -110,7 +137,26 @@ class ServerState:
         self.settings = None
         self.rotor_connection = None
         self.rotor_logic = None
-        self.client_count = 0
+        self.websocket_manager = None
+        self.session_manager = None
+
+    def broadcast_connection_state(self) -> None:
+        """Broadcast current connection state to all WebSocket clients."""
+        if not self.websocket_manager:
+            return
+            
+        if self.rotor_connection and self.rotor_connection.is_connected():
+            self.websocket_manager.broadcast_connection_state(
+                connected=True,
+                port=self.rotor_connection.port,
+                baud_rate=self.rotor_connection.baud_rate
+            )
+        else:
+            self.websocket_manager.broadcast_connection_state(
+                connected=False,
+                port=None,
+                baud_rate=None
+            )
 
     @classmethod
     def get_instance(cls) -> "ServerState":
@@ -128,4 +174,3 @@ class ServerState:
             if cls._instance:
                 cls._instance.reset()
             cls._instance = None
-

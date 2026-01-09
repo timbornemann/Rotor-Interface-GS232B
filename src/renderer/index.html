@@ -176,6 +176,10 @@
             <span class="nav-icon">🎯</span>
             <span class="nav-label">Kalibrierung</span>
           </button>
+          <button class="settings-nav-item" data-tab="clients">
+            <span class="nav-icon">👥</span>
+            <span class="nav-label">Clients</span>
+          </button>
         </nav>
 
         <!-- Settings Content -->
@@ -536,6 +540,57 @@
               </div>
             </div>
           </section>
+
+          <!-- Clients Tab -->
+          <section class="settings-section" id="tab-clients">
+            <h3 class="section-title">Verbundene Clients</h3>
+            
+            <div class="settings-card">
+              <h4 class="card-title">Aktive Sitzungen</h4>
+              <p class="help-text">Übersicht aller verbundenen Clients. Clients können temporär suspendiert werden.</p>
+              
+              <div class="clients-table-wrapper">
+                <table class="clients-table" id="clientsTable">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>IP-Adresse</th>
+                      <th>Browser</th>
+                      <th>Verbunden seit</th>
+                      <th>Status</th>
+                      <th>Aktion</th>
+                    </tr>
+                  </thead>
+                  <tbody id="clientsTableBody">
+                    <tr class="empty-row">
+                      <td colspan="6">Keine Clients verbunden</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div class="clients-info">
+                <p class="help-text">
+                  <strong>Hinweis:</strong> Suspendierte Clients können keine API-Anfragen mehr senden. 
+                  Beim Neuladen der Seite erhält der Client eine neue Sitzung und kann wieder zugreifen.
+                </p>
+              </div>
+            </div>
+            
+            <div class="settings-card">
+              <h4 class="card-title">Ihre Sitzung</h4>
+              <div class="own-session-info">
+                <div class="session-detail">
+                  <span class="label">Session-ID:</span>
+                  <code id="ownSessionId">--</code>
+                </div>
+                <div class="session-detail">
+                  <span class="label">Status:</span>
+                  <span id="ownSessionStatus" class="status-badge active">Aktiv</span>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -546,9 +601,20 @@
     </div>
   </div>
 
-  <!-- Services zuerst -->
+  <!-- Suspension Overlay -->
+  <div id="suspensionOverlay" class="suspension-overlay hidden">
+    <div class="suspension-content">
+      <div class="suspension-icon">🚫</div>
+      <h2>Sitzung suspendiert</h2>
+      <p id="suspensionMessage">Ihre Sitzung wurde von einem Administrator suspendiert.</p>
+      <p class="suspension-hint">Laden Sie die Seite neu, um eine neue Sitzung zu starten.</p>
+      <button id="suspensionReloadBtn" class="primary" type="button">Seite neu laden</button>
+    </div>
+  </div>
 
+  <!-- Services zuerst -->
   <script src="./services/configStore.js"></script>
+  <script src="./services/websocketService.js"></script>
   <script src="./services/rotorService.js"></script>
   <!-- UI-Komponenten -->
   <script src="./ui/compass.js"></script>

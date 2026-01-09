@@ -1927,3 +1927,215 @@ main.dashboard {
     box-sizing: border-box;
   }
 }
+
+/* ========================================
+   Clients Table Styles
+   ======================================== */
+
+.clients-table-wrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+.clients-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.clients-table th,
+.clients-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.clients-table th {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.clients-table tbody tr {
+  transition: background 0.2s ease;
+}
+
+.clients-table tbody tr:hover {
+  background: rgba(47, 212, 255, 0.05);
+}
+
+.clients-table tbody tr.suspended {
+  opacity: 0.6;
+  background: rgba(247, 107, 107, 0.1);
+}
+
+.clients-table tbody tr.own-session {
+  background: rgba(47, 212, 255, 0.1);
+}
+
+.clients-table tbody tr.empty-row td {
+  text-align: center;
+  color: var(--muted);
+  font-style: italic;
+  padding: 2rem;
+}
+
+.clients-table .status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.clients-table .status-badge.active {
+  background: rgba(47, 212, 255, 0.2);
+  color: var(--accent);
+}
+
+.clients-table .status-badge.suspended {
+  background: rgba(247, 107, 107, 0.2);
+  color: var(--danger);
+}
+
+.clients-table .action-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clients-table .action-btn.suspend-btn {
+  background: rgba(247, 107, 107, 0.2);
+  color: var(--danger);
+}
+
+.clients-table .action-btn.suspend-btn:hover {
+  background: rgba(247, 107, 107, 0.4);
+}
+
+.clients-table .action-btn.resume-btn {
+  background: rgba(47, 212, 255, 0.2);
+  color: var(--accent);
+}
+
+.clients-table .action-btn.resume-btn:hover {
+  background: rgba(47, 212, 255, 0.4);
+}
+
+.clients-table .action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.own-session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.session-detail {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.session-detail .label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.session-detail code {
+  font-family: 'Courier New', monospace;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.session-detail .status-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.session-detail .status-badge.active {
+  background: rgba(47, 212, 255, 0.2);
+  color: var(--accent);
+}
+
+.clients-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ========================================
+   Suspension Overlay Styles
+   ======================================== */
+
+.suspension-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(8, 13, 21, 0.95);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+}
+
+.suspension-overlay.hidden {
+  display: none;
+}
+
+.suspension-content {
+  text-align: center;
+  max-width: 400px;
+  padding: 3rem;
+  background: var(--card);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.suspension-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.suspension-content h2 {
+  color: var(--danger);
+  margin: 0 0 1rem 0;
+  font-size: 1.5rem;
+}
+
+.suspension-content p {
+  color: var(--text);
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.suspension-content .suspension-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.suspension-content button {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+}

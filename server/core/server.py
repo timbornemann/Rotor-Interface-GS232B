@@ -15,10 +15,12 @@ from server.api.handler import RotorHandler
 
 
 DEFAULT_PORT = 8081
+DEFAULT_WEBSOCKET_PORT = 8082
 
 
 def run_server(
     port: int = DEFAULT_PORT,
+    websocket_port: int = DEFAULT_WEBSOCKET_PORT,
     config_dir: Optional[Path] = None,
     server_root: Optional[Path] = None
 ) -> None:
@@ -28,6 +30,7 @@ def run_server(
     
     Args:
         port: The port to listen on (default: 8081).
+        websocket_port: The port for WebSocket server (default: 8082).
         config_dir: Directory for configuration files (default: project root).
         server_root: Directory for static files (default: src/renderer).
     """
@@ -35,7 +38,11 @@ def run_server(
     state = ServerState.get_instance()
     
     # Initialize with optional overrides
-    state.initialize(config_dir=config_dir, server_root=server_root)
+    state.initialize(
+        config_dir=config_dir, 
+        server_root=server_root,
+        websocket_port=websocket_port
+    )
     
     # Set state reference on handler class
     RotorHandler.state = state
@@ -50,7 +57,9 @@ def run_server(
     # Start HTTP server
     with ThreadingHTTPServer(("0.0.0.0", port), handler_factory) as httpd:
         log(f"Serving Rotor UI from {state.server_root} at http://localhost:{port}")
+        log(f"WebSocket server running on ws://localhost:{websocket_port}")
         log("API V2 enabled (Server-Side Logic)")
+        log("Multi-client synchronization enabled")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
@@ -96,4 +105,3 @@ def create_test_server(
     base_url = f"http://{server.server_address[0]}:{server.server_address[1]}"
     
     return server, state, base_url
-

@@ -66,6 +66,11 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
         state: The server state singleton.
     """
     with state.rotor_lock:
+        # Get client count from session manager
+        client_count = 0
+        if state.session_manager:
+            client_count = state.session_manager.get_session_count()
+            
         if state.rotor_connection and state.rotor_connection.is_connected():
             # Get raw status from connection
             status = state.rotor_connection.get_status()
@@ -99,10 +104,10 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
                     },
                     "calibrated": calibrated
                 },
-                "clientCount": state.client_count
+                "clientCount": client_count
             })
         else:
-            send_json(handler, {"connected": False, "clientCount": 0})
+            send_json(handler, {"connected": False, "clientCount": client_count})
 
 
 # --- Connection Routes ---
@@ -126,8 +131,10 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
         try:
             if state.rotor_connection.is_connected():
                 if state.rotor_connection.port == port:
-                    state.client_count += 1
+                    # Already connected to this port
                     send_json(handler, {"status": "ok", "message": "Already connected"})
+                    # Still broadcast state so the requesting client gets updated
+                    state.broadcast_connection_state()
                     return
                 else:
                     send_json(
@@ -138,8 +145,11 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
                     return
             
             state.rotor_connection.connect(port, int(baud_rate))
-            state.client_count = 1
             send_json(handler, {"status": "ok"})
+            
+            # Broadcast connection state to all clients
+            state.broadcast_connection_state()
+            
         except Exception as e:
             send_json(handler, {"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -153,16 +163,11 @@ def handle_disconnect(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
     """
     with state.rotor_lock:
         if state.rotor_connection and state.rotor_connection.is_connected():
-            state.client_count = max(0, state.client_count - 1)
-            if state.client_count == 0:
-                state.rotor_connection.disconnect()
-                send_json(handler, {"status": "ok", "message": "Disconnected"})
-            else:
-                send_json(handler, {
-                    "status": "ok", 
-                    "message": "Client disconnected", 
-                    "remaining": state.client_count
-                })
+            state.rotor_connection.disconnect()
+            send_json(handler, {"status": "ok", "message": "Disconnected"})
+            
+            # Broadcast disconnection to all clients
+            state.broadcast_connection_state()
         else:
             send_json(handler, {"status": "ok", "message": "Not connected"})
 
@@ -217,3 +222,73 @@ def handle_stop(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     else:
         send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
+
+# --- Client Management Routes ---
+
+def handle_get_clients(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/clients - List all connected client sessions.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    if not state.session_manager:
+        send_json(handler, {"clients": []})
+        return
+    
+    clients = state.session_manager.get_all_sessions_as_list()
+    send_json(handler, {"clients": clients})
+
+
+def handle_suspend_client(
+    handler: BaseHTTPRequestHandler, 
+    state: "ServerState", 
+    client_id: str
+) -> None:
+    """Handle POST /api/clients/{client_id}/suspend - Suspend a client session.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+        client_id: The client session ID to suspend.
+    """
+    if not state.session_manager:
+        send_json(handler, {"error": "Session manager not available"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    # Check if session exists
+    session = state.session_manager.get_session(client_id)
+    if not session:
+        send_json(handler, {"error": "Client not found"}, HTTPStatus.NOT_FOUND)
+        return
+    
+    # Suspend the session
+    state.session_manager.suspend_session(client_id)
+    send_json(handler, {"status": "ok", "message": f"Client {client_id[:8]}... suspended"})
+
+
+def handle_resume_client(
+    handler: BaseHTTPRequestHandler, 
+    state: "ServerState", 
+    client_id: str
+) -> None:
+    """Handle POST /api/clients/{client_id}/resume - Resume a suspended client session.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+        client_id: The client session ID to resume.
+    """
+    if not state.session_manager:
+        send_json(handler, {"error": "Session manager not available"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    # Check if session exists
+    session = state.session_manager.get_session(client_id)
+    if not session:
+        send_json(handler, {"error": "Client not found"}, HTTPStatus.NOT_FOUND)
+        return
+    
+    # Resume the session
+    state.session_manager.resume_session(client_id)
+    send_json(handler, {"status": "ok", "message": f"Client {client_id[:8]}... resumed"})

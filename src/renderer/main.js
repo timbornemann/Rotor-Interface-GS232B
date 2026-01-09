@@ -12,6 +12,10 @@ if ('serviceWorker' in navigator) {
 const rotor = createRotorService(); // createRotorService is global from rotorService.js
 window.rotorService = rotor; // Make available globally for settings modal
 
+// Initialize WebSocket service for real-time updates
+const wsService = createWebSocketService(); // createWebSocketService is global from websocketService.js
+window.wsService = wsService; // Make available globally
+
 const portSelect = document.getElementById('portSelect');
 const refreshPortsBtn = document.getElementById('refreshPortsBtn');
 const manualPortBtn = document.getElementById('manualPortBtn');
@@ -330,6 +334,87 @@ configStore.load().then(loadedConfig => {
   console.warn('[main] Could not load config', err);
 });
 
+// WebSocket setup for real-time synchronization
+function setupWebSocket() {
+  // Set session ID from rotor service
+  const sessionId = rotor.getSessionId();
+  if (sessionId) {
+    wsService.setSessionId(sessionId);
+  }
+  
+  // Handle connection state broadcasts from server
+  wsService.on('connection_state_changed', (state) => {
+    logAction('WebSocket: Verbindungsstatus empfangen', state);
+    
+    // Update local connection state
+    rotor.handleConnectionStateUpdate(state);
+    
+    // Update UI
+    if (state.connected) {
+      connected = true;
+      setConnectionState(true);
+      
+      // Update port select to show connected port
+      if (state.port) {
+        const option = Array.from(portSelect.options).find(o => o.value === state.port);
+        if (option) {
+          portSelect.value = state.port;
+        }
+      }
+    } else {
+      connected = false;
+      setConnectionState(false);
+    }
+  });
+  
+  // Handle client list updates
+  wsService.on('client_list_updated', (data) => {
+    logAction('WebSocket: Client-Liste aktualisiert', { count: data.clients?.length });
+    // Settings modal will handle this event directly
+  });
+  
+  // Handle suspension
+  wsService.on('client_suspended', (data) => {
+    if (data.clientId === rotor.getSessionId()) {
+      showSuspensionOverlay(data.message);
+    }
+  });
+  
+  // Connect to WebSocket server
+  wsService.connect();
+}
+
+// Suspension overlay handling
+function setupSuspensionOverlay() {
+  const overlay = document.getElementById('suspensionOverlay');
+  const reloadBtn = document.getElementById('suspensionReloadBtn');
+  
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', () => {
+      window.location.reload();
+    });
+  }
+}
+
+function showSuspensionOverlay(message) {
+  const overlay = document.getElementById('suspensionOverlay');
+  const messageEl = document.getElementById('suspensionMessage');
+  
+  if (overlay) {
+    if (messageEl && message) {
+      messageEl.textContent = message;
+    }
+    overlay.classList.remove('hidden');
+    
+    // Disable all controls
+    controls.setEnabled(false);
+    connectBtn.disabled = true;
+    disconnectBtn.disabled = true;
+    
+    logAction('Session suspendiert', { message });
+  }
+}
+
 init().catch(reportError);
 
 function updateScaleFactorInputsFromConfig() {
@@ -371,6 +456,15 @@ async function init() {
   updateUIFromConfig();
   controls.setEnabled(false);
   disconnectBtn.disabled = true;
+
+  // Initialize session with server
+  await rotor.initSession();
+  
+  // Set up WebSocket service
+  setupWebSocket();
+  
+  // Set up suspension overlay
+  setupSuspensionOverlay();
 
   applyLimitsToRotor();
   applyOffsetsToRotor();
@@ -826,4 +920,6 @@ window.addEventListener('beforeunload', () => {
   void rotor.disconnect();
   if (unsubscribeStatus) unsubscribeStatus();
   if (typeof unsubscribeError === 'function') unsubscribeError();
+  // Disconnect WebSocket
+  if (wsService) wsService.disconnect();
 });

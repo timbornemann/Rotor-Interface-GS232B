@@ -12,6 +12,8 @@ class SettingsModal {
     this.sections = document.querySelectorAll('.settings-section');
     this.currentConfig = null;
     this.onSaveCallback = null;
+    this.clientsRefreshTimer = null;
+    this.wsUnsubscribers = [];
     
     // Settings field definitions for easy maintenance
     this.settingsFields = {
@@ -118,8 +120,23 @@ class SettingsModal {
         this.close();
       }
     });
+    
+    // Setup WebSocket listener for client list updates
+    this.setupWebSocketListeners();
 
     console.log('[SettingsModal] Initialized successfully');
+  }
+  
+  setupWebSocketListeners() {
+    // Listen for client list updates from WebSocket
+    if (typeof window.wsService !== 'undefined') {
+      const unsubscribe = window.wsService.on('client_list_updated', (data) => {
+        if (this.modal && !this.modal.classList.contains('hidden')) {
+          this.updateClientsTable(data.clients || []);
+        }
+      });
+      this.wsUnsubscribers.push(unsubscribe);
+    }
   }
 
   setupRangeSync(rangeId, inputId) {
@@ -146,6 +163,11 @@ class SettingsModal {
     this.sections.forEach(section => {
       section.classList.toggle('active', section.id === `tab-${tabName}`);
     });
+    
+    // Load clients data when switching to clients tab
+    if (tabName === 'clients') {
+      this.loadClientsData();
+    }
   }
 
   async refreshPorts() {
@@ -181,6 +203,129 @@ class SettingsModal {
       console.error('[SettingsModal] Error refreshing ports:', error);
     }
   }
+  
+  // --- Clients Tab Functions ---
+  
+  async loadClientsData() {
+    try {
+      if (typeof window.rotorService === 'undefined') {
+        console.warn('[SettingsModal] Rotor service not available');
+        return;
+      }
+      
+      const clients = await window.rotorService.getClients();
+      this.updateClientsTable(clients);
+      this.updateOwnSessionInfo();
+    } catch (error) {
+      console.error('[SettingsModal] Error loading clients:', error);
+    }
+  }
+  
+  updateClientsTable(clients) {
+    const tableBody = document.getElementById('clientsTableBody');
+    if (!tableBody) return;
+    
+    const ownSessionId = window.rotorService?.getSessionId();
+    
+    if (!clients || clients.length === 0) {
+      tableBody.innerHTML = `
+        <tr class="empty-row">
+          <td colspan="6">Keine Clients verbunden</td>
+        </tr>
+      `;
+      return;
+    }
+    
+    tableBody.innerHTML = clients.map(client => {
+      const isOwnSession = client.id === ownSessionId;
+      const isSuspended = client.status === 'suspended';
+      const shortId = client.id.substring(0, 8) + '...';
+      const connectedAt = new Date(client.connectedAt).toLocaleString('de-DE');
+      
+      let rowClass = '';
+      if (isOwnSession) rowClass = 'own-session';
+      if (isSuspended) rowClass += ' suspended';
+      
+      return `
+        <tr class="${rowClass}" data-client-id="${client.id}">
+          <td><code>${shortId}</code></td>
+          <td>${client.ip}</td>
+          <td>${client.userAgent}</td>
+          <td>${connectedAt}</td>
+          <td>
+            <span class="status-badge ${client.status}">${client.status === 'active' ? 'Aktiv' : 'Suspendiert'}</span>
+          </td>
+          <td>
+            ${this.getActionButton(client, isOwnSession)}
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    // Attach event handlers to action buttons
+    tableBody.querySelectorAll('.action-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => this.handleClientAction(e));
+    });
+  }
+  
+  getActionButton(client, isOwnSession) {
+    if (isOwnSession) {
+      return `<button class="action-btn" disabled title="Eigene Sitzung">--</button>`;
+    }
+    
+    if (client.status === 'suspended') {
+      return `<button class="action-btn resume-btn" data-action="resume" data-client-id="${client.id}">Fortsetzen</button>`;
+    }
+    
+    return `<button class="action-btn suspend-btn" data-action="suspend" data-client-id="${client.id}">Suspendieren</button>`;
+  }
+  
+  async handleClientAction(e) {
+    const btn = e.target;
+    const action = btn.dataset.action;
+    const clientId = btn.dataset.clientId;
+    
+    if (!action || !clientId) return;
+    
+    btn.disabled = true;
+    btn.textContent = 'Bitte warten...';
+    
+    try {
+      if (action === 'suspend') {
+        await window.rotorService.suspendClient(clientId);
+      } else if (action === 'resume') {
+        await window.rotorService.resumeClient(clientId);
+      }
+      
+      // Refresh clients list
+      await this.loadClientsData();
+    } catch (error) {
+      console.error('[SettingsModal] Error performing client action:', error);
+      alert(`Fehler: ${error.message}`);
+      btn.disabled = false;
+      btn.textContent = action === 'suspend' ? 'Suspendieren' : 'Fortsetzen';
+    }
+  }
+  
+  updateOwnSessionInfo() {
+    const sessionIdEl = document.getElementById('ownSessionId');
+    const sessionStatusEl = document.getElementById('ownSessionStatus');
+    
+    if (sessionIdEl && window.rotorService) {
+      const sessionId = window.rotorService.getSessionId();
+      if (sessionId) {
+        sessionIdEl.textContent = sessionId.substring(0, 8) + '...';
+      } else {
+        sessionIdEl.textContent = '--';
+      }
+    }
+    
+    if (sessionStatusEl) {
+      // Status is always active if we can see this (suspended users can't access)
+      sessionStatusEl.textContent = 'Aktiv';
+      sessionStatusEl.className = 'status-badge active';
+    }
+  }
 
   async open(config, onSave) {
     this.currentConfig = { ...config };
@@ -205,6 +350,12 @@ class SettingsModal {
     document.body.style.overflow = '';
     this.currentConfig = null;
     this.onSaveCallback = null;
+    
+    // Clear any refresh timers
+    if (this.clientsRefreshTimer) {
+      clearInterval(this.clientsRefreshTimer);
+      this.clientsRefreshTimer = null;
+    }
   }
 
   loadConfigIntoForm(config) {
