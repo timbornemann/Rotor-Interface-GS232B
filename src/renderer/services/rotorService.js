@@ -421,3 +421,8 @@ class RotorService {
 function createRotorService() {
   return new RotorService();
 }
+
+// Export for CommonJS (for tests)
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { RotorService, createRotorService };
+}

@@ -128,6 +128,9 @@ class TestRotorConnectionMocked:
         assert status is not None
         assert status["azimuthRaw"] == 90
         assert status["elevationRaw"] == 45
+        # Legacy fields should also be set
+        assert status["azimuth"] == 90
+        assert status["elevation"] == 45
     
     def test_process_status_line_preserves_raw(self, connected_connection):
         """_process_status_line should preserve raw line."""
@@ -135,4 +138,13 @@ class TestRotorConnectionMocked:
         connected_connection._process_status_line(raw_line)
         status = connected_connection.get_status()
         assert status["raw"] == raw_line
+        assert "timestamp" in status
+    
+    def test_process_status_line_includes_timestamp(self, connected_connection):
+        """_process_status_line should include timestamp."""
+        connected_connection._process_status_line("AZ=180 EL=045")
+        status = connected_connection.get_status()
+        assert status is not None
+        assert "timestamp" in status
+        assert isinstance(status["timestamp"], int)
 

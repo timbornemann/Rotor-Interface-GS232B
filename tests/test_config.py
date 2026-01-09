@@ -60,10 +60,10 @@ class TestSettingsManager:
         """Create a SettingsManager instance."""
         return SettingsManager(settings_dir)
     
-    def test_creates_default_ini_if_missing(self, settings_dir, settings):
-        """Should create default INI file if missing."""
-        ini_file = settings_dir / "rotor-config.ini"
-        assert ini_file.exists()
+    def test_creates_default_json_if_missing(self, settings_dir, settings):
+        """Should create default JSON file if missing."""
+        json_file = settings_dir / "web-settings.json"
+        assert json_file.exists()
     
     def test_get_all_returns_defaults(self, settings):
         """get_all should return default values."""

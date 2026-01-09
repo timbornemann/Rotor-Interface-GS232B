@@ -105,6 +105,42 @@ class TestRotorStatusAPI:
         
         assert data["connected"] == False
         assert data["clientCount"] == 0
+        # Should not have status field when disconnected
+        assert "status" not in data
+    
+    def test_get_status_structure_when_connected(self, test_server):
+        """GET /api/rotor/status should return proper structure when connected."""
+        base_url, state = test_server
+        
+        # Mock a connection with status
+        from unittest.mock import MagicMock
+        mock_status = {
+            "azimuthRaw": 180,
+            "elevationRaw": 45,
+            "raw": "AZ=180 EL=045",
+            "timestamp": 1234567890
+        }
+        state.rotor_connection.is_connected = MagicMock(return_value=True)
+        state.rotor_connection.get_status = MagicMock(return_value=mock_status)
+        state.rotor_connection.port = "COM3"
+        state.rotor_connection.baud_rate = 9600
+        
+        with urllib.request.urlopen(urljoin(base_url, "/api/rotor/status")) as response:
+            assert response.status == 200
+            data = json.load(response)
+        
+        assert data["connected"] == True
+        assert data["port"] == "COM3"
+        assert data["baudRate"] == 9600
+        assert "status" in data
+        assert "rawLine" in data["status"]
+        assert "timestamp" in data["status"]
+        assert "rph" in data["status"]
+        assert "azimuth" in data["status"]["rph"]
+        assert "elevation" in data["status"]["rph"]
+        assert "calibrated" in data["status"]
+        assert "azimuth" in data["status"]["calibrated"]
+        assert "elevation" in data["status"]["calibrated"]
 
 
 class TestRotorConnectAPI:
@@ -153,8 +189,8 @@ class TestRotorDisconnectAPI:
 class TestRotorControlAPI:
     """Tests for the rotor control API endpoints."""
     
-    def test_set_target(self, test_server):
-        """POST /api/rotor/set_target should succeed."""
+    def test_set_target_requires_connection(self, test_server):
+        """POST /api/rotor/set_target should require connection."""
         base_url, state = test_server
         
         request = urllib.request.Request(
@@ -164,14 +200,17 @@ class TestRotorControlAPI:
             method="POST"
         )
         
-        with urllib.request.urlopen(request) as response:
-            assert response.status == 200
-            data = json.load(response)
+        # Should fail with 400 when not connected
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
         
-        assert data["status"] == "ok"
+        assert exc_info.value.code == 400
+        error_data = json.loads(exc_info.value.read().decode("utf-8"))
+        assert "error" in error_data
+        assert "Not connected" in error_data["error"]
     
-    def test_manual_move(self, test_server):
-        """POST /api/rotor/manual should succeed."""
+    def test_manual_move_requires_connection(self, test_server):
+        """POST /api/rotor/manual should require connection."""
         base_url, state = test_server
         
         request = urllib.request.Request(
@@ -181,11 +220,14 @@ class TestRotorControlAPI:
             method="POST"
         )
         
-        with urllib.request.urlopen(request) as response:
-            assert response.status == 200
-            data = json.load(response)
+        # Should fail with 400 when not connected
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
         
-        assert data["status"] == "ok"
+        assert exc_info.value.code == 400
+        error_data = json.loads(exc_info.value.read().decode("utf-8"))
+        assert "error" in error_data
+        assert "Not connected" in error_data["error"]
     
     def test_stop(self, test_server):
         """POST /api/rotor/stop should succeed."""

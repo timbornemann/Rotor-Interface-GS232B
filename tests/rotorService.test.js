@@ -28,41 +28,14 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-test('planAzimuthTarget picks shortest wrap-around path in 450° mode', () => {
+// Note: planAzimuthTarget is now a stub - the actual planning logic
+// has been moved to the server-side (rotor_logic.py)
+test('planAzimuthTarget returns stub response', async () => {
   const rotor = new RotorService();
-  rotor.maxAzimuthRange = 450;
-  rotor.softLimits.azimuthMax = 450;
-  rotor.currentStatus = { azimuth: 440 };
-
-  const plan = rotor.planAzimuthTarget(10);
-
-  assert.strictEqual(plan.calibrated, 10);
-  assert.strictEqual(plan.commandValue, 10);
-});
-
-
-test('planAzimuthTarget prefers CW wrap when crossing 0° in 360° mode', () => {
-  const rotor = new RotorService();
-  rotor.maxAzimuthRange = 360;
-  rotor.softLimits.azimuthMax = 360;
-  rotor.currentStatus = { azimuth: 359 };
-
-  const plan = rotor.planAzimuthTarget(1);
-
-  assert.strictEqual(plan.direction, 'CW');
-  assert.strictEqual(plan.usesWrap, true);
-  assert.strictEqual(plan.commandValue, 1);
-});
-
-test('planAzimuthTarget reports wrap usage for targets over 360° in 450° mode', () => {
-  const rotor = new RotorService();
-  rotor.maxAzimuthRange = 450;
-  rotor.softLimits.azimuthMax = 450;
-  rotor.currentStatus = { azimuth: 10 };
-
-  const plan = rotor.planAzimuthTarget(380);
-
-  assert.strictEqual(plan.calibrated, 380);
-  assert.strictEqual(plan.direction, 'CCW');
-  assert.strictEqual(plan.usesWrap, true);
+  
+  const plan = await rotor.planAzimuthTarget(180);
+  
+  // Should return simple stub format
+  assert.strictEqual(plan.commandValue, 180);
+  assert.strictEqual(plan.distance, 0);
 });
