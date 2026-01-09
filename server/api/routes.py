@@ -418,6 +418,24 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
         if key in payload:
             update_dict[key] = payload[key]
     
+    # Check if ports actually changed (before updating)
+    # Compare with current config values, not the state ports (which might be different)
+    restart_required = False
+    if "serverHttpPort" in update_dict:
+        current_http_port = state.settings.get("serverHttpPort")
+        if current_http_port is None:
+            current_http_port = state.http_port
+        if update_dict["serverHttpPort"] != current_http_port:
+            restart_required = True
+            log(f"[API] HTTP port change detected: {current_http_port} -> {update_dict['serverHttpPort']}")
+    if "serverWebSocketPort" in update_dict:
+        current_ws_port = state.settings.get("serverWebSocketPort")
+        if current_ws_port is None:
+            current_ws_port = state.websocket_port
+        if update_dict["serverWebSocketPort"] != current_ws_port:
+            restart_required = True
+            log(f"[API] WebSocket port change detected: {current_ws_port} -> {update_dict['serverWebSocketPort']}")
+    
     if update_dict:
         state.settings.update(update_dict)
         
@@ -456,9 +474,6 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
         if "serverMaxClients" in update_dict and state.session_manager:
             state.session_manager.max_clients = update_dict["serverMaxClients"]
             log(f"[API] Max clients updated to {update_dict['serverMaxClients']}")
-    
-    # Only ports require restart
-    restart_required = any(k in update_dict for k in ["serverHttpPort", "serverWebSocketPort"])
     
     send_json(handler, {
         "status": "ok",

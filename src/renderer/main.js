@@ -544,9 +544,13 @@ async function init() {
           const serverSettings = {};
           const regularSettings = {};
           
+          // Only include server settings that actually changed
           for (const key in newConfig) {
             if (serverSettingsKeys.includes(key)) {
-              serverSettings[key] = newConfig[key];
+              // Only include if value actually changed
+              if (newConfig[key] !== config[key]) {
+                serverSettings[key] = newConfig[key];
+              }
             } else {
               regularSettings[key] = newConfig[key];
             }
