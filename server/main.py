@@ -15,7 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from server.core.server import run_server, DEFAULT_PORT
+from server.core.server import run_server, DEFAULT_PORT, DEFAULT_WEBSOCKET_PORT
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -35,7 +35,13 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "--port",
         type=int,
         default=DEFAULT_PORT,
-        help=f"Port to listen on (default: {DEFAULT_PORT})"
+        help=f"HTTP port to listen on (default: {DEFAULT_PORT})"
+    )
+    parser.add_argument(
+        "--websocket-port",
+        type=int,
+        default=DEFAULT_WEBSOCKET_PORT,
+        help=f"WebSocket port (default: {DEFAULT_WEBSOCKET_PORT})"
     )
     parser.add_argument(
         "--config-dir",
@@ -60,19 +66,23 @@ def main(args: list[str] | None = None) -> int:
         args: Command line arguments (default: sys.argv[1:]).
         
     Returns:
-        Exit code (0 for success).
+        Exit code (0 for success, 42 for restart request).
     """
     parsed = parse_args(args)
     
     try:
         run_server(
-            port=parsed.port,
+            http_port=parsed.port,
+            websocket_port=parsed.websocket_port,
             config_dir=parsed.config_dir,
             server_root=parsed.server_root
         )
         return 0
     except KeyboardInterrupt:
         return 0
+    except SystemExit as e:
+        # Propagate exit code for restart mechanism
+        return e.code if isinstance(e.code, int) else 0
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

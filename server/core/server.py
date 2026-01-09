@@ -19,7 +19,7 @@ DEFAULT_WEBSOCKET_PORT = 8082
 
 
 def run_server(
-    port: int = DEFAULT_PORT,
+    http_port: int = DEFAULT_PORT,
     websocket_port: int = DEFAULT_WEBSOCKET_PORT,
     config_dir: Optional[Path] = None,
     server_root: Optional[Path] = None
@@ -29,7 +29,7 @@ def run_server(
     Initializes all components and runs the server until interrupted.
     
     Args:
-        port: The port to listen on (default: 8081).
+        http_port: The HTTP port to listen on (default: 8081).
         websocket_port: The port for WebSocket server (default: 8082).
         config_dir: Directory for configuration files (default: project root).
         server_root: Directory for static files (default: src/renderer).
@@ -37,10 +37,11 @@ def run_server(
     # Get state singleton
     state = ServerState.get_instance()
     
-    # Initialize with optional overrides
+    # Initialize with optional overrides (config can override ports)
     state.initialize(
         config_dir=config_dir, 
         server_root=server_root,
+        http_port=http_port,
         websocket_port=websocket_port
     )
     
@@ -54,17 +55,21 @@ def run_server(
     def handler_factory(*args, **kwargs):
         return RotorHandler(*args, directory=str(state.server_root), **kwargs)
     
-    # Start HTTP server
-    with ThreadingHTTPServer(("0.0.0.0", port), handler_factory) as httpd:
-        log(f"Serving Rotor UI from {state.server_root} at http://localhost:{port}")
-        log(f"WebSocket server running on ws://localhost:{websocket_port}")
+    # Start HTTP server with configured port
+    with ThreadingHTTPServer(("0.0.0.0", state.http_port), handler_factory) as httpd:
+        log(f"Serving Rotor UI from {state.server_root} at http://localhost:{state.http_port}")
+        log(f"WebSocket server running on ws://localhost:{state.websocket_port}")
         log("API V2 enabled (Server-Side Logic)")
         log("Multi-client synchronization enabled")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
             log("Shutting down...")
-            state.stop()
+            try:
+                state.stop()
+            except Exception as e:
+                log(f"Error during shutdown: {e}")
+            log("Server stopped")
 
 
 def create_test_server(

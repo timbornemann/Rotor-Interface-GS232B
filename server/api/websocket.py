@@ -296,18 +296,26 @@ class WebSocketManager:
             return
             
         self._running = True
+        server = None
         
         try:
-            async with websockets.serve(self._handle_client, host, port):
+            async with websockets.serve(self._handle_client, host, port) as server:
                 log(f"[WebSocket] Server started on ws://{host}:{port}")
-                while self._running:
-                    await asyncio.sleep(1)
+                try:
+                    while self._running:
+                        await asyncio.sleep(0.5)
+                except asyncio.CancelledError:
+                    log("[WebSocket] Server shutdown requested")
+                    self._running = False
         except OSError as e:
             if e.errno == 10048 or "Address already in use" in str(e):
                 log(f"[WebSocket] ERROR: Port {port} is already in use. WebSocket server disabled.")
                 log("[WebSocket] Please stop any other instances of the server or change the port.")
             else:
                 log(f"[WebSocket] ERROR: Failed to start server: {e}")
+            self._running = False
+        except asyncio.CancelledError:
+            log("[WebSocket] Server cancelled")
             self._running = False
         except Exception as e:
             log(f"[WebSocket] ERROR: Unexpected error starting server: {e}")
@@ -325,21 +333,63 @@ class WebSocketManager:
             return
             
         def run_loop():
-            self._loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self._loop)
-            self._loop.run_until_complete(self._run_server(host, port))
-            self._loop.close()
+            try:
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+                self._loop.run_until_complete(self._run_server(host, port))
+            except Exception as e:
+                log(f"[WebSocket] Error in event loop: {e}")
+            finally:
+                # Clean shutdown of event loop
+                try:
+                    # Cancel all pending tasks
+                    pending = asyncio.all_tasks(self._loop)
+                    for task in pending:
+                        task.cancel()
+                    # Wait for tasks to complete cancellation
+                    if pending:
+                        self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except Exception:
+                    pass
+                finally:
+                    if self._loop and not self._loop.is_closed():
+                        self._loop.close()
         
         self._thread = threading.Thread(target=run_loop, daemon=True)
         self._thread.start()
     
     def stop(self) -> None:
-        """Stop the WebSocket server."""
+        """Stop the WebSocket server gracefully."""
+        if not self._running:
+            return
+            
+        log("[WebSocket] Stopping WebSocket server...")
         self._running = False
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        if self._thread:
-            self._thread.join(timeout=2)
+        
+        # Close all client connections
+        with self._lock:
+            clients_to_close = list(self.clients.values())
+            self.clients.clear()
+        
+        # Stop the event loop gracefully
+        if self._loop and self._loop.is_running():
+            try:
+                # Cancel the main server task
+                for task in asyncio.all_tasks(self._loop):
+                    if not task.done():
+                        task.cancel()
+                # Stop the loop
+                self._loop.call_soon_threadsafe(self._loop.stop)
+            except Exception as e:
+                log(f"[WebSocket] Error stopping event loop: {e}")
+        
+        # Wait for thread to finish (with timeout)
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=3)
+            if self._thread.is_alive():
+                log("[WebSocket] Warning: WebSocket thread did not stop within timeout")
+        
+        log("[WebSocket] Server stopped")
             
     def get_client_count(self) -> int:
         """Get the number of connected WebSocket clients.

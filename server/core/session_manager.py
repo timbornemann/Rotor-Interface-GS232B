@@ -78,19 +78,23 @@ class SessionManager:
     Thread-safe session tracking with automatic cleanup of stale sessions.
     """
     
-    # Session timeout in seconds (5 minutes of inactivity)
-    SESSION_TIMEOUT = 300
-    
     # Cleanup interval in seconds
     CLEANUP_INTERVAL = 60
     
-    def __init__(self) -> None:
-        """Initialize the session manager."""
+    def __init__(self, session_timeout_s: int = 300, max_clients: int = 10) -> None:
+        """Initialize the session manager.
+        
+        Args:
+            session_timeout_s: Session timeout in seconds (default: 300 = 5 minutes).
+            max_clients: Maximum number of concurrent clients (default: 10).
+        """
         self._sessions: Dict[str, ClientSession] = {}
         self._lock = threading.Lock()
         self._websocket_manager: Optional["WebSocketManager"] = None
         self._cleanup_thread: Optional[threading.Thread] = None
         self._running = False
+        self.session_timeout_s = session_timeout_s
+        self.max_clients = max_clients
         
     def set_websocket_manager(self, ws_manager: "WebSocketManager") -> None:
         """Set the WebSocket manager reference for broadcasting.
@@ -128,7 +132,7 @@ class SessionManager:
             for session_id, session in self._sessions.items():
                 # Calculate seconds since last activity
                 elapsed = (now - session.last_seen).total_seconds()
-                if elapsed > self.SESSION_TIMEOUT:
+                if elapsed > self.session_timeout_s:
                     stale_ids.append(session_id)
             
             for session_id in stale_ids:
@@ -138,12 +142,22 @@ class SessionManager:
             log(f"[SessionManager] Cleaned up {len(stale_ids)} stale sessions")
             self._broadcast_client_list()
     
+    def enforce_max_clients(self) -> bool:
+        """Check if we can accept a new client.
+        
+        Returns:
+            True if we can accept new clients, False if at capacity.
+        """
+        with self._lock:
+            active_count = sum(1 for s in self._sessions.values() if s.status == SessionStatus.ACTIVE)
+            return active_count < self.max_clients
+    
     def get_or_create_session(
         self, 
         session_id: Optional[str], 
         ip: str, 
         user_agent: str
-    ) -> ClientSession:
+    ) -> Optional[ClientSession]:
         """Get an existing session or create a new one.
         
         Args:
@@ -152,7 +166,7 @@ class SessionManager:
             user_agent: Client's User-Agent string.
             
         Returns:
-            The existing or new ClientSession.
+            The existing or new ClientSession, or None if max clients reached.
         """
         with self._lock:
             # Try to find existing session
@@ -160,6 +174,12 @@ class SessionManager:
                 session = self._sessions[session_id]
                 session.update_last_seen()
                 return session
+            
+            # Check if we can accept new clients
+            active_count = sum(1 for s in self._sessions.values() if s.status == SessionStatus.ACTIVE)
+            if active_count >= self.max_clients:
+                log(f"[SessionManager] Max clients ({self.max_clients}) reached, rejecting new session from {ip}")
+                return None
             
             # Create new session
             new_id = str(uuid.uuid4())
@@ -169,7 +189,7 @@ class SessionManager:
                 user_agent=self._parse_user_agent(user_agent)
             )
             self._sessions[new_id] = session
-            log(f"[SessionManager] New session created: {new_id[:8]}... from {ip}")
+            log(f"[SessionManager] New session created: {new_id[:8]}... from {ip} ({active_count + 1}/{self.max_clients})")
             
         # Broadcast updated client list
         self._broadcast_client_list()

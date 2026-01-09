@@ -63,6 +63,14 @@ class SettingsModal {
       azimuthMaxLimit: { id: 'settingsAzMaxLimit', type: 'number' },
       elevationMinLimit: { id: 'settingsElMinLimit', type: 'number' },
       elevationMaxLimit: { id: 'settingsElMaxLimit', type: 'number' },
+      
+      // Server Settings
+      serverHttpPort: { id: 'settingsServerHttpPort', type: 'number' },
+      serverWebSocketPort: { id: 'settingsServerWebSocketPort', type: 'number' },
+      serverPollingIntervalMs: { id: 'settingsServerPollingInterval', type: 'number' },
+      serverSessionTimeoutS: { id: 'settingsServerSessionTimeout', type: 'number' },
+      serverMaxClients: { id: 'settingsServerMaxClients', type: 'number' },
+      serverLoggingLevel: { id: 'settingsServerLoggingLevel', type: 'select' },
     };
     
     // Initialize when DOM is ready
@@ -112,6 +120,12 @@ class SettingsModal {
     const refreshBtn = document.getElementById('settingsRefreshPortsBtn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => this.refreshPorts());
+    }
+    
+    // Restart server button
+    const restartBtn = document.getElementById('restartServerBtn');
+    if (restartBtn) {
+      restartBtn.addEventListener('click', () => this.handleServerRestart());
     }
 
     // Keyboard handling
@@ -463,8 +477,45 @@ class SettingsModal {
     if (config.elevationLowSpeedStage > config.elevationHighSpeedStage) {
       errors.push('Elevation Low-Speed darf nicht größer als High-Speed sein');
     }
+    
+    // Validate server settings
+    if (config.serverHttpPort && config.serverWebSocketPort && config.serverHttpPort === config.serverWebSocketPort) {
+      errors.push('HTTP- und WebSocket-Port müssen unterschiedlich sein');
+    }
 
     return errors;
+  }
+  
+  async handleServerRestart() {
+    const restartStatus = document.getElementById('restartStatus');
+    if (!restartStatus) return;
+    
+    if (!confirm('Server wirklich neu starten? Alle Clients werden getrennt.')) {
+      return;
+    }
+    
+    try {
+      restartStatus.textContent = 'Server wird neu gestartet...';
+      restartStatus.classList.remove('hidden');
+      
+      const response = await fetch(`${window.rotorService.apiBase}/api/server/restart`, {
+        method: 'POST',
+        headers: window.rotorService.getSessionHeaders()
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server Error: ${response.status}`);
+      }
+      
+      // Wait for server to restart (5s) then reload page
+      setTimeout(() => {
+        window.location.reload();
+      }, 5000);
+      
+    } catch (error) {
+      console.error('[SettingsModal] Error restarting server:', error);
+      restartStatus.textContent = 'Fehler beim Neustart: ' + error.message;
+    }
   }
 
   showError(message) {

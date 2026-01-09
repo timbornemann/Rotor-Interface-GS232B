@@ -79,6 +79,24 @@ DEFAULT_CONFIG = {
     "azimuthScaleFactorMax": 2.0,
     "elevationScaleFactorMin": 0.1,
     "elevationScaleFactorMax": 2.0,
+    
+    # Server Settings
+    "serverHttpPort": 8081,
+    "serverWebSocketPort": 8082,
+    "serverPollingIntervalMs": 500,
+    "serverSessionTimeoutS": 300,
+    "serverMaxClients": 10,
+    "serverLoggingLevel": "INFO",
+    "serverHttpPortMin": 1024,
+    "serverHttpPortMax": 65535,
+    "serverWebSocketPortMin": 1024,
+    "serverWebSocketPortMax": 65535,
+    "serverPollingIntervalMsMin": 250,
+    "serverPollingIntervalMsMax": 2000,
+    "serverSessionTimeoutSMin": 60,
+    "serverSessionTimeoutSMax": 3600,
+    "serverMaxClientsMin": 1,
+    "serverMaxClientsMax": 100,
 }
 
 # INI file template with sections and comments
@@ -159,5 +177,24 @@ azimuthScaleFactorMin=0.1
 azimuthScaleFactorMax=2.0
 elevationScaleFactorMin=0.1
 elevationScaleFactorMax=2.0
+
+[Server]
+; Server configuration settings
+serverHttpPort=8081
+serverWebSocketPort=8082
+serverPollingIntervalMs=500
+serverSessionTimeoutS=300
+serverMaxClients=10
+serverLoggingLevel=INFO
+serverHttpPortMin=1024
+serverHttpPortMax=65535
+serverWebSocketPortMin=1024
+serverWebSocketPortMax=65535
+serverPollingIntervalMsMin=250
+serverPollingIntervalMsMax=2000
+serverSessionTimeoutSMin=60
+serverSessionTimeoutSMax=3600
+serverMaxClientsMin=1
+serverMaxClientsMax=100
 """
 

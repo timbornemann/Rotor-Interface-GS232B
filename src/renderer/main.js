@@ -329,6 +329,7 @@ configStore.load().then(loadedConfig => {
   if (loadedConfig) {
     config = loadedConfig;
     updateUIFromConfig();
+    updateConeSettings(); // Ensure mapView has correct config after async load
   }
 }).catch(err => {
   console.warn('[main] Could not load config', err);
@@ -625,6 +626,7 @@ async function handleConnect() {
     applyLimitsToRotor();
     applyOffsetsToRotor();
     applyScaleFactorsToRotor();
+    updateConeSettings(); // Ensure mapView has latest config
     
     config = await configStore.save({
       baudRate,
@@ -708,6 +710,7 @@ async function handleApplyLimits() {
   }
   config = await configStore.save(limits);
   applyLimitsToRotor();
+  updateConeSettings(); // Ensure mapView has latest config
   showLimitWarning('Limits wurden angewendet.');
   logAction('Software-Limits aktualisiert', limits);
 }
@@ -724,6 +727,7 @@ async function handleSetAzReference(value) {
   config = await configStore.save({ azimuthOffset: offset });
   applyOffsetsToRotor();
   updateOffsetInputsFromConfig();
+  updateConeSettings(); // Ensure mapView has latest config
   showLimitWarning(`Azimut auf ${value}° referenziert (Offset: ${offset.toFixed(1)}).`);
   logAction('Azimut referenziert', { value, offset });
 }
@@ -732,6 +736,7 @@ async function handleResetOffsets() {
   config = await configStore.save({ azimuthOffset: 0, elevationOffset: 0 });
   applyOffsetsToRotor();
   updateOffsetInputsFromConfig();
+  updateConeSettings(); // Ensure mapView has latest config
   showLimitWarning('Offsets wurden auf 0° zurueckgesetzt.');
   logAction('Offsets zurueckgesetzt');
 }
@@ -823,6 +828,14 @@ function handleStatus(status) {
   if (!status) return;
   lastStatusReceivedTime = Date.now();
   
+  // Ensure mapView has current config values before updating
+  // This prevents issues where config changes but mapView hasn't been updated yet
+  const currentDisplayOffset = Number(config.azimuthDisplayOffset || 0);
+  const mapViewDisplayOffset = Number(mapView.azimuthDisplayOffset || 0);
+  if (mapViewDisplayOffset !== currentDisplayOffset) {
+    updateConeSettings();
+  }
+  
   if (typeof status.azimuth === 'number') {
     azValue.textContent = `${status.azimuth.toFixed(0)}deg`;
   }
@@ -877,6 +890,7 @@ async function handleLoadMap() {
     logAction('Kartenkoordinaten werden gesetzt', { lat, lon });
     mapView.setCoordinates(lat, lon);
     config = await configStore.save({ mapLatitude: lat, mapLongitude: lon });
+    updateConeSettings(); // Ensure mapView has latest config
 
     if (satelliteMapToggle.checked) {
       loadMapBtn.disabled = true;
@@ -897,6 +911,7 @@ async function handleSatelliteMapToggle() {
   logAction('Satellitenansicht zweck', { enabled });
   mapView.setSatelliteMapEnabled(enabled);
   config = await configStore.save({ satelliteMapEnabled: enabled });
+  updateConeSettings(); // Ensure mapView has latest config
 
   if (enabled && mapView.latitude !== null) {
       // Refresh map

@@ -147,6 +147,10 @@ class RotorHandler(SimpleHTTPRequestHandler):
             routes.handle_get_clients(self, self.state)
             return
         
+        if parsed.path == "/api/server/settings":
+            routes.handle_get_server_settings(self, self.state)
+            return
+        
         # API endpoint for getting own session ID
         if parsed.path == "/api/session":
             # This endpoint creates a session if one doesn't exist
@@ -207,6 +211,15 @@ class RotorHandler(SimpleHTTPRequestHandler):
             if resume_match:
                 client_id = resume_match.group(1)
                 routes.handle_resume_client(self, self.state, client_id)
+                return
+            
+            # Server management routes
+            if parsed.path == "/api/server/settings":
+                routes.handle_post_server_settings(self, self.state)
+                return
+            
+            if parsed.path == "/api/server/restart":
+                routes.handle_server_restart(self, self.state)
                 return
 
             send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)

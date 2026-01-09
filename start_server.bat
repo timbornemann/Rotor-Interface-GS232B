@@ -26,17 +26,47 @@ if not exist "server" (
     exit /b 1
 )
 
-echo Starte Server...
+REM Lese Ports aus web-settings.json (wenn vorhanden)
+set HTTP_PORT=8081
+set WS_PORT=8082
+
+if exist "web-settings.json" (
+    echo Lade Ports aus web-settings.json...
+    for /f "tokens=*" %%a in ('powershell -Command "try { $config = Get-Content -Raw web-settings.json | ConvertFrom-Json; Write-Host $config.serverHttpPort } catch { Write-Host 8081 }"') do set HTTP_PORT=%%a
+    for /f "tokens=*" %%b in ('powershell -Command "try { $config = Get-Content -Raw web-settings.json | ConvertFrom-Json; Write-Host $config.serverWebSocketPort } catch { Write-Host 8082 }"') do set WS_PORT=%%b
+)
+
 echo.
-echo Server läuft auf: http://localhost:8081
-echo Keine Authentifizierung erforderlich
+echo Server wird gestartet...
+echo HTTP-Port: %HTTP_PORT%
+echo WebSocket-Port: %WS_PORT%
 echo.
-echo Zum Beenden: Strg+C drücken
+echo Zum Beenden: Strg+C druecken
 echo ========================================
 echo.
 
-REM Starte den Server mit Standard-Parametern
-REM Nutzt das neue modulare Package
-python -m server.main --port 8081
+REM Auto-Restart-Loop: Startet Server neu, wenn Exit-Code 42 zurückgegeben wird
+:restart_loop
+python -m server.main --port %HTTP_PORT% --websocket-port %WS_PORT%
+set EXIT_CODE=%ERRORLEVEL%
 
+if %EXIT_CODE%==42 (
+    echo.
+    echo ========================================
+    echo Server wird neu gestartet...
+    echo ========================================
+    timeout /t 2 /nobreak >nul
+    echo.
+    goto restart_loop
+)
+
+if %EXIT_CODE%==0 (
+    echo.
+    echo Server wurde normal beendet.
+) else (
+    echo.
+    echo Server wurde mit Fehler beendet (Code: %EXIT_CODE%)
+)
+
+echo.
 pause

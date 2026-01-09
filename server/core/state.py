@@ -60,6 +60,11 @@ class ServerState:
         self.websocket_manager: Optional["WebSocketManager"] = None
         self.session_manager: Optional["SessionManager"] = None
         
+        # Server configuration
+        self.http_port: int = 8081
+        self.websocket_port: int = 8082
+        self._restart_requested: bool = False
+        
         # Thread safety
         self.rotor_lock = threading.Lock()
 
@@ -67,6 +72,7 @@ class ServerState:
         self,
         config_dir: Optional[Path] = None,
         server_root: Optional[Path] = None,
+        http_port: int = 8081,
         websocket_port: int = 8082
     ) -> None:
         """Initialize all server components.
@@ -74,6 +80,7 @@ class ServerState:
         Args:
             config_dir: Directory for configuration files.
             server_root: Directory for static file serving.
+            http_port: Port for HTTP server (default: 8081).
             websocket_port: Port for WebSocket server (default: 8082).
         """
         # Import here to avoid circular imports
@@ -82,6 +89,7 @@ class ServerState:
         from server.control.rotor_logic import RotorLogic
         from server.api.websocket import WebSocketManager
         from server.core.session_manager import SessionManager
+        from server.utils.logging import log
         
         if config_dir:
             self.config_dir = Path(config_dir)
@@ -90,35 +98,65 @@ class ServerState:
         
         # Initialize settings
         self.settings = SettingsManager(self.config_dir)
+        config = self.settings.get_all()
         
-        # Initialize rotor connection
-        self.rotor_connection = RotorConnection()
+        # Override ports from config if available
+        self.http_port = config.get("serverHttpPort", http_port)
+        self.websocket_port = config.get("serverWebSocketPort", websocket_port)
+        
+        # Get server settings from config
+        polling_interval_ms = config.get("serverPollingIntervalMs", 500)
+        session_timeout_s = config.get("serverSessionTimeoutS", 300)
+        max_clients = config.get("serverMaxClients", 10)
+        
+        log(f"[ServerState] Initializing with HTTP port {self.http_port}, WebSocket port {self.websocket_port}")
+        
+        # Initialize rotor connection with polling interval
+        self.rotor_connection = RotorConnection(polling_interval_ms=polling_interval_ms)
         
         # Initialize rotor logic with connection
         self.rotor_logic = RotorLogic(self.rotor_connection)
-        self.rotor_logic.update_config(self.settings.get_all())
+        self.rotor_logic.update_config(config)
         
         # Initialize WebSocket manager
         self.websocket_manager = WebSocketManager()
         
-        # Initialize session manager
-        self.session_manager = SessionManager()
+        # Initialize session manager with config
+        self.session_manager = SessionManager(
+            session_timeout_s=session_timeout_s,
+            max_clients=max_clients
+        )
         
         # Cross-reference managers
         self.websocket_manager.set_session_manager(self.session_manager)
         self.session_manager.set_websocket_manager(self.websocket_manager)
-        
-        # Store websocket port for startup
-        self._websocket_port = websocket_port
 
     def start(self) -> None:
         """Start all background processes."""
         if self.rotor_logic:
             self.rotor_logic.start()
         if self.websocket_manager:
-            self.websocket_manager.start(port=getattr(self, '_websocket_port', 8082))
+            self.websocket_manager.start(port=self.websocket_port)
         if self.session_manager:
             self.session_manager.start()
+    
+    def request_restart(self) -> None:
+        """Request a server restart.
+        
+        Sets a flag that will be checked by the main loop to trigger
+        a restart with exit code 42.
+        """
+        from server.utils.logging import log
+        log("[ServerState] Server restart requested")
+        self._restart_requested = True
+    
+    def is_restart_requested(self) -> bool:
+        """Check if a restart has been requested.
+        
+        Returns:
+            True if restart was requested, False otherwise.
+        """
+        return self._restart_requested
 
     def stop(self) -> None:
         """Stop all background processes and cleanup."""

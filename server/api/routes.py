@@ -3,12 +3,16 @@
 Contains all route handler functions for the REST API endpoints.
 """
 
+import sys
+import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from typing import TYPE_CHECKING
 
 from server.api.middleware import send_json, read_json_body
 from server.connection.port_scanner import list_available_ports
+from server.utils.logging import log, get_current_logging_level, set_logging_level
 
 if TYPE_CHECKING:
     from server.core.state import ServerState
@@ -330,3 +334,142 @@ def handle_resume_client(
     # Resume the session
     state.session_manager.resume_session(client_id)
     send_json(handler, {"status": "ok", "message": f"Client {client_id[:8]}... resumed"})
+
+
+# --- Server Management Routes ---
+
+def handle_get_server_settings(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/server/settings - Get server configuration.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    settings = {
+        "httpPort": state.http_port,
+        "webSocketPort": state.websocket_port,
+        "pollingIntervalMs": int(state.rotor_connection.polling_interval_s * 1000) if state.rotor_connection else 500,
+        "sessionTimeoutS": state.session_manager.session_timeout_s if state.session_manager else 300,
+        "maxClients": state.session_manager.max_clients if state.session_manager else 10,
+        "loggingLevel": get_current_logging_level()
+    }
+    send_json(handler, settings)
+
+
+def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/server/settings - Update server configuration.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    payload = read_json_body(handler)
+    
+    # Validate settings
+    errors = []
+    
+    # Validate ports
+    http_port = payload.get("serverHttpPort")
+    ws_port = payload.get("serverWebSocketPort")
+    
+    if http_port is not None:
+        if not isinstance(http_port, int) or http_port < 1024 or http_port > 65535:
+            errors.append("HTTP port must be between 1024 and 65535")
+    
+    if ws_port is not None:
+        if not isinstance(ws_port, int) or ws_port < 1024 or ws_port > 65535:
+            errors.append("WebSocket port must be between 1024 and 65535")
+    
+    if http_port and ws_port and http_port == ws_port:
+        errors.append("HTTP and WebSocket ports must be different")
+    
+    # Validate polling interval
+    polling_ms = payload.get("serverPollingIntervalMs")
+    if polling_ms is not None:
+        if not isinstance(polling_ms, int) or polling_ms < 250 or polling_ms > 2000:
+            errors.append("Polling interval must be between 250 and 2000 ms")
+    
+    # Validate session timeout
+    timeout_s = payload.get("serverSessionTimeoutS")
+    if timeout_s is not None:
+        if not isinstance(timeout_s, int) or timeout_s < 60 or timeout_s > 3600:
+            errors.append("Session timeout must be between 60 and 3600 seconds")
+    
+    # Validate max clients
+    max_clients = payload.get("serverMaxClients")
+    if max_clients is not None:
+        if not isinstance(max_clients, int) or max_clients < 1 or max_clients > 100:
+            errors.append("Max clients must be between 1 and 100")
+    
+    # Validate logging level
+    log_level = payload.get("serverLoggingLevel")
+    if log_level is not None:
+        if log_level not in ["DEBUG", "INFO", "WARNING", "ERROR"]:
+            errors.append("Logging level must be one of: DEBUG, INFO, WARNING, ERROR")
+    
+    if errors:
+        send_json(handler, {"error": "Validation failed", "details": errors}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    # Save to config
+    update_dict = {}
+    for key in ["serverHttpPort", "serverWebSocketPort", "serverPollingIntervalMs", 
+                "serverSessionTimeoutS", "serverMaxClients", "serverLoggingLevel"]:
+        if key in payload:
+            update_dict[key] = payload[key]
+    
+    if update_dict:
+        state.settings.update(update_dict)
+        
+        # Apply logging level immediately
+        if "serverLoggingLevel" in update_dict:
+            try:
+                set_logging_level(update_dict["serverLoggingLevel"])
+            except ValueError as e:
+                log(f"[API] Error setting log level: {e}", level="WARNING")
+        
+        # Apply polling interval immediately (no restart needed)
+        if "serverPollingIntervalMs" in update_dict and state.rotor_connection:
+            state.rotor_connection.set_polling_interval(update_dict["serverPollingIntervalMs"])
+        
+        # Apply session timeout immediately
+        if "serverSessionTimeoutS" in update_dict and state.session_manager:
+            state.session_manager.session_timeout_s = update_dict["serverSessionTimeoutS"]
+            log(f"[API] Session timeout updated to {update_dict['serverSessionTimeoutS']}s")
+        
+        # Apply max clients immediately
+        if "serverMaxClients" in update_dict and state.session_manager:
+            state.session_manager.max_clients = update_dict["serverMaxClients"]
+            log(f"[API] Max clients updated to {update_dict['serverMaxClients']}")
+    
+    # Only ports require restart
+    restart_required = any(k in update_dict for k in ["serverHttpPort", "serverWebSocketPort"])
+    
+    send_json(handler, {
+        "status": "ok",
+        "message": "Server settings saved." + (" Restart required for port changes to take effect." if restart_required else ""),
+        "restartRequired": restart_required
+    })
+
+
+def handle_server_restart(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/server/restart - Restart server.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    log("[API] Server restart requested")
+    
+    # Send response before restarting
+    send_json(handler, {"status": "restarting", "message": "Server is restarting..."})
+    
+    # Delayed restart to allow response to be sent
+    def delayed_restart():
+        time.sleep(1)  # Give time for response to be sent
+        log("[API] Initiating server restart (exit code 42)")
+        state.stop()  # Clean shutdown
+        sys.exit(42)  # Special exit code for restart
+    
+    restart_thread = threading.Thread(target=delayed_restart, daemon=True)
+    restart_thread.start()

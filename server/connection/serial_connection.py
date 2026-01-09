@@ -30,8 +30,12 @@ class RotorConnection:
     - Parsing of status responses (AZ=xxx EL=xxx format)
     """
 
-    def __init__(self) -> None:
-        """Initialize the rotor connection."""
+    def __init__(self, polling_interval_ms: int = 500) -> None:
+        """Initialize the rotor connection.
+        
+        Args:
+            polling_interval_ms: Interval in milliseconds for C2 status polling (default: 500ms).
+        """
         self.serial: Optional[Any] = None
         self.port: Optional[str] = None
         self.baud_rate: int = 9600
@@ -39,6 +43,7 @@ class RotorConnection:
         self.read_active = False
         self.polling_active = False
         self.polling_thread: Optional[threading.Thread] = None
+        self.polling_interval_s: float = polling_interval_ms / 1000.0
         self.buffer = ""
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
@@ -153,13 +158,22 @@ class RotorConnection:
         with self.status_lock:
             return self.status
 
+    def set_polling_interval(self, polling_interval_ms: int) -> None:
+        """Update the polling interval dynamically.
+        
+        Args:
+            polling_interval_ms: New interval in milliseconds for C2 status polling.
+        """
+        self.polling_interval_s = polling_interval_ms / 1000.0
+        log(f"[RotorConnection] Polling interval updated to {polling_interval_ms}ms")
+
     def _polling_loop(self) -> None:
         """Background thread to poll the rotor for status."""
         while self.polling_active and self.serial and self.serial.is_open:
             try:
-                # Send C2 every 500ms (2x per second)
+                # Send C2 with configured interval
                 self.send_command("C2")
-                time.sleep(0.5)
+                time.sleep(self.polling_interval_s)
             except Exception as e:
                 log(f"[RotorConnection] Polling error: {e}")
                 time.sleep(1.0)
