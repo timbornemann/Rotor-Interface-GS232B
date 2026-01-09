@@ -96,6 +96,24 @@ button.secondary {
   background: rgba(47, 212, 255, 0.15);
 }
 
+/* Icon styling for buttons */
+button .icon {
+  width: 18px;
+  height: 18px;
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+  display: block;
+}
+
+button:hover .icon {
+  opacity: 1;
+}
+
+button.primary .icon {
+  filter: brightness(0) saturate(100%);
+}
+
 button.danger {
   background: rgba(247, 107, 107, 0.2);
   border: 1px solid rgba(247, 107, 107, 0.6);
@@ -1043,6 +1061,10 @@ main.dashboard {
   text-align: left;
 }
 
+.settings-nav-item .nav-icon-img {
+  flex-shrink: 0;
+}
+
 .settings-nav-item:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
@@ -1056,6 +1078,24 @@ main.dashboard {
 .settings-nav-item .nav-icon {
   font-size: 1.1rem;
   opacity: 0.85;
+}
+
+/* Icon Images */
+.settings-nav-item .nav-icon-img {
+  width: 1.1rem;
+  height: 1.1rem;
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+  filter: brightness(0) invert(1);
+}
+
+.settings-nav-item.active .nav-icon-img {
+  opacity: 1;
+  filter: brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(175deg);
+}
+
+.settings-nav-item:hover .nav-icon-img {
+  opacity: 1;
 }
 
 .settings-nav-item .nav-label {
@@ -1245,6 +1285,18 @@ main.dashboard {
 .icon-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.15);
+}
+
+.icon-btn img {
+  width: 18px;
+  height: 18px;
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+
+.icon-btn:hover img {
+  opacity: 1;
 }
 
 /* Toggle Switch */
@@ -2115,6 +2167,14 @@ main.dashboard {
 .suspension-icon {
   font-size: 4rem;
   margin-bottom: 1rem;
+}
+
+.suspension-icon-img {
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1rem;
+  filter: brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(340deg);
+  opacity: 0.9;
 }
 
 .suspension-content h2 {

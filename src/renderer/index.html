@@ -16,13 +16,19 @@
         Port
         <select id="portSelect"></select>
       </label>
-      <button id="refreshPortsBtn" class="secondary" type="button" title="Ports aktualisieren">🔄</button>
-      <button id="manualPortBtn" class="secondary" type="button" title="Port manuell eingeben">⌨️</button>
+      <button id="refreshPortsBtn" class="secondary" type="button" title="Ports aktualisieren">
+        <img src="./assets/icons/refresh-ccw.png" alt="Aktualisieren" class="icon">
+      </button>
+      <button id="manualPortBtn" class="secondary" type="button" title="Port manuell eingeben">
+        <img src="./assets/icons/keyboard.png" alt="Manuell" class="icon">
+      </button>
       <button id="connectBtn" class="primary">Verbinden</button>
       <button id="disconnectBtn" disabled>Trennen</button>
     </div>
     <div class="app-title">RotorControl GS-232B</div>
-    <button id="settingsBtn" class="secondary" type="button" title="Einstellungen">⚙️</button>
+    <button id="settingsBtn" class="secondary" type="button" title="Einstellungen">
+      <img src="./assets/icons/settings.png" alt="Einstellungen" class="icon">
+    </button>
     <div class="status-line">
       <span id="connectionStatus" class="status-chip disconnected">Getrennt</span>
       <span id="modeStatus">Modus: 360deg</span>
@@ -81,8 +87,12 @@
             Satellitenkarte anzeigen
           </label>
           <div class="zoom-controls">
-            <button id="zoomInBtn" class="secondary" title="Hineinzoomen">+</button>
-            <button id="zoomOutBtn" class="secondary" title="Herauszoomen">−</button>
+            <button id="zoomInBtn" class="secondary" title="Hineinzoomen">
+              <img src="./assets/icons/plus.png" alt="Hineinzoomen" class="icon">
+            </button>
+            <button id="zoomOutBtn" class="secondary" title="Herauszoomen">
+              <img src="./assets/icons/minus.png" alt="Herauszoomen" class="icon">
+            </button>
             <span id="zoomLevel" class="zoom-level">Zoom: 15</span>
           </div>
         </div>
@@ -153,31 +163,31 @@
         <!-- Sidebar Navigation -->
         <nav class="settings-nav">
           <button class="settings-nav-item active" data-tab="connection">
-            <span class="nav-icon">🔌</span>
+            <img src="./assets/icons/cable.png" alt="Verbindung" class="nav-icon-img">
             <span class="nav-label">Verbindung</span>
           </button>
           <button class="settings-nav-item" data-tab="display">
-            <span class="nav-icon">🖥️</span>
+            <img src="./assets/icons/monitor.png" alt="Anzeige" class="nav-icon-img">
             <span class="nav-label">Anzeige</span>
           </button>
           <button class="settings-nav-item" data-tab="map">
-            <span class="nav-icon">🗺️</span>
+            <img src="./assets/icons/map.png" alt="Karte" class="nav-icon-img">
             <span class="nav-label">Karte</span>
           </button>
           <button class="settings-nav-item" data-tab="speed">
-            <span class="nav-icon">⚡</span>
+            <img src="./assets/icons/zap.png" alt="Geschwindigkeit" class="nav-icon-img">
             <span class="nav-label">Geschwindigkeit</span>
           </button>
           <button class="settings-nav-item" data-tab="ramp">
-            <span class="nav-icon">📈</span>
+            <img src="./assets/icons/chart-spline.png" alt="Rampe" class="nav-icon-img">
             <span class="nav-label">Rampe</span>
           </button>
           <button class="settings-nav-item" data-tab="calibration">
-            <span class="nav-icon">🎯</span>
+            <img src="./assets/icons/gauge.png" alt="Kalibrierung" class="nav-icon-img">
             <span class="nav-label">Kalibrierung</span>
           </button>
           <button class="settings-nav-item" data-tab="clients">
-            <span class="nav-icon">👥</span>
+            <img src="./assets/icons/users.png" alt="Clients" class="nav-icon-img">
             <span class="nav-label">Clients</span>
           </button>
         </nav>
@@ -194,7 +204,9 @@
                 <label for="settingsPortSelect">COM-Port</label>
                 <div class="input-with-action">
                   <select id="settingsPortSelect"></select>
-                  <button id="settingsRefreshPortsBtn" class="icon-btn" type="button" title="Ports aktualisieren">🔄</button>
+                  <button id="settingsRefreshPortsBtn" class="icon-btn" type="button" title="Ports aktualisieren">
+                    <img src="./assets/icons/refresh-ccw.png" alt="Aktualisieren" class="icon">
+                  </button>
                 </div>
               </div>
               <div class="form-row">
@@ -604,7 +616,7 @@
   <!-- Suspension Overlay -->
   <div id="suspensionOverlay" class="suspension-overlay hidden">
     <div class="suspension-content">
-      <div class="suspension-icon">🚫</div>
+      <img src="./assets/icons/shield-ban.png" alt="Suspendiert" class="suspension-icon-img">
       <h2>Sitzung suspendiert</h2>
       <p id="suspensionMessage">Ihre Sitzung wurde von einem Administrator suspendiert.</p>
       <p class="suspension-hint">Laden Sie die Seite neu, um eine neue Sitzung zu starten.</p>
