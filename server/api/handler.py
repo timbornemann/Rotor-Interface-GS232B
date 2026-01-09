@@ -143,6 +143,14 @@ class RotorHandler(SimpleHTTPRequestHandler):
             routes.handle_get_status(self, self.state)
             return
         
+        if parsed.path == "/api/rotor/position":
+            routes.handle_get_position(self, self.state)
+            return
+        
+        if parsed.path == "/api/config/ini":
+            routes.handle_get_config_ini(self, self.state)
+            return
+        
         if parsed.path == "/api/clients":
             routes.handle_get_clients(self, self.state)
             return
@@ -200,6 +208,10 @@ class RotorHandler(SimpleHTTPRequestHandler):
 
             if parsed.path == "/api/rotor/stop":
                 routes.handle_stop(self, self.state)
+                return
+            
+            if parsed.path == "/api/rotor/command":
+                routes.handle_send_command(self, self.state)
                 return
             
             # Client management routes

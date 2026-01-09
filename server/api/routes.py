@@ -297,6 +297,138 @@ def handle_stop(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
         )
 
 
+def handle_send_command(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/command - Send direct GS-232B command.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    try:
+        payload = read_json_body(handler)
+        command = payload.get("command")
+        
+        if not command or not isinstance(command, str):
+            send_json(handler, {"error": "command must be a non-empty string"}, HTTPStatus.BAD_REQUEST)
+            return
+        
+        if not state.rotor_connection or not state.rotor_connection.is_connected():
+            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            return
+        
+        state.rotor_connection.send_command(command)
+        send_json(handler, {"status": "ok"})
+    except Exception as e:
+        log(f"[Routes] Error in handle_send_command: {e}")
+        send_json(
+            handler, 
+            {"error": "Failed to send command", "message": str(e)}, 
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
+
+
+def handle_get_position(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/rotor/position - Get position with cone visualization.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    from urllib.parse import urlparse, parse_qs
+    
+    # Parse query parameters
+    parsed = urlparse(handler.path)
+    params = parse_qs(parsed.query)
+    
+    try:
+        cone_angle = float(params.get("coneAngle", ["10"])[0])
+        cone_length = float(params.get("coneLength", ["1000"])[0])
+    except (ValueError, IndexError):
+        cone_angle = 10.0
+        cone_length = 1000.0
+    
+    with state.rotor_lock:
+        client_count = 0
+        if state.session_manager:
+            client_count = state.session_manager.get_session_count()
+            
+        if state.rotor_connection and state.rotor_connection.is_connected():
+            status = state.rotor_connection.get_status()
+            
+            config = state.settings.get_all()
+            azimuth_raw = status.get("azimuthRaw") if status else None
+            elevation_raw = status.get("elevationRaw") if status else None
+            
+            # Calculate calibrated values
+            calibrated = {"azimuth": None, "elevation": None}
+            if azimuth_raw is not None:
+                scale = config.get("azimuthScaleFactor", 1.0) or 1.0
+                offset = config.get("azimuthOffset", 0.0) or 0.0
+                calibrated["azimuth"] = (azimuth_raw + offset) / scale
+            
+            if elevation_raw is not None:
+                scale = config.get("elevationScaleFactor", 1.0) or 1.0
+                offset = config.get("elevationOffset", 0.0) or 0.0
+                calibrated["elevation"] = (elevation_raw + offset) / scale
+            
+            # Build calibration info
+            calibration = {
+                "azimuthOffset": config.get("azimuthOffset", 0.0),
+                "elevationOffset": config.get("elevationOffset", 0.0),
+                "azimuthScaleFactor": config.get("azimuthScaleFactor", 1.0),
+                "elevationScaleFactor": config.get("elevationScaleFactor", 1.0)
+            }
+
+            send_json(handler, {
+                "connected": True,
+                "port": state.rotor_connection.port,
+                "baudRate": state.rotor_connection.baud_rate,
+                "position": {
+                    "rawLine": status.get("raw") if status else None,
+                    "timestamp": status.get("timestamp") if status else None,
+                    "rph": {
+                        "azimuth": azimuth_raw,
+                        "elevation": elevation_raw
+                    },
+                    "calibrated": calibrated,
+                    "calibration": calibration
+                },
+                "cone": {
+                    "angle": cone_angle,
+                    "length": cone_length
+                },
+                "clientCount": client_count
+            })
+        else:
+            send_json(handler, {"connected": False, "clientCount": client_count})
+
+
+def handle_get_config_ini(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/config/ini - Get rotor-config.ini content (read-only).
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    try:
+        # Try to read rotor-config.ini from the project root
+        config_file = state.settings.config_dir / "rotor-config.ini"
+        
+        if config_file.exists():
+            with open(config_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            send_json(handler, {"content": content})
+        else:
+            send_json(handler, {"error": "rotor-config.ini not found"}, HTTPStatus.NOT_FOUND)
+    except Exception as e:
+        log(f"[Routes] Error reading rotor-config.ini: {e}")
+        send_json(
+            handler, 
+            {"error": "Failed to read configuration file", "message": str(e)}, 
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
+
+
 # --- Client Management Routes ---
 
 def handle_get_clients(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
