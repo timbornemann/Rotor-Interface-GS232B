@@ -7,6 +7,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RotorControl GS-232B</title>
   <link rel="stylesheet" href="./styles.css" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
 </head>
 
 <body>
@@ -293,6 +304,20 @@
                 <input id="settingsMapCoordinatesInput" type="text" 
                   placeholder="z.B. 51.8591, 11.4223" />
                 <p class="help-text">GPS-Koordinaten des Antennenstandorts.</p>
+              </div>
+              <div class="form-group">
+                <label for="settingsMapSearchInput">Adresse oder Ortsname</label>
+                <div class="map-search-row">
+                  <input id="settingsMapSearchInput" type="text" placeholder="z.B. Berlin Alexanderplatz" />
+                  <button id="settingsMapSearchBtn" class="secondary" type="button">Suchen</button>
+                </div>
+                <p class="help-text">Alternative zur manuellen Eingabe: Suche nach Adresse/Ort und setze den Punkt per Drag & Drop.</p>
+              </div>
+              <div id="settingsMapSearchStatus" class="map-search-status hidden" aria-live="polite"></div>
+              <div id="settingsMapSearchResults" class="map-search-results hidden"></div>
+              <div class="settings-map-picker">
+                <div id="settingsMapPicker" class="map-picker-canvas"></div>
+                <div class="map-picker-overlay">Karte ziehen, um den Punkt zu zentrieren.</div>
               </div>
               <div class="form-group">
                 <label class="toggle-label">

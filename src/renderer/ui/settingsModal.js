@@ -14,6 +14,11 @@ class SettingsModal {
     this.onSaveCallback = null;
     this.clientsRefreshTimer = null;
     this.wsUnsubscribers = [];
+    this.locationMap = null;
+    this.locationMarker = null;
+    this.locationSearchAbort = null;
+    this.pendingLocation = null;
+    this.locationMapReady = false;
     
     // Settings field definitions for easy maintenance
     this.settingsFields = {
@@ -115,6 +120,8 @@ class SettingsModal {
     // Range/Number sync for speed inputs
     this.setupRangeSync('settingsAzSpeedRange', 'settingsAzSpeedInput');
     this.setupRangeSync('settingsElSpeedRange', 'settingsElSpeedInput');
+    this.setupLocationSearch();
+    this.setupCoordinateSync();
 
     // Port refresh button
     const refreshBtn = document.getElementById('settingsRefreshPortsBtn');
@@ -181,6 +188,13 @@ class SettingsModal {
     // Load clients data when switching to clients tab
     if (tabName === 'clients') {
       this.loadClientsData();
+    }
+
+    if (tabName === 'map') {
+      this.ensureLocationPicker();
+      if (this.locationMap) {
+        this.locationMap.invalidateSize();
+      }
     }
   }
 
@@ -347,6 +361,7 @@ class SettingsModal {
     
     // Load config into form fields
     this.loadConfigIntoForm(config);
+    this.syncLocationPicker(config);
     
     // Refresh ports
     await this.refreshPorts();
@@ -449,6 +464,219 @@ class SettingsModal {
     }
 
     return config;
+  }
+
+  setupLocationSearch() {
+    const searchInput = document.getElementById('settingsMapSearchInput');
+    const searchButton = document.getElementById('settingsMapSearchBtn');
+
+    if (!searchInput || !searchButton) {
+      return;
+    }
+
+    const handleSearch = () => {
+      const query = searchInput.value.trim();
+      if (query) {
+        void this.performLocationSearch(query);
+      }
+    };
+
+    searchButton.addEventListener('click', handleSearch);
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleSearch();
+      }
+    });
+  }
+
+  setupCoordinateSync() {
+    const coordsInput = document.getElementById('settingsMapCoordinatesInput');
+    if (!coordsInput) {
+      return;
+    }
+
+    coordsInput.addEventListener('change', () => {
+      const coords = this.parseCoordinates(coordsInput.value);
+      if (coords) {
+        this.setLocationPickerCoordinates(coords.lat, coords.lon);
+      }
+    });
+  }
+
+  ensureLocationPicker() {
+    if (this.locationMap || typeof window.L === 'undefined') {
+      return;
+    }
+
+    const mapContainer = document.getElementById('settingsMapPicker');
+    if (!mapContainer) {
+      return;
+    }
+
+    const defaultLocation = this.getDefaultLocation();
+    this.locationMap = window.L.map(mapContainer, {
+      zoomControl: true,
+      attributionControl: true
+    });
+
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap-Mitwirkende'
+    }).addTo(this.locationMap);
+
+    this.locationMarker = window.L.marker([defaultLocation.lat, defaultLocation.lon], {
+      draggable: false
+    }).addTo(this.locationMap);
+
+    this.locationMap.on('moveend', () => this.updateCoordinatesFromMap());
+    this.locationMap.on('zoomend', () => this.updateCoordinatesFromMap());
+
+    this.locationMap.setView([defaultLocation.lat, defaultLocation.lon], defaultLocation.zoom);
+    this.locationMapReady = true;
+
+    if (this.pendingLocation) {
+      this.setLocationPickerCoordinates(this.pendingLocation.lat, this.pendingLocation.lon, this.pendingLocation.zoom);
+      this.pendingLocation = null;
+    }
+  }
+
+  getDefaultLocation() {
+    return { lat: 51.0, lon: 10.0, zoom: 6 };
+  }
+
+  syncLocationPicker(config) {
+    const hasCoords = config.mapLatitude != null && config.mapLongitude != null;
+    const zoomLevel = Number.isFinite(config.mapZoomLevel) ? config.mapZoomLevel : undefined;
+    if (hasCoords) {
+      this.setLocationPickerCoordinates(config.mapLatitude, config.mapLongitude, zoomLevel);
+    } else if (zoomLevel) {
+      const fallback = this.getDefaultLocation();
+      this.setLocationPickerCoordinates(fallback.lat, fallback.lon, zoomLevel);
+    }
+  }
+
+  setLocationPickerCoordinates(lat, lon, zoom) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    if (!this.locationMap || !this.locationMapReady) {
+      this.pendingLocation = { lat, lon, zoom };
+      return;
+    }
+
+    const targetZoom = Number.isFinite(zoom) ? zoom : this.locationMap.getZoom();
+    this.locationMap.setView([lat, lon], targetZoom, { animate: false });
+    if (this.locationMarker) {
+      this.locationMarker.setLatLng([lat, lon]);
+    }
+    this.updateCoordinatesInput(lat, lon);
+  }
+
+  updateCoordinatesFromMap() {
+    if (!this.locationMap || !this.locationMarker) {
+      return;
+    }
+
+    const center = this.locationMap.getCenter();
+    this.locationMarker.setLatLng(center);
+    this.updateCoordinatesInput(center.lat, center.lng);
+  }
+
+  updateCoordinatesInput(lat, lon) {
+    const coordsInput = document.getElementById('settingsMapCoordinatesInput');
+    if (!coordsInput) {
+      return;
+    }
+    coordsInput.value = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+  }
+
+  parseCoordinates(value) {
+    if (!value) {
+      return null;
+    }
+    const parts = value.split(',').map(part => part.trim());
+    if (parts.length !== 2) {
+      return null;
+    }
+    const lat = parseFloat(parts[0]);
+    const lon = parseFloat(parts[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return null;
+    }
+    return { lat, lon };
+  }
+
+  async performLocationSearch(query) {
+    const statusEl = document.getElementById('settingsMapSearchStatus');
+    const resultsEl = document.getElementById('settingsMapSearchResults');
+
+    if (statusEl) {
+      statusEl.textContent = 'Suche läuft...';
+      statusEl.classList.remove('hidden', 'error');
+    }
+
+    if (resultsEl) {
+      resultsEl.innerHTML = '';
+      resultsEl.classList.add('hidden');
+    }
+
+    if (this.locationSearchAbort) {
+      this.locationSearchAbort.abort();
+    }
+    this.locationSearchAbort = new AbortController();
+
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(query)}`, {
+        headers: {
+          'Accept-Language': 'de'
+        },
+        signal: this.locationSearchAbort.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const results = await response.json();
+      if (!Array.isArray(results) || results.length === 0) {
+        if (statusEl) {
+          statusEl.textContent = 'Keine Treffer gefunden.';
+        }
+        return;
+      }
+
+      if (statusEl) {
+        statusEl.textContent = `${results.length} Treffer gefunden.`;
+      }
+
+      if (resultsEl) {
+        resultsEl.classList.remove('hidden');
+        results.forEach(result => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = result.display_name;
+          button.addEventListener('click', () => {
+            const lat = parseFloat(result.lat);
+            const lon = parseFloat(result.lon);
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              this.setLocationPickerCoordinates(lat, lon, 15);
+            }
+          });
+          resultsEl.appendChild(button);
+        });
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+      console.error('[SettingsModal] Location search failed:', error);
+      if (statusEl) {
+        statusEl.textContent = 'Fehler bei der Suche. Bitte später erneut versuchen.';
+        statusEl.classList.add('error');
+      }
+    }
   }
 
   validate(config) {
