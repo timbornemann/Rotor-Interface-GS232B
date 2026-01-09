@@ -8,11 +8,6 @@ class SettingsModal {
     this.tabContents = document.querySelectorAll('.tab-content');
     this.currentConfig = null;
     this.onSaveCallback = null;
-    this.clientPollTimer = null;
-    this.serverClientsList = null;
-    this.serverClientsCount = null;
-    this.serverClientsEmpty = null;
-    this.serverClientsUnavailable = null;
     
     // Only init if all required elements exist
     if (this.modal && this.closeBtn && this.saveBtn && this.cancelBtn) {
@@ -41,11 +36,6 @@ class SettingsModal {
       console.error('[SettingsModal] Cannot initialize - required elements missing');
       return;
     }
-
-    this.serverClientsList = document.getElementById('serverClientsList');
-    this.serverClientsCount = document.getElementById('serverClientsCount');
-    this.serverClientsEmpty = document.getElementById('serverClientsEmpty');
-    this.serverClientsUnavailable = document.getElementById('serverClientsUnavailable');
 
     // Tab switching
     if (this.tabButtons && this.tabButtons.length > 0) {
@@ -196,14 +186,12 @@ class SettingsModal {
     }
     
     this.modal.classList.remove('hidden');
-    this.startClientPolling();
   }
 
   close() {
     this.modal.classList.add('hidden');
     this.currentConfig = null;
     this.onSaveCallback = null;
-    this.stopClientPolling();
   }
 
   loadConfigIntoModal(config) {
@@ -366,118 +354,5 @@ class SettingsModal {
     }
     this.close();
   }
-
-  startClientPolling() {
-    this.stopClientPolling();
-    void this.refreshClientList();
-    this.clientPollTimer = setInterval(() => {
-      void this.refreshClientList();
-    }, 2000);
-  }
-
-  stopClientPolling() {
-    if (this.clientPollTimer) {
-      clearInterval(this.clientPollTimer);
-      this.clientPollTimer = null;
-    }
-  }
-
-  async refreshClientList() {
-    if (!this.serverClientsList || !this.serverClientsCount || !this.serverClientsEmpty || !this.serverClientsUnavailable) {
-      return;
-    }
-    const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
-    const connectionModeSelect = document.getElementById('settingsConnectionModeSelect');
-    const isServerMode = connectionModeSelect ? connectionModeSelect.value === 'server' : false;
-
-    if (isFileProtocol || !isServerMode || typeof window.rotorService === 'undefined') {
-      this.serverClientsUnavailable.classList.remove('hidden');
-      this.serverClientsEmpty.classList.add('hidden');
-      this.serverClientsList.innerHTML = '';
-      this.serverClientsCount.textContent = '0';
-      return;
-    }
-
-    try {
-      await window.rotorService.registerServerClient();
-      const response = await fetch(`${window.location.origin}/api/clients`, {
-        headers: window.rotorService.buildServerHeaders()
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
-      const clients = Array.isArray(data.clients) ? data.clients : [];
-      const ownId = window.rotorService.getClientId();
-
-      this.serverClientsUnavailable.classList.add('hidden');
-      this.serverClientsList.innerHTML = '';
-      this.serverClientsCount.textContent = `${clients.length}`;
-
-      if (clients.length === 0) {
-        this.serverClientsEmpty.classList.remove('hidden');
-        return;
-      }
-      this.serverClientsEmpty.classList.add('hidden');
-
-      clients.forEach((client) => {
-        const item = document.createElement('li');
-        item.className = `server-client-item${client.suspended ? ' suspended' : ''}`;
-
-        const info = document.createElement('div');
-        info.className = 'server-client-info';
-
-        const title = document.createElement('strong');
-        const shortId = client.id ? client.id.slice(0, 8) : 'unbekannt';
-        title.textContent = `${shortId}${client.id === ownId ? ' (Du)' : ''}`;
-
-        const meta = document.createElement('div');
-        meta.className = 'server-client-meta';
-        const lastSeenSeconds = client.lastSeen ? Math.max(0, Math.round(Date.now() / 1000 - client.lastSeen)) : null;
-        const lastSeenText = lastSeenSeconds === null ? 'unbekannt' : `vor ${lastSeenSeconds}s`;
-        meta.textContent = `${client.address || 'unbekannt'} • ${lastSeenText} ${client.suspended ? '• suspendiert' : ''}`;
-
-        info.appendChild(title);
-        info.appendChild(meta);
-
-        const actions = document.createElement('div');
-        actions.className = 'server-client-actions';
-
-        const suspendBtn = document.createElement('button');
-        suspendBtn.type = 'button';
-        suspendBtn.className = client.suspended ? 'secondary' : 'danger';
-        suspendBtn.textContent = client.suspended ? 'Reaktivieren' : 'Suspendieren';
-        suspendBtn.addEventListener('click', () => {
-          void this.setClientSuspended(client.id, !client.suspended);
-        });
-
-        actions.appendChild(suspendBtn);
-        item.appendChild(info);
-        item.appendChild(actions);
-        this.serverClientsList.appendChild(item);
-      });
-    } catch (error) {
-      console.error('[SettingsModal] Fehler beim Laden der Clients', error);
-      this.serverClientsUnavailable.classList.remove('hidden');
-      this.serverClientsEmpty.classList.add('hidden');
-      this.serverClientsList.innerHTML = '';
-      this.serverClientsCount.textContent = '0';
-    }
-  }
-
-  async setClientSuspended(clientId, suspended) {
-    if (!clientId || typeof window.rotorService === 'undefined') {
-      return;
-    }
-    try {
-      await fetch(`${window.location.origin}/api/clients/suspend`, {
-        method: 'POST',
-        headers: window.rotorService.buildServerHeaders(),
-        body: JSON.stringify({ targetClientId: clientId, suspended })
-      });
-      await this.refreshClientList();
-    } catch (error) {
-      console.error('[SettingsModal] Fehler beim Suspendieren', error);
-    }
-  }
 }
+

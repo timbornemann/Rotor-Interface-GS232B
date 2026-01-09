@@ -4,13 +4,6 @@ const decoder = new TextDecoder();
 const portIds = new WeakMap();
 let portCounter = 0;
 
-function createClientId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 function supportsWebSerial() {
   return typeof navigator !== 'undefined' && Boolean(navigator.serial);
 }
@@ -515,100 +508,28 @@ class SimulationSerialConnection extends SerialConnection {
 }
 
 class ServerConnection extends SerialConnection {
-  constructor(apiBase, clientId) {
+  constructor(apiBase) {
     super();
     this.apiBase = apiBase || (window.location.origin);
-    this.clientId = clientId;
     this.isConnected = false;
     this.statusPollTimer = null;
-    this.clientHeartbeatTimer = null;
-    this.connectedPort = null;
-  }
-
-  buildHeaders() {
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-    if (this.clientId) {
-      headers['X-Client-Id'] = this.clientId;
-    }
-    return headers;
-  }
-
-  async registerClient(resetSuspend = true) {
-    if (!this.clientId) {
-      return;
-    }
-    try {
-      await fetch(`${this.apiBase}/api/clients/register`, {
-        method: 'POST',
-        headers: this.buildHeaders(),
-        body: JSON.stringify({ clientId: this.clientId, resetSuspend })
-      });
-    } catch (error) {
-      console.warn('[RotorService][Server] Client-Registrierung fehlgeschlagen', error);
-    }
-  }
-
-  startClientHeartbeat() {
-    if (this.clientHeartbeatTimer) {
-      clearInterval(this.clientHeartbeatTimer);
-    }
-    const heartbeat = async () => {
-      if (!this.clientId) {
-        return;
-      }
-      try {
-        await fetch(`${this.apiBase}/api/clients/heartbeat`, {
-          method: 'POST',
-          headers: this.buildHeaders(),
-          body: JSON.stringify({ clientId: this.clientId })
-        });
-      } catch (error) {
-        console.warn('[RotorService][Server] Client-Heartbeat fehlgeschlagen', error);
-      }
-    };
-    heartbeat();
-    this.clientHeartbeatTimer = setInterval(heartbeat, 5000);
-  }
-
-  stopClientHeartbeat() {
-    if (this.clientHeartbeatTimer) {
-      clearInterval(this.clientHeartbeatTimer);
-      this.clientHeartbeatTimer = null;
-    }
   }
 
   async open(options) {
     const port = options?.port;
     const baudRate = options?.baudRate || 9600;
     
+    if (!port) {
+      throw new Error('Port ist erforderlich für Server-Verbindung');
+    }
+
     try {
-      await this.registerClient();
-      this.startClientHeartbeat();
-
-      const statusResponse = await fetch(`${this.apiBase}/api/rotor/status`, {
-        headers: this.buildHeaders()
-      });
-      if (statusResponse.ok) {
-        const status = await statusResponse.json();
-        if (status.connected) {
-          this.isConnected = true;
-          this.connectedPort = status.port || port || null;
-          console.log('[RotorService][Server] Bereits verbunden', { port: status.port, baudRate: status.baudRate });
-          this.startStatusPolling();
-          return;
-        }
-      }
-
-      if (!port) {
-        throw new Error('Port ist erforderlich für Server-Verbindung');
-      }
-
       const response = await fetch(`${this.apiBase}/api/rotor/connect`, {
         method: 'POST',
-        headers: this.buildHeaders(),
-        body: JSON.stringify({ port, baudRate, clientId: this.clientId })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ port, baudRate })
       });
 
       if (!response.ok) {
@@ -646,7 +567,6 @@ class ServerConnection extends SerialConnection {
       }
 
       this.isConnected = true;
-      this.connectedPort = port;
       console.log('[RotorService][Server] Verbunden', { port, baudRate });
       
       // Starte Status-Polling
@@ -659,18 +579,17 @@ class ServerConnection extends SerialConnection {
 
   async close() {
     this.isConnected = false;
-    this.connectedPort = null;
     if (this.statusPollTimer) {
       clearInterval(this.statusPollTimer);
       this.statusPollTimer = null;
     }
-    this.stopClientHeartbeat();
 
     try {
       const response = await fetch(`${this.apiBase}/api/rotor/disconnect`, {
         method: 'POST',
-        headers: this.buildHeaders(),
-        body: JSON.stringify({ clientId: this.clientId })
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       if (!response.ok) {
@@ -695,8 +614,10 @@ class ServerConnection extends SerialConnection {
     try {
       const response = await fetch(`${this.apiBase}/api/rotor/command`, {
         method: 'POST',
-        headers: this.buildHeaders(),
-        body: JSON.stringify({ command, clientId: this.clientId })
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ command })
       });
 
       if (!response.ok) {
@@ -723,7 +644,9 @@ class ServerConnection extends SerialConnection {
 
       try {
         const response = await fetch(`${this.apiBase}/api/rotor/status`, {
-          headers: this.buildHeaders()
+          headers: {
+            'Content-Type': 'application/json'
+          }
         });
 
         if (!response.ok) {
@@ -731,13 +654,6 @@ class ServerConnection extends SerialConnection {
         }
 
         const data = await response.json();
-        if (!data.connected) {
-          this.isConnected = false;
-          return;
-        }
-        if (data.port) {
-          this.connectedPort = data.port;
-        }
         if (data.connected && data.status) {
           this.emitData(data.status.raw || '');
         }
@@ -923,9 +839,6 @@ class RotorService {
     this.simulationMode = true;
     this.connectionMode = 'local'; // 'local', 'server', 'simulation'
     this.apiBase = window.location.origin;
-    this.clientId = createClientId();
-    this.clientRegistered = false;
-    this.clientHeartbeatTimer = null;
     this.maxAzimuthRange = 360;
     this.azimuthOffset = 0;
     this.elevationOffset = 0;
@@ -963,72 +876,6 @@ class RotorService {
     return supportsWebSerial();
   }
 
-  getClientId() {
-    return this.clientId;
-  }
-
-  buildServerHeaders() {
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-    if (this.clientId) {
-      headers['X-Client-Id'] = this.clientId;
-    }
-    return headers;
-  }
-
-  async registerServerClient() {
-    if (this.clientRegistered) {
-      return;
-    }
-    const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
-    if (isFileProtocol) {
-      return;
-    }
-    try {
-      const response = await fetch(`${this.apiBase}/api/clients/register`, {
-        method: 'POST',
-        headers: this.buildServerHeaders(),
-        body: JSON.stringify({ clientId: this.clientId })
-      });
-      if (response.ok) {
-        this.clientRegistered = true;
-      }
-    } catch (error) {
-      console.warn('[RotorService] Client-Registrierung fehlgeschlagen', error);
-    }
-  }
-
-  startClientHeartbeat() {
-    const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
-    if (isFileProtocol) {
-      return;
-    }
-    if (this.clientHeartbeatTimer) {
-      clearInterval(this.clientHeartbeatTimer);
-    }
-    const heartbeat = async () => {
-      try {
-        await fetch(`${this.apiBase}/api/clients/heartbeat`, {
-          method: 'POST',
-          headers: this.buildServerHeaders(),
-          body: JSON.stringify({ clientId: this.clientId })
-        });
-      } catch (error) {
-        console.warn('[RotorService] Client-Heartbeat fehlgeschlagen', error);
-      }
-    };
-    heartbeat();
-    this.clientHeartbeatTimer = setInterval(heartbeat, 5000);
-  }
-
-  stopClientHeartbeat() {
-    if (this.clientHeartbeatTimer) {
-      clearInterval(this.clientHeartbeatTimer);
-      this.clientHeartbeatTimer = null;
-    }
-  }
-
   async listPorts() {
     const ports = [];
     
@@ -1047,7 +894,9 @@ class RotorService {
       try {
       const response = await fetch(`${this.apiBase}/api/rotor/ports`, {
         method: 'GET',
-        headers: this.buildServerHeaders()
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
         
         console.log('[RotorService] Server-Antwort erhalten', { 
@@ -1153,7 +1002,7 @@ class RotorService {
     } else if (useServer) {
       this.simulationMode = false;
       this.connectionMode = 'server';
-      this.serial = new ServerConnection(this.apiBase, this.clientId);
+      this.serial = new ServerConnection(this.apiBase);
     } else {
       const port = this.portRegistry.get(config.path);
       if (!port) {
