@@ -18,7 +18,6 @@ window.wsService = wsService; // Make available globally
 
 const portSelect = document.getElementById('portSelect');
 const refreshPortsBtn = document.getElementById('refreshPortsBtn');
-const manualPortBtn = document.getElementById('manualPortBtn');
 // Elements from settings modal may be null here, so we check them inside update functions or modal logic
 const baudInput = document.getElementById('baudInput');
 const pollingInput = document.getElementById('pollingInput');
@@ -546,9 +545,6 @@ async function init() {
   if (refreshPortsBtn) {
     refreshPortsBtn.addEventListener('click', () => void refreshPorts());
   }
-  if (manualPortBtn) {
-    manualPortBtn.addEventListener('click', () => handleManualPort());
-  }
 
   if (connectBtn) {
     connectBtn.addEventListener('click', () => void handleConnect());
@@ -679,20 +675,6 @@ async function init() {
   subscribeToStatus();
 
   logAction('Initialisierung abgeschlossen');
-}
-
-function handleManualPort() {
-  const port = prompt('Port-Pfad eingeben (z.B. COM3 oder /dev/ttyUSB0):');
-  if (port && port.trim()) {
-    const trimmed = port.trim();
-    const option = document.createElement('option');
-    option.value = trimmed;
-    option.textContent = `${trimmed} (Manuell)`;
-    portSelect.appendChild(option);
-    portSelect.value = trimmed;
-    logAction('Manueller Port hinzugefügt', { port: trimmed });
-    logAction('Manueller Port hinzugefügt', { port: trimmed });
-  }
 }
 
 async function refreshPorts() {
