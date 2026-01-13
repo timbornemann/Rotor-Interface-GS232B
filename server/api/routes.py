@@ -3,7 +3,6 @@
 Contains all route handler functions for the REST API endpoints.
 """
 
-import sys
 import threading
 import time
 from http import HTTPStatus
@@ -660,10 +659,14 @@ def handle_server_restart(handler: BaseHTTPRequestHandler, state: "ServerState")
     
     # Delayed restart to allow response to be sent
     def delayed_restart():
-        time.sleep(1)  # Give time for response to be sent
-        log("[API] Initiating server restart (exit code 42)")
-        state.stop()  # Clean shutdown
-        sys.exit(42)  # Special exit code for restart
+        time.sleep(0.75)  # Give time for response to be sent
+        log("[API] Initiating server restart (requesting exit code 42)")
+        # Mark restart so core.server can exit with the special code after HTTP loop stops
+        state.request_restart()
+        # Stop background components first (WebSocket, rotor loop, etc.)
+        state.stop()
+        # Stop the HTTP server loop (serve_forever), then core.server will exit with code 42
+        state.shutdown_http_server()
     
     restart_thread = threading.Thread(target=delayed_restart, daemon=True)
     restart_thread.start()

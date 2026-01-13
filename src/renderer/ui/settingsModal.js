@@ -717,6 +717,13 @@ class SettingsModal {
     }
     
     try {
+      // If ports were changed, we need to redirect to the new HTTP port (reload would hit the old origin).
+      const httpPortEl = document.getElementById('settingsServerHttpPort');
+      const desiredHttpPort = httpPortEl ? Number(httpPortEl.value) : NaN;
+      const currentPort = window.location.port ? Number(window.location.port) : NaN;
+      const targetPort = Number.isFinite(desiredHttpPort) ? desiredHttpPort : (Number.isFinite(currentPort) ? currentPort : 8081);
+      const targetUrl = `${window.location.protocol}//${window.location.hostname}:${targetPort}/`;
+
       restartStatus.textContent = 'Server wird neu gestartet...';
       restartStatus.classList.remove('hidden');
       
@@ -729,10 +736,21 @@ class SettingsModal {
         throw new Error(`Server Error: ${response.status}`);
       }
       
-      // Wait for server to restart (5s) then reload page
+      // Wait for server to restart then reload/redirect
       setTimeout(() => {
-        window.location.reload();
-      }, 5000);
+        const currentPortStr = window.location.port || '';
+        const targetPortStr = String(targetPort);
+        if (currentPortStr && currentPortStr !== targetPortStr) {
+          window.location.href = targetUrl;
+        } else if (!currentPortStr && (targetPort === 80 || targetPort === 443)) {
+          // Default ports: keep origin without explicit port
+          window.location.href = `${window.location.protocol}//${window.location.hostname}/`;
+        } else if (!currentPortStr && targetPort !== 80 && targetPort !== 443) {
+          window.location.href = targetUrl;
+        } else {
+          window.location.reload();
+        }
+      }, 2500);
       
     } catch (error) {
       console.error('[SettingsModal] Error restarting server:', error);

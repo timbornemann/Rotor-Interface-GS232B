@@ -388,11 +388,29 @@ configStore.load().then(loadedConfig => {
 });
 
 // WebSocket setup for real-time synchronization
-function setupWebSocket() {
+async function setupWebSocket() {
   // Set session ID from rotor service
   const sessionId = rotor.getSessionId();
   if (sessionId) {
     wsService.setSessionId(sessionId);
+  }
+
+  // Configure WebSocket port from server (supports custom ports)
+  try {
+    const resp = await fetch(`${rotor.apiBase}/api/server/settings`, {
+      headers: rotor.getSessionHeaders()
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.webSocketPort) {
+        wsService.setWebSocketPort(data.webSocketPort);
+      }
+    }
+  } catch (e) {
+    // Fallback to config cache (may still be default on first load)
+    if (config && config.serverWebSocketPort) {
+      wsService.setWebSocketPort(config.serverWebSocketPort);
+    }
   }
   
   // Handle connection state broadcasts from server
@@ -514,7 +532,7 @@ async function init() {
   await rotor.initSession();
   
   // Set up WebSocket service
-  setupWebSocket();
+  await setupWebSocket();
   
   // Set up suspension overlay
   setupSuspensionOverlay();

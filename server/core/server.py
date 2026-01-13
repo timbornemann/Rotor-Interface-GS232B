@@ -56,7 +56,10 @@ def run_server(
         return RotorHandler(*args, directory=str(state.server_root), **kwargs)
     
     # Start HTTP server with configured port
+    restart_requested = False
     with ThreadingHTTPServer(("0.0.0.0", state.http_port), handler_factory) as httpd:
+        # Allow other components (e.g. restart endpoint) to shut down the HTTP server
+        state.set_http_server(httpd)
         log(f"Serving Rotor UI from {state.server_root} at http://localhost:{state.http_port}")
         log(f"WebSocket server running on ws://localhost:{state.websocket_port}")
         log("API V2 enabled (Server-Side Logic)")
@@ -70,6 +73,14 @@ def run_server(
             except Exception as e:
                 log(f"Error during shutdown: {e}")
             log("Server stopped")
+        finally:
+            restart_requested = state.is_restart_requested()
+            # Detach server reference (avoid stale references across restarts/tests)
+            state.set_http_server(None)
+
+    # If a restart was requested (e.g. via /api/server/restart), exit with special code 42
+    if restart_requested:
+        raise SystemExit(42)
 
 
 def create_test_server(

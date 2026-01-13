@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from server.config.settings import SettingsManager
@@ -59,6 +59,7 @@ class ServerState:
         self.rotor_logic: Optional["RotorLogic"] = None
         self.websocket_manager: Optional["WebSocketManager"] = None
         self.session_manager: Optional["SessionManager"] = None
+        self.http_server: Any = None  # ThreadingHTTPServer instance (set by core.server)
         
         # Server configuration
         self.http_port: int = 8081
@@ -169,6 +170,24 @@ class ServerState:
         if self.session_manager:
             self.session_manager.stop()
 
+    def set_http_server(self, server: Any) -> None:
+        """Attach the running HTTP server instance so it can be shut down on restart."""
+        self.http_server = server
+
+    def shutdown_http_server(self) -> None:
+        """Request the HTTP server to stop serving (causes serve_forever() to return)."""
+        from server.utils.logging import log
+
+        if not self.http_server:
+            log("[ServerState] No HTTP server instance set; cannot shutdown HTTP server", level="WARNING")
+            return
+        try:
+            log("[ServerState] Shutting down HTTP server...")
+            # ThreadingHTTPServer.shutdown() is thread-safe and will unblock serve_forever()
+            self.http_server.shutdown()
+        except Exception as e:
+            log(f"[ServerState] Error shutting down HTTP server: {e}", level="WARNING")
+
     def reset(self) -> None:
         """Reset state for testing purposes."""
         self.stop()
@@ -177,6 +196,7 @@ class ServerState:
         self.rotor_logic = None
         self.websocket_manager = None
         self.session_manager = None
+        self.http_server = None
 
     def broadcast_connection_state(self) -> None:
         """Broadcast current connection state to all WebSocket clients."""

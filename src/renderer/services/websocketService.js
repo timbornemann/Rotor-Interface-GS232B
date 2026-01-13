@@ -10,6 +10,7 @@ class WebSocketService {
   constructor() {
     this.ws = null;
     this.sessionId = null;
+    this.port = null; // configurable via setWebSocketPort()
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 10;
     this.reconnectDelay = 1000; // Start with 1 second
@@ -29,6 +30,15 @@ class WebSocketService {
     // Load session ID from localStorage
     this.sessionId = localStorage.getItem('rotor_session_id');
   }
+
+  /**
+   * Override the WebSocket port (useful when server port is configurable).
+   * @param {number} port
+   */
+  setWebSocketPort(port) {
+    const p = Number(port);
+    this.port = Number.isFinite(p) && p > 0 ? p : null;
+  }
   
   /**
    * Get WebSocket URL based on current page location.
@@ -37,8 +47,8 @@ class WebSocketService {
   getWebSocketUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.hostname;
-    // WebSocket runs on port 8082 by default
-    const port = 8082;
+    // WebSocket runs on port 8082 by default, but can be configured
+    const port = this.port || 8082;
     return `${protocol}//${host}:${port}`;
   }
   
