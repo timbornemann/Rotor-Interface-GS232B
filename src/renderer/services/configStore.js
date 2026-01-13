@@ -81,8 +81,8 @@ const defaultConfig = {
   elevationScaleFactorMin: 0.1,
   elevationScaleFactorMax: 2.0,
   
-  // Saved Positions
-  savedPositions: [],  // Array of {id, name, azimuth, elevation, order, createdAt}
+  // Saved Routes (replaces savedPositions)
+  savedRoutes: [],  // Array of route objects with steps (position, wait, loop)
 };
 
 class ConfigStore {

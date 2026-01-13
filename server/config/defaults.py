@@ -98,8 +98,8 @@ DEFAULT_CONFIG = {
     "serverMaxClientsMin": 1,
     "serverMaxClientsMax": 100,
     
-    # Saved Positions
-    "savedPositions": [],  # Array of {id, name, azimuth, elevation, order, createdAt}
+    # Saved Routes (replaces savedPositions)
+    "savedRoutes": [],  # Array of route objects with steps (position, wait, loop)
 }
 
 # INI file template with sections and comments

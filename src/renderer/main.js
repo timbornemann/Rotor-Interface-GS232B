@@ -364,55 +364,94 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   }
 });
 
-// Initialize Position Manager
-const positionManager = new PositionManager(document.getElementById('positionManagerRoot'), {
-  getCurrentPosition: () => {
-    // Return current position from rotor status
-    if (rotor.currentStatus) {
-      return {
-        azimuth: rotor.currentStatus.azimuthRaw || 0,
-        elevation: rotor.currentStatus.elevationRaw || 0
-      };
-    }
-    return { azimuth: 0, elevation: 0 };
+// Initialize Route Executor
+const routeExecutor = new RouteExecutor(rotor);
+
+// Initialize Route Editor Modal
+const routeEditorModal = new RouteEditorModal();
+
+// Initialize Route Manager
+const routeManager = new RouteManager(document.getElementById('routeManagerRoot'), {
+  onAddRoute: () => {
+    logAction('Neue Route wird erstellt');
+    routeEditorModal.open(null, async (route, isEdit) => {
+      logAction('Route hinzufügen', route);
+      const updatedRoutes = [...(config.savedRoutes || []), route];
+      config = await configStore.save({ savedRoutes: updatedRoutes });
+      routeManager.setRoutes(config.savedRoutes);
+    });
   },
-  onAddPosition: async (position) => {
-    logAction('Position hinzufügen', position);
-    const updatedPositions = [...(config.savedPositions || []), position];
-    config = await configStore.save({ savedPositions: updatedPositions });
-    positionManager.setPositions(config.savedPositions);
+  onEditRoute: (route) => {
+    logAction('Route bearbeiten', { id: route.id, name: route.name });
+    routeEditorModal.open(route, async (editedRoute, isEdit) => {
+      logAction('Route speichern', editedRoute);
+      const updatedRoutes = (config.savedRoutes || []).map(r => 
+        r.id === editedRoute.id ? editedRoute : r
+      );
+      config = await configStore.save({ savedRoutes: updatedRoutes });
+      routeManager.setRoutes(config.savedRoutes);
+    });
   },
-  onEditPosition: async (position) => {
-    logAction('Position bearbeiten', position);
-    const updatedPositions = (config.savedPositions || []).map(p => 
-      p.id === position.id ? position : p
-    );
-    config = await configStore.save({ savedPositions: updatedPositions });
-    positionManager.setPositions(config.savedPositions);
+  onDeleteRoute: async (routeId) => {
+    logAction('Route löschen', { id: routeId });
+    const updatedRoutes = (config.savedRoutes || []).filter(r => r.id !== routeId);
+    config = await configStore.save({ savedRoutes: updatedRoutes });
+    routeManager.setRoutes(config.savedRoutes);
   },
-  onDeletePosition: async (positionId) => {
-    logAction('Position löschen', { id: positionId });
-    const updatedPositions = (config.savedPositions || []).filter(p => p.id !== positionId);
-    config = await configStore.save({ savedPositions: updatedPositions });
-    positionManager.setPositions(config.savedPositions);
-  },
-  onPlayPosition: async (position) => {
+  onPlayRoute: async (route) => {
     if (!connected) {
-      logAction('Position-Befehl verworfen, nicht verbunden', position);
+      logAction('Route-Befehl verworfen, nicht verbunden', { id: route.id, name: route.name });
+      await window.alertModal.showAlert('Nicht verbunden. Bitte erst eine Verbindung herstellen.');
       return;
     }
-    logAction('Navigiere zu Position', position);
+    logAction('Route starten', { id: route.id, name: route.name, steps: route.steps.length });
     try {
-      await rotor.setAzElRaw({ az: position.azimuth, el: position.elevation });
+      await routeExecutor.executeRoute(route);
     } catch (error) {
+      logAction('Fehler bei Route-Ausführung', { error: error.message });
       reportError(error);
     }
   },
-  onReorder: async (newPositions) => {
-    logAction('Positionen neu sortiert');
-    config = await configStore.save({ savedPositions: newPositions });
-    positionManager.setPositions(config.savedPositions);
+  onStopRoute: () => {
+    logAction('Route stoppen');
+    routeExecutor.stop();
+  },
+  onManualContinue: () => {
+    logAction('Manuelles Fortfahren');
+    routeExecutor.continueFromManualWait();
   }
+});
+
+// Setup route executor event listeners
+routeExecutor.onProgress((progressData) => {
+  // Update UI with progress
+  const routeId = routeExecutor.currentRoute?.id;
+  if (routeId) {
+    routeManager.setExecutionProgress(routeId, progressData);
+  }
+  
+  // Log significant progress events
+  if (progressData.type === 'step_started' || progressData.type === 'loop_iteration') {
+    logAction('Route-Fortschritt', progressData);
+  }
+});
+
+routeExecutor.onComplete((completeData) => {
+  logAction('Route abgeschlossen', { success: completeData.success, route: completeData.route?.name });
+  routeManager.clearExecution();
+  
+  if (completeData.success) {
+    // Success feedback
+    logAction('Route erfolgreich abgeschlossen', { route: completeData.route?.name });
+  } else {
+    // Error feedback
+    logAction('Route mit Fehler beendet', { error: completeData.error });
+  }
+});
+
+routeExecutor.onStop(() => {
+  logAction('Route gestoppt');
+  routeManager.clearExecution();
 });
 
 const configStore = new ConfigStore();
@@ -435,9 +474,9 @@ configStore.load().then(loadedConfig => {
     config = loadedConfig;
     updateUIFromConfig();
     updateConeSettings(); // Ensure mapView has correct config after async load
-    // Update position manager with loaded positions
-    if (positionManager) {
-      positionManager.setPositions(config.savedPositions || []);
+    // Update route manager with loaded routes
+    if (routeManager) {
+      routeManager.setRoutes(config.savedRoutes || []);
     }
   }
 }).catch(err => {
@@ -522,9 +561,9 @@ async function setupWebSocket() {
         console.error('[main] Error updating speed after settings sync:', err);
       });
       updateConeSettings();
-      // Update position manager with synced positions
-      if (positionManager) {
-        positionManager.setPositions(settings.savedPositions || []);
+      // Update route manager with synced routes
+      if (routeManager) {
+        routeManager.setRoutes(settings.savedRoutes || []);
       }
     }
   });
@@ -1006,8 +1045,8 @@ function setConnectionState(state) {
   connected = state;
   logAction('Verbindungsstatus gesetzt', { connected: state });
   controls.setEnabled(state);
-  if (positionManager) {
-    positionManager.setEnabled(state);
+  if (routeManager) {
+    routeManager.setEnabled(state);
   }
   if (!state) {
     controls.showRouteHint(null);
