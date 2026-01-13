@@ -56,14 +56,26 @@ body {
 
 .connection-group select,
 .connection-group input,
-.connection-group button,
 .mode-switch select {
   margin-top: 0.25rem;
   padding: 0.4rem 0.6rem;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.3);
   color: var(--text);
+  transition: all 0.15s ease;
+}
+
+.connection-group select:focus,
+.connection-group input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 3px rgba(47, 212, 255, 0.1);
+}
+
+.connection-group button {
+  margin-top: 0.25rem;
 }
 
 .app-title {
@@ -78,22 +90,24 @@ body {
 
 button {
   cursor: pointer;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 0.45rem 0.8rem;
-  transition: background 0.2s ease, transform 0.1s ease;
+  transition: all 0.2s ease;
 }
 
 button.primary {
   background: var(--accent);
   color: #0a131e;
+  border-color: var(--accent);
 }
 
 button.secondary {
   background: rgba(47, 212, 255, 0.15);
+  border-color: rgba(47, 212, 255, 0.3);
 }
 
 /* Icon styling for buttons */
@@ -115,8 +129,15 @@ button.primary .icon {
 }
 
 button.danger {
-  background: rgba(247, 107, 107, 0.2);
-  border: 1px solid rgba(247, 107, 107, 0.6);
+  background: rgba(247, 107, 107, 0.15);
+  border-color: rgba(247, 107, 107, 0.4);
+  color: var(--danger);
+}
+
+button.danger:not(:disabled):hover {
+  background: rgba(247, 107, 107, 0.25);
+  border-color: rgba(247, 107, 107, 0.5);
+  transform: translateY(-1px);
 }
 
 button:disabled {
@@ -125,15 +146,25 @@ button:disabled {
 }
 
 button:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(47, 212, 255, 0.15);
+  border-color: rgba(47, 212, 255, 0.3);
+  transform: translateY(-1px);
 }
 
 button.primary:not(:disabled):hover {
   background: #4fe3ff;
+  border-color: #4fe3ff;
+  transform: translateY(-1px);
 }
 
-button:active {
-  transform: scale(0.98);
+button.secondary:not(:disabled):hover {
+  background: rgba(47, 212, 255, 0.2);
+  border-color: rgba(47, 212, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 .status-line {
@@ -376,6 +407,7 @@ main.dashboard {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 6px;
 }
 
 .zoom-level {
@@ -407,12 +439,26 @@ main.dashboard {
 
 .map-coordinate-inputs input {
   margin-top: 0.25rem;
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.3);
   color: var(--text);
+  font-size: 0.9rem;
   width: 100%;
+  transition: all 0.15s ease;
+}
+
+.map-coordinate-inputs input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 3px rgba(47, 212, 255, 0.1);
+}
+
+.map-coordinate-inputs input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
 }
 
 .map-card .canvas-wrapper {
@@ -1292,6 +1338,25 @@ button.refreshing .icon {
 
 .map-search-row input {
   flex: 1;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+}
+
+.map-search-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 3px rgba(47, 212, 255, 0.1);
+}
+
+.map-search-row input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
 }
 
 .map-search-status {
@@ -1645,31 +1710,41 @@ button.refreshing .icon {
   color: #0a131e;
   font-weight: 600;
   padding: 0.7rem 1.5rem;
-  border: none;
+  border: 1px solid var(--accent);
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
-.btn-primary:hover {
-  filter: brightness(1.1);
+.btn-primary:hover:not(:disabled) {
+  background: #4fe3ff;
+  border-color: #4fe3ff;
   transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 .btn-secondary {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
   padding: 0.7rem 1.5rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
-.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.15);
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(47, 212, 255, 0.15);
+  border-color: rgba(47, 212, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-secondary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 /* Legacy support for old tab-based styles (can be removed after migration) */
