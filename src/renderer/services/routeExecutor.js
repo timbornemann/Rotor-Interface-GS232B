@@ -327,7 +327,13 @@ class RouteExecutor {
    * Execute a loop step - repeat nested steps N times
    */
   async executeLoopStep(step) {
-    const iterations = step.iterations === Infinity ? Infinity : parseInt(step.iterations);
+    // Handle null, 0, or Infinity as infinite loop
+    let iterations;
+    if (step.iterations === null || step.iterations === 0 || step.iterations === Infinity) {
+      iterations = Infinity;
+    } else {
+      iterations = parseInt(step.iterations) || Infinity;
+    }
     console.log(`[RouteExecutor] Starting loop: ${iterations === Infinity ? '∞' : iterations} iterations`);
 
     let currentIteration = 0;
