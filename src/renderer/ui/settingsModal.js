@@ -717,6 +717,44 @@ class SettingsModal {
     }
     
     try {
+      // Save settings first (user might have changed ports without pressing "Save")
+      restartStatus.textContent = 'Einstellungen werden gespeichert...';
+      restartStatus.classList.remove('hidden');
+
+      const config = this.getConfigFromForm();
+      const errors = this.validate(config);
+      if (errors.length > 0) {
+        restartStatus.textContent = 'Validierungsfehler:\n' + errors.join('\n');
+        return;
+      }
+
+      const mergedConfig = { ...(this.currentConfig || {}), ...config };
+      if (this.onSaveCallback) {
+        // Reuse the existing save pipeline from main.js (includes server-settings split + sanitizing)
+        await this.onSaveCallback(mergedConfig);
+        // Close modal to avoid UI weirdness while the server restarts
+        this.close();
+      } else {
+        // Fallback: save directly to server if modal was opened without a save callback
+        await fetch(`${window.rotorService.apiBase}/api/server/settings`, {
+          method: 'POST',
+          headers: window.rotorService.getSessionHeaders(),
+          body: JSON.stringify({
+            serverHttpPort: mergedConfig.serverHttpPort,
+            serverWebSocketPort: mergedConfig.serverWebSocketPort,
+            serverPollingIntervalMs: mergedConfig.serverPollingIntervalMs,
+            serverSessionTimeoutS: mergedConfig.serverSessionTimeoutS,
+            serverMaxClients: mergedConfig.serverMaxClients,
+            serverLoggingLevel: mergedConfig.serverLoggingLevel
+          })
+        });
+        await fetch(`${window.rotorService.apiBase}/api/settings`, {
+          method: 'POST',
+          headers: window.rotorService.getSessionHeaders(),
+          body: JSON.stringify(mergedConfig)
+        });
+      }
+
       // If ports were changed, we need to redirect to the new HTTP port (reload would hit the old origin).
       const httpPortEl = document.getElementById('settingsServerHttpPort');
       const desiredHttpPort = httpPortEl ? Number(httpPortEl.value) : NaN;
