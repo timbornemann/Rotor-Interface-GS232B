@@ -2599,6 +2599,17 @@ button.refreshing .icon {
   /* Animation removed - could block scrolling */
 }
 
+.route-card.editing {
+  background: rgba(47, 212, 255, 0.05);
+  border-color: rgba(47, 212, 255, 0.3);
+  padding: 1rem;
+}
+
+.route-card.editing:hover {
+  background: rgba(47, 212, 255, 0.05);
+  border-color: rgba(47, 212, 255, 0.4);
+}
+
 .route-header {
   display: flex;
   align-items: center;
@@ -2712,6 +2723,72 @@ button.refreshing .icon {
   color: var(--muted);
 }
 
+/* Route Edit Header (Inline Editing) */
+.route-edit-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.route-name-input,
+.route-description-input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.route-name-input {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.route-description-input {
+  resize: vertical;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.route-name-input:focus,
+.route-description-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 3px rgba(47, 212, 255, 0.1);
+}
+
+.route-name-input::placeholder,
+.route-description-input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+/* Route Edit Actions */
+.route-edit-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.route-edit-actions button {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  font-size: 0.9rem;
+}
+
+/* Steps Edit Container */
+.route-steps-edit-container {
+  margin: 0.75rem 0;
+}
+
 .route-expand-btn {
   width: 100%;
   padding: 0.5rem;
@@ -2818,19 +2895,339 @@ button.refreshing .icon {
   padding: 0.5rem 0.75rem;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 6px;
-  border-left: 3px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.15s ease;
 }
 
-.step-card.position { border-left-color: rgba(47, 212, 255, 0.5); }
-.step-card.wait { border-left-color: rgba(255, 179, 71, 0.5); }
-.step-card.loop { border-left-color: rgba(159, 122, 234, 0.5); }
-.step-card.nested { margin-left: 1.5rem; opacity: 0.9; }
+.step-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Editable Step Cards */
+.step-card.editable {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.step-type-label {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.step-delete-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: rgba(247, 107, 107, 0.1);
+  border: 1px solid rgba(247, 107, 107, 0.2);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.step-delete-btn:hover {
+  opacity: 1;
+  background: rgba(247, 107, 107, 0.25);
+  border-color: rgba(247, 107, 107, 0.5);
+  transform: scale(1.05);
+}
+
+.step-delete-btn .icon-small {
+  width: 12px;
+  height: 12px;
+  filter: brightness(0) invert(1) sepia(1) saturate(5) hue-rotate(340deg);
+}
+
+/* Step Inline Form */
+.step-inline-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.step-inline-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.step-inline-form .form-group.hidden {
+  display: none;
+}
+
+.step-inline-form .form-group:only-child,
+.step-inline-form .form-group:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.step-inline-form label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.step-inline-form input,
+.step-inline-form select {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.step-inline-form input:focus,
+.step-inline-form select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 2px rgba(47, 212, 255, 0.1);
+}
+
+.step-inline-form input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+/* Loop Start/End Blocks (Flat List) */
+.step-card.loop-start {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.step-card.loop-end {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.step-card.loop-end .step-header {
+  margin-bottom: 0;
+}
+
+.step-card.loop-end .step-type-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* Loop Add Step Container */
+.loop-add-step-container {
+  margin-bottom: 0.5rem;
+}
+
+.loop-add-step-container .add-step-dropdown {
+  margin-top: 0;
+}
+
+/* Add Step Dropdown */
+.add-step-dropdown {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.add-step-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-step-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(47, 212, 255, 0.4);
+  border-style: solid;
+}
+
+.dropdown-arrow {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.add-step-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: rgba(20, 20, 25, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.add-step-option {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+
+.add-step-option:hover {
+  background: rgba(47, 212, 255, 0.1);
+  color: var(--accent);
+}
+
+.add-step-option:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 
 .step-icon {
   font-size: 16px;
   flex-shrink: 0;
 }
+
+.step-icon-img {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  opacity: 0.8;
+  filter: brightness(0) invert(1);
+}
+
+.add-step-option .step-icon-img {
+  width: 16px;
+  height: 16px;
+  opacity: 0.7;
+}
+
+/* Loop Start/End Blocks (Flat List) */
+.step-card.loop-start {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.step-card.loop-end {
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.step-card.loop-end .step-header {
+  margin-bottom: 0;
+}
+
+.step-card.loop-end .step-type-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* Loop Add Step Container */
+.loop-add-step-container {
+  margin-bottom: 0.5rem;
+}
+
+.loop-add-step-container .add-step-dropdown {
+  margin-top: 0;
+}
+
+/* Add Step Dropdown */
+.add-step-dropdown {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.add-step-btn {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-step-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(47, 212, 255, 0.4);
+  border-style: solid;
+}
+
+.dropdown-arrow {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.add-step-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: rgba(20, 20, 25, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.add-step-option {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--text);
+  transition: all 0.15s ease;
+}
+
+.add-step-option:hover {
+  background: rgba(47, 212, 255, 0.1);
+  color: var(--accent);
+}
+
+.add-step-option:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 
 .step-info {
   flex: 1;

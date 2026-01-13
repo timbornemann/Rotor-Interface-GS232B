@@ -367,30 +367,21 @@ const controls = new Controls(document.querySelector('.controls-card'), {
 // Initialize Route Executor
 const routeExecutor = new RouteExecutor(rotor);
 
-// Initialize Route Editor Modal
-const routeEditorModal = new RouteEditorModal();
-
-// Initialize Route Manager
+// Initialize Route Manager (with inline editing)
 const routeManager = new RouteManager(document.getElementById('routeManagerRoot'), {
-  onAddRoute: () => {
-    logAction('Neue Route wird erstellt');
-    routeEditorModal.open(null, async (route, isEdit) => {
-      logAction('Route hinzufügen', route);
-      const updatedRoutes = [...(config.savedRoutes || []), route];
-      config = await configStore.save({ savedRoutes: updatedRoutes });
-      routeManager.setRoutes(config.savedRoutes);
-    });
+  onAddRoute: async (route) => {
+    logAction('Route hinzufügen', route);
+    const updatedRoutes = [...(config.savedRoutes || []), route];
+    config = await configStore.save({ savedRoutes: updatedRoutes });
+    routeManager.setRoutes(config.savedRoutes);
   },
-  onEditRoute: (route) => {
-    logAction('Route bearbeiten', { id: route.id, name: route.name });
-    routeEditorModal.open(route, async (editedRoute, isEdit) => {
-      logAction('Route speichern', editedRoute);
-      const updatedRoutes = (config.savedRoutes || []).map(r => 
-        r.id === editedRoute.id ? editedRoute : r
-      );
-      config = await configStore.save({ savedRoutes: updatedRoutes });
-      routeManager.setRoutes(config.savedRoutes);
-    });
+  onEditRoute: async (route) => {
+    logAction('Route speichern', route);
+    const updatedRoutes = (config.savedRoutes || []).map(r => 
+      r.id === route.id ? route : r
+    );
+    config = await configStore.save({ savedRoutes: updatedRoutes });
+    routeManager.setRoutes(config.savedRoutes);
   },
   onDeleteRoute: async (routeId) => {
     logAction('Route löschen', { id: routeId });
