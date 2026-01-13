@@ -71,5 +71,6 @@
   "serverSessionTimeoutSMin": 60,
   "serverSessionTimeoutSMax": 3600,
   "serverMaxClientsMin": 1,
-  "serverMaxClientsMax": 100
+  "serverMaxClientsMax": 100,
+  "savedPositions": []
 }

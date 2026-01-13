@@ -80,6 +80,9 @@ const defaultConfig = {
   azimuthScaleFactorMax: 2.0,
   elevationScaleFactorMin: 0.1,
   elevationScaleFactorMax: 2.0,
+  
+  // Saved Positions
+  savedPositions: [],  // Array of {id, name, azimuth, elevation, order, createdAt}
 };
 
 class ConfigStore {

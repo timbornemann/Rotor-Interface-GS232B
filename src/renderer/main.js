@@ -364,6 +364,57 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   }
 });
 
+// Initialize Position Manager
+const positionManager = new PositionManager(document.getElementById('positionManagerRoot'), {
+  getCurrentPosition: () => {
+    // Return current position from rotor status
+    if (rotor.currentStatus) {
+      return {
+        azimuth: rotor.currentStatus.azimuthRaw || 0,
+        elevation: rotor.currentStatus.elevationRaw || 0
+      };
+    }
+    return { azimuth: 0, elevation: 0 };
+  },
+  onAddPosition: async (position) => {
+    logAction('Position hinzufügen', position);
+    const updatedPositions = [...(config.savedPositions || []), position];
+    config = await configStore.save({ savedPositions: updatedPositions });
+    positionManager.setPositions(config.savedPositions);
+  },
+  onEditPosition: async (position) => {
+    logAction('Position bearbeiten', position);
+    const updatedPositions = (config.savedPositions || []).map(p => 
+      p.id === position.id ? position : p
+    );
+    config = await configStore.save({ savedPositions: updatedPositions });
+    positionManager.setPositions(config.savedPositions);
+  },
+  onDeletePosition: async (positionId) => {
+    logAction('Position löschen', { id: positionId });
+    const updatedPositions = (config.savedPositions || []).filter(p => p.id !== positionId);
+    config = await configStore.save({ savedPositions: updatedPositions });
+    positionManager.setPositions(config.savedPositions);
+  },
+  onPlayPosition: async (position) => {
+    if (!connected) {
+      logAction('Position-Befehl verworfen, nicht verbunden', position);
+      return;
+    }
+    logAction('Navigiere zu Position', position);
+    try {
+      await rotor.setAzElRaw({ az: position.azimuth, el: position.elevation });
+    } catch (error) {
+      reportError(error);
+    }
+  },
+  onReorder: async (newPositions) => {
+    logAction('Positionen neu sortiert');
+    config = await configStore.save({ savedPositions: newPositions });
+    positionManager.setPositions(config.savedPositions);
+  }
+});
+
 const configStore = new ConfigStore();
 let config = configStore.loadSync();
 let connected = false;
@@ -384,6 +435,10 @@ configStore.load().then(loadedConfig => {
     config = loadedConfig;
     updateUIFromConfig();
     updateConeSettings(); // Ensure mapView has correct config after async load
+    // Update position manager with loaded positions
+    if (positionManager) {
+      positionManager.setPositions(config.savedPositions || []);
+    }
   }
 }).catch(err => {
   console.warn('[main] Could not load config', err);
@@ -467,6 +522,10 @@ async function setupWebSocket() {
         console.error('[main] Error updating speed after settings sync:', err);
       });
       updateConeSettings();
+      // Update position manager with synced positions
+      if (positionManager) {
+        positionManager.setPositions(settings.savedPositions || []);
+      }
     }
   });
   
@@ -947,6 +1006,9 @@ function setConnectionState(state) {
   connected = state;
   logAction('Verbindungsstatus gesetzt', { connected: state });
   controls.setEnabled(state);
+  if (positionManager) {
+    positionManager.setEnabled(state);
+  }
   if (!state) {
     controls.showRouteHint(null);
   }

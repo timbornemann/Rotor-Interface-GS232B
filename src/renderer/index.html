@@ -56,14 +56,17 @@
         </div>
       </div>
       <div id="elevationRoot" class="elevation">
-        <svg viewBox="0 0 200 200" class="elevation-svg" id="elevationSvg">
+        <svg viewBox="0 30 200 170" class="elevation-svg" id="elevationSvg">
           <g id="elevationScale"></g>
           <g id="elevationIndicator" class="elevation-indicator">
-            <line x1="100" y1="180" x2="100" y2="100" stroke="#2fd4ff" stroke-width="3" />
-            <polygon points="100,100 95,110 105,110" fill="#ffb347" />
+            <line x1="100" y1="180" x2="100" y2="60" stroke="#2fd4ff" stroke-width="3" />
+            <polygon points="100,60 95,70 105,70" fill="#ffb347" />
           </g>
         </svg>
       </div>
+      
+      <!-- Position Manager -->
+      <div id="positionManagerRoot" class="position-manager-container"></div>
     </section>
 
     <section class="card map-card">
@@ -726,6 +729,7 @@
   <script src="./ui/mapView.js"></script>
   <script src="./ui/historyLog.js"></script>
   <script src="./ui/controls.js"></script>
+  <script src="./ui/positionManager.js"></script>
   <script src="./ui/alertModal.js"></script>
   <script src="./ui/settingsModal.js"></script>
   <!-- Hauptlogik zuletzt -->
