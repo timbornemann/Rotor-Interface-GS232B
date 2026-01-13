@@ -23,6 +23,7 @@ class WebSocketService {
       connection_state_changed: new Set(),
       client_list_updated: new Set(),
       client_suspended: new Set(),
+      settings_updated: new Set(),
       connected: new Set(),
       disconnected: new Set()
     };
@@ -186,6 +187,10 @@ class WebSocketService {
             this.disconnect();
           }
           this.emit('client_suspended', payload);
+          break;
+          
+        case 'settings_updated':
+          this.emit('settings_updated', payload);
           break;
           
         case 'pong':

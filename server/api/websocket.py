@@ -204,6 +204,18 @@ class WebSocketManager:
         }
         self._schedule_broadcast(json.dumps(message))
     
+    def broadcast_settings_updated(self, settings: Dict[str, Any]) -> None:
+        """Broadcast settings update to all clients.
+        
+        Args:
+            settings: Dictionary containing all current settings.
+        """
+        message = {
+            "type": "settings_updated",
+            "data": settings
+        }
+        self._schedule_broadcast(json.dumps(message))
+    
     def send_suspension_notice(self, session_id: str, message_text: str = "Your session has been suspended") -> None:
         """Send suspension notice to a specific client.
         

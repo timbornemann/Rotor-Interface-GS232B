@@ -253,4 +253,15 @@ class ConfigStore {
   getAll() {
     return this.cache ? { ...this.cache } : { ...defaultConfig };
   }
+
+  /**
+   * Update cache from external source (e.g., WebSocket broadcast).
+   * @param {object} settings - Settings object to update cache with
+   */
+  updateCache(settings) {
+    if (settings && typeof settings === 'object') {
+      this.cache = this.sanitizeConfig({ ...defaultConfig, ...settings });
+      console.log('[ConfigStore] Cache updated from external source');
+    }
+  }
 }

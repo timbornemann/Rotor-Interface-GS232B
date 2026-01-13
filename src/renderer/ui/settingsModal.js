@@ -157,6 +157,23 @@ class SettingsModal {
         }
       });
       this.wsUnsubscribers.push(unsubscribe);
+      
+      // Listen for settings updates from other clients
+      const unsubscribeSettings = window.wsService.on('settings_updated', (settings) => {
+        if (settings && typeof settings === 'object') {
+          // Update current config
+          this.currentConfig = { ...settings };
+          
+          // If modal is open, update the form with new settings
+          if (this.modal && !this.modal.classList.contains('hidden')) {
+            this.loadConfigIntoForm(settings);
+            this.syncLocationPicker(settings);
+            // Optional: Show a subtle notification that settings were updated
+            console.log('[SettingsModal] Settings updated by another client');
+          }
+        }
+      });
+      this.wsUnsubscribers.push(unsubscribeSettings);
     }
   }
 

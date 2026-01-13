@@ -447,6 +447,30 @@ async function setupWebSocket() {
     // Settings modal will handle this event directly
   });
   
+  // Handle settings updates from other clients
+  wsService.on('settings_updated', (settings) => {
+    if (settings && typeof settings === 'object') {
+      logAction('WebSocket: Einstellungen von anderem Client aktualisiert');
+      
+      // Update configStore cache
+      configStore.updateCache(settings);
+      
+      // Update local config variable
+      config = { ...settings };
+      
+      // Update UI with new settings
+      updateUIFromConfig();
+      applyLimitsToRotor();
+      applyOffsetsToRotor();
+      applyScaleFactorsToRotor();
+      rotor.setRampSettings(getRampConfigFromState());
+      rotor.setSpeed(getSpeedConfigFromState()).catch(err => {
+        console.error('[main] Error updating speed after settings sync:', err);
+      });
+      updateConeSettings();
+    }
+  });
+  
   // Handle suspension
   wsService.on('client_suspended', (data) => {
     if (data.clientId === rotor.getSessionId()) {

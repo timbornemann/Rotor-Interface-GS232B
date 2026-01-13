@@ -43,6 +43,10 @@ def handle_post_settings(handler: BaseHTTPRequestHandler, state: "ServerState") 
     if state.rotor_logic:
         state.rotor_logic.update_config(state.settings.get_all())
     
+    # Broadcast settings update to all clients
+    if state.websocket_manager:
+        state.websocket_manager.broadcast_settings_updated(state.settings.get_all())
+    
     send_json(handler, {"status": "ok", "settings": state.settings.get_all()})
 
 
@@ -637,6 +641,10 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
         if "serverMaxClients" in update_dict and state.session_manager:
             state.session_manager.max_clients = update_dict["serverMaxClients"]
             log(f"[API] Max clients updated to {update_dict['serverMaxClients']}")
+    
+    # Broadcast settings update to all clients
+    if state.websocket_manager:
+        state.websocket_manager.broadcast_settings_updated(state.settings.get_all())
     
     send_json(handler, {
         "status": "ok",
