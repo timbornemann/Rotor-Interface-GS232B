@@ -26,6 +26,8 @@ if not exist "server" (
     exit /b 1
 )
 
+REM Auto-Restart-Loop: Startet Server neu, wenn Exit-Code 42 zurückgegeben wird
+:restart_loop
 REM Lese Ports aus web-settings.json (wenn vorhanden)
 set HTTP_PORT=8081
 set WS_PORT=8082
@@ -45,8 +47,6 @@ echo Zum Beenden: Strg+C druecken
 echo ========================================
 echo.
 
-REM Auto-Restart-Loop: Startet Server neu, wenn Exit-Code 42 zurückgegeben wird
-:restart_loop
 python -m server.main --port %HTTP_PORT% --websocket-port %WS_PORT%
 set EXIT_CODE=%ERRORLEVEL%
 
