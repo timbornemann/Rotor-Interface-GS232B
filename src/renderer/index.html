@@ -708,6 +708,22 @@
     </div>
   </div>
 
+  <!-- Alert Modal -->
+  <div id="alertModal" class="modal hidden">
+    <div class="modal-content alert-modal">
+      <div class="modal-header">
+        <h2 id="alertTitle">Hinweis</h2>
+      </div>
+      <div class="modal-body alert-body">
+        <p id="alertMessage"></p>
+      </div>
+      <div class="modal-footer">
+        <button id="alertCancelBtn" class="btn-secondary" type="button" style="display: none;">Abbrechen</button>
+        <button id="alertOkBtn" class="btn-primary" type="button">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Suspension Overlay -->
   <div id="suspensionOverlay" class="suspension-overlay hidden">
     <div class="suspension-content">
@@ -729,6 +745,7 @@
   <script src="./ui/mapView.js"></script>
   <script src="./ui/historyLog.js"></script>
   <script src="./ui/controls.js"></script>
+  <script src="./ui/alertModal.js"></script>
   <script src="./ui/settingsModal.js"></script>
   <!-- Hauptlogik zuletzt -->
   <script src="./main.js"></script>

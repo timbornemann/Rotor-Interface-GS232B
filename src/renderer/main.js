@@ -16,6 +16,10 @@ window.rotorService = rotor; // Make available globally for settings modal
 const wsService = createWebSocketService(); // createWebSocketService is global from websocketService.js
 window.wsService = wsService; // Make available globally
 
+// Initialize Alert Modal
+const alertModal = createAlertModal(); // createAlertModal is global from alertModal.js
+window.alertModal = alertModal; // Make available globally
+
 const portSelect = document.getElementById('portSelect');
 const refreshPortsBtn = document.getElementById('refreshPortsBtn');
 // Elements from settings modal may be null here, so we check them inside update functions or modal logic

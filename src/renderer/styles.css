@@ -1024,6 +1024,25 @@ main.dashboard {
   background: rgba(0, 0, 0, 0.15);
 }
 
+/* Alert Modal */
+.modal-content.alert-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.modal-body.alert-body {
+  padding: 1.5rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.modal-body.alert-body p {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
 /* Settings Layout - Sidebar + Content */
 .settings-layout {
   display: flex;

@@ -61,7 +61,7 @@
   "serverPollingIntervalMs": 500,
   "serverSessionTimeoutS": 300,
   "serverMaxClients": 10,
-  "serverLoggingLevel": "INFO",
+  "serverLoggingLevel": "DEBUG",
   "serverHttpPortMin": 1024,
   "serverHttpPortMax": 65535,
   "serverWebSocketPortMin": 1024,

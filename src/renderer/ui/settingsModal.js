@@ -329,7 +329,11 @@ class SettingsModal {
       await this.loadClientsData();
     } catch (error) {
       console.error('[SettingsModal] Error performing client action:', error);
-      alert(`Fehler: ${error.message}`);
+      if (window.alertModal) {
+        await window.alertModal.showAlert(`Fehler: ${error.message}`);
+      } else {
+        alert(`Fehler: ${error.message}`);
+      }
       btn.disabled = false;
       btn.textContent = action === 'suspend' ? 'Suspendieren' : 'Fortsetzen';
     }
@@ -712,7 +716,14 @@ class SettingsModal {
     const restartStatus = document.getElementById('restartStatus');
     if (!restartStatus) return;
     
-    if (!confirm('Server wirklich neu starten? Alle Clients werden getrennt.')) {
+    let confirmed = false;
+    if (window.alertModal) {
+      confirmed = await window.alertModal.showConfirm('Server wirklich neu starten? Alle Clients werden getrennt.');
+    } else {
+      confirmed = confirm('Server wirklich neu starten? Alle Clients werden getrennt.');
+    }
+    
+    if (!confirmed) {
       return;
     }
     
@@ -796,18 +807,22 @@ class SettingsModal {
     }
   }
 
-  showError(message) {
+  async showError(message) {
     // Simple error display - could be enhanced with a toast system
-    alert(message);
+    if (window.alertModal) {
+      await window.alertModal.showAlert(message);
+    } else {
+      alert(message);
+    }
   }
 
-  save() {
+  async save() {
     const config = this.getConfigFromForm();
     
     // Validate
     const errors = this.validate(config);
     if (errors.length > 0) {
-      this.showError('Validierungsfehler:\n' + errors.join('\n'));
+      await this.showError('Validierungsfehler:\n' + errors.join('\n'));
       return;
     }
 
