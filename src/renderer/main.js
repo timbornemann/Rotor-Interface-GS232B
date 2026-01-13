@@ -33,7 +33,6 @@ const azValue = document.getElementById('azValue');
 const elValue = document.getElementById('elValue');
 const gotoAzInput = document.getElementById('gotoAzInput');
 const gotoElInput = document.getElementById('gotoElInput');
-const compass = new Compass(document.getElementById('compassRoot'));
 const elevation = new Elevation(document.getElementById('elevationRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
 
@@ -1008,7 +1007,6 @@ function handleStatus(status) {
   if (typeof status.elevation === 'number') {
     elValue.textContent = `${status.elevation.toFixed(0)}deg`;
   }
-  compass.update(status.azimuth);
   elevation.update(status.elevation);
   mapView.update(status.azimuth, status.elevation);
   

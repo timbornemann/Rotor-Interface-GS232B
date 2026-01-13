@@ -44,33 +44,15 @@
   </header>
 
   <main class="dashboard">
-    <section class="card compass-card">
-      <div class="card-header">
-        <h2>Kompass</h2>
-      </div>
-      <div class="compass-container">
-        <div id="compassRoot" class="compass">
-          <svg viewBox="0 0 200 200" class="compass-svg">
-            <circle cx="100" cy="100" r="90" class="compass-outline" />
-            <text x="100" y="20" text-anchor="middle">N</text>
-            <text x="180" y="105" text-anchor="middle">E</text>
-            <text x="100" y="190" text-anchor="middle">S</text>
-            <text x="20" y="105" text-anchor="middle">W</text>
-            <g id="compassNeedle" class="needle">
-              <polygon points="100,30 110,100 90,100" />
-              <polygon points="100,170 110,100 90,100" class="needle tail" />
-            </g>
-          </svg>
+    <section class="card elevation-card">
+      <div class="az-values">
+        <div class="az-value-item">
+          <span>Azimut</span>
+          <strong id="azValue">--deg</strong>
         </div>
-        <div class="az-values">
-          <div class="az-value-item">
-            <span>Azimut</span>
-            <strong id="azValue">--deg</strong>
-          </div>
-          <div class="az-value-item">
-            <span>Elevation</span>
-            <strong id="elValue">--deg</strong>
-          </div>
+        <div class="az-value-item">
+          <span>Elevation</span>
+          <strong id="elValue">--deg</strong>
         </div>
       </div>
       <div id="elevationRoot" class="elevation">
@@ -740,7 +722,6 @@
   <script src="./services/websocketService.js"></script>
   <script src="./services/rotorService.js"></script>
   <!-- UI-Komponenten -->
-  <script src="./ui/compass.js"></script>
   <script src="./ui/elevation.js"></script>
   <script src="./ui/mapView.js"></script>
   <script src="./ui/historyLog.js"></script>

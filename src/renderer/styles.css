@@ -250,7 +250,7 @@ main.dashboard {
   overflow: hidden;
 }
 
-.compass-card {
+.elevation-card {
   grid-column: 1;
   min-width: 280px;
   overflow: hidden;
@@ -285,24 +285,6 @@ main.dashboard {
   letter-spacing: 0.02em;
 }
 
-.compass-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.5rem;
-  margin-top: 1rem;
-}
-
-.compass {
-  display: flex;
-  justify-content: center;
-}
-
-.compass-svg {
-  width: 180px;
-  height: 180px;
-}
-
 .az-values {
   display: flex;
   gap: 2rem;
@@ -328,25 +310,6 @@ main.dashboard {
   font-size: 1.6rem;
   font-weight: 600;
   color: var(--accent);
-}
-
-.compass-outline {
-  fill: rgba(47, 212, 255, 0.05);
-  stroke: rgba(47, 212, 255, 0.4);
-  stroke-width: 3;
-}
-
-.needle polygon {
-  fill: var(--accent);
-}
-
-.needle .tail {
-  fill: rgba(255, 255, 255, 0.2);
-}
-
-.needle {
-  transform-origin: 100px 100px;
-  transition: transform 0.3s ease;
 }
 
 .elevation {
@@ -811,7 +774,7 @@ main.dashboard {
   }
   
   /* Verstecke alle Cards außer map-card und controls-card */
-  .compass-card,
+  .elevation-card,
   .history-card,
   .serial-tool-card {
     display: none !important;
@@ -2077,7 +2040,7 @@ button.refreshing .icon {
     height: 100%;
   }
 
-  .compass-card,
+  .elevation-card,
   .serial-tool-card {
     display: none !important;
   }
