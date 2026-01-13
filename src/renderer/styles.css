@@ -1204,7 +1204,7 @@ main.dashboard {
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  height: 260px;
+  height: 400px;
 }
 
 .map-picker-canvas {

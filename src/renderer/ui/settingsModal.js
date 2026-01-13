@@ -529,8 +529,12 @@ class SettingsModal {
       draggable: false
     }).addTo(this.locationMap);
 
-    this.locationMap.on('moveend', () => this.updateCoordinatesFromMap());
-    this.locationMap.on('zoomend', () => this.updateCoordinatesFromMap());
+    // Set location only on click, not on pan/zoom
+    this.locationMap.on('click', (e) => {
+      const lat = e.latlng.lat;
+      const lon = e.latlng.lng;
+      this.setLocationPickerCoordinates(lat, lon);
+    });
 
     this.locationMap.setView([defaultLocation.lat, defaultLocation.lon], defaultLocation.zoom);
     this.locationMapReady = true;
@@ -572,16 +576,6 @@ class SettingsModal {
       this.locationMarker.setLatLng([lat, lon]);
     }
     this.updateCoordinatesInput(lat, lon);
-  }
-
-  updateCoordinatesFromMap() {
-    if (!this.locationMap || !this.locationMarker) {
-      return;
-    }
-
-    const center = this.locationMap.getCenter();
-    this.locationMarker.setLatLng(center);
-    this.updateCoordinatesInput(center.lat, center.lng);
   }
 
   updateCoordinatesInput(lat, lon) {
