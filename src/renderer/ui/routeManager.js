@@ -38,10 +38,13 @@ class RouteManager {
     const buttons = this.root.querySelectorAll('button');
     const inputs = this.root.querySelectorAll('input');
     buttons.forEach(btn => {
-      // Don't disable stop button during execution
-      if (!btn.classList.contains('route-stop-btn') || !this.executingRouteId) {
-        btn.disabled = !enabled;
+      // Never disable stop button - it should always work
+      // Never disable expand button
+      if (btn.classList.contains('route-stop-btn') || 
+          btn.classList.contains('route-expand-btn')) {
+        return;
       }
+      btn.disabled = !enabled;
     });
     inputs.forEach(input => input.disabled = !enabled);
   }
@@ -50,15 +53,58 @@ class RouteManager {
    * Update execution progress
    */
   setExecutionProgress(routeId, progress) {
+    // Skip updates for wait_progress to avoid constant re-rendering
+    if (progress.type === 'wait_progress' && 
+        this.executingRouteId === routeId && 
+        this.currentProgress?.type === 'wait_progress') {
+      // Already showing wait progress, no need to update
+      return;
+    }
+    
+    // Only re-render if route ID changed or progress type is significant
+    const shouldRender = this.executingRouteId !== routeId || 
+                         !this.currentProgress ||
+                         this.currentProgress.type !== progress.type;
+    
     this.executingRouteId = routeId;
     this.currentProgress = progress;
-    this.render();
+    
+    if (shouldRender) {
+      this.render();
+    }
+  }
+
+  /**
+   * Get progress status text
+   */
+  getProgressStatusText(progress) {
+    switch (progress.type) {
+      case 'route_started':
+        return 'Route gestartet...';
+      case 'step_started':
+        return `Schritt ${progress.stepIndex + 1}...`;
+      case 'position_moving':
+        return 'Fahre zu Position...';
+      case 'position_reached':
+        return 'Position erreicht';
+      case 'wait_manual':
+        return `Warte auf Fortsetzung${progress.message ? ': ' + progress.message : ''}`;
+      case 'wait_progress':
+        return `Warten...${progress.step?.message ? ' (' + progress.step.message + ')' : ''}`;
+      case 'loop_iteration':
+        const iter = progress.iteration;
+        const total = progress.total === Infinity ? '∞' : progress.total;
+        return `Loop ${iter} von ${total}`;
+      default:
+        return progress.type;
+    }
   }
 
   /**
    * Clear execution state
    */
   clearExecution() {
+    console.log('[RouteManager] Clearing execution state');
     this.executingRouteId = null;
     this.currentProgress = null;
     this.render();
@@ -132,13 +178,9 @@ class RouteManager {
               <div class="route-meta">${stepCount} ${stepCount === 1 ? 'Schritt' : 'Schritte'}</div>
             </div>
             
-            <button class="route-expand-btn" data-route-id="${route.id}" title="${isExpanded ? 'Zuklappen' : 'Aufklappen'}">
-              <span class="expand-icon">${isExpanded ? '▼' : '▶'}</span>
-            </button>
-            
             ${isExecuting ? `
               <button class="route-stop-btn" data-route-id="${route.id}" title="Route stoppen">
-                <img src="./assets/icons/shield-ban.png" alt="Stoppen" class="icon">
+                <img src="./assets/icons/circle-pause.png" alt="Stoppen" class="icon">
               </button>
             ` : `
               <button class="route-play-btn" data-route-id="${route.id}" title="Route starten">
@@ -149,6 +191,11 @@ class RouteManager {
           
           ${isExpanded ? this.renderSteps(route.steps || [], route.id) : ''}
           ${isExecuting && this.currentProgress ? this.renderProgress() : ''}
+          
+          <button class="route-expand-btn" data-route-id="${route.id}" title="${isExpanded ? 'Zuklappen' : 'Aufklappen'}">
+            <span class="expand-icon">${isExpanded ? '▲' : '▼'}</span>
+            <span class="expand-text">${isExpanded ? 'Zuklappen' : 'Details anzeigen'}</span>
+          </button>
         </div>
       `;
     }).join('');
@@ -225,35 +272,7 @@ class RouteManager {
   renderProgress() {
     if (!this.currentProgress) return '';
 
-    let statusText = '';
-    switch (this.currentProgress.type) {
-      case 'route_started':
-        statusText = 'Route gestartet...';
-        break;
-      case 'step_started':
-        statusText = `Schritt ${this.currentProgress.stepIndex + 1}...`;
-        break;
-      case 'position_moving':
-        statusText = 'Fahre zu Position...';
-        break;
-      case 'position_reached':
-        statusText = 'Position erreicht';
-        break;
-      case 'wait_manual':
-        statusText = `Warte auf Fortsetzung: ${this.currentProgress.message || ''}`;
-        break;
-      case 'wait_progress':
-        const remaining = Math.ceil(this.currentProgress.remaining / 1000);
-        statusText = `Warten... (${remaining}s)`;
-        break;
-      case 'loop_iteration':
-        const iter = this.currentProgress.iteration;
-        const total = this.currentProgress.total === Infinity ? '∞' : this.currentProgress.total;
-        statusText = `Loop ${iter} von ${total}`;
-        break;
-      default:
-        statusText = this.currentProgress.type;
-    }
+    const statusText = this.getProgressStatusText(this.currentProgress);
 
     return `
       <div class="route-progress">
@@ -401,9 +420,13 @@ class RouteManager {
    * Handle stop route execution
    */
   handleStopRoute() {
+    console.log('[RouteManager] Stop button clicked');
     if (this.callbacks.onStopRoute) {
       this.callbacks.onStopRoute();
     }
+    
+    // Immediately clear execution state for responsive UI
+    this.clearExecution();
   }
 
   /**

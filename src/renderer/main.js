@@ -438,6 +438,8 @@ routeExecutor.onProgress((progressData) => {
 
 routeExecutor.onComplete((completeData) => {
   logAction('Route abgeschlossen', { success: completeData.success, route: completeData.route?.name });
+  
+  // Clear execution state immediately
   routeManager.clearExecution();
   
   if (completeData.success) {
@@ -450,7 +452,9 @@ routeExecutor.onComplete((completeData) => {
 });
 
 routeExecutor.onStop(() => {
-  logAction('Route gestoppt');
+  logAction('Route gestoppt vom Benutzer');
+  
+  // Clear execution state immediately
   routeManager.clearExecution();
 });
 

@@ -21,6 +21,7 @@ class RouteExecutor {
     this.completeListeners = new Set();
     this.stopListeners = new Set();
     this.manualContinueResolve = null;
+    this.manualWaitCheckInterval = null;
     
     // Position arrival detection
     this.positionTolerance = 2; // degrees
@@ -55,6 +56,9 @@ class RouteExecutor {
       if (!this.shouldStop) {
         console.log('[RouteExecutor] Route completed successfully');
         this.emitComplete({ success: true, route: route });
+      } else {
+        console.log('[RouteExecutor] Route stopped by user');
+        this.emitStop();
       }
     } catch (error) {
       console.error('[RouteExecutor] Route execution error:', error);
@@ -63,6 +67,7 @@ class RouteExecutor {
       this.isExecuting = false;
       this.currentRoute = null;
       this.currentStepIndex = 0;
+      this.shouldStop = false;
     }
   }
 
@@ -221,12 +226,24 @@ class RouteExecutor {
       });
 
       await this.waitForManualContinue();
+      
+      // Check if stopped during manual wait
+      if (this.shouldStop) {
+        console.log('[RouteExecutor] Wait aborted by stop');
+        return;
+      }
     } else {
       // Time-based wait
       const seconds = step.duration / 1000;
       console.log(`[RouteExecutor] Waiting ${seconds}s:`, step.message || 'No message');
 
       await this.waitWithProgress(step.duration, step);
+      
+      // Check if stopped during timed wait
+      if (this.shouldStop) {
+        console.log('[RouteExecutor] Wait aborted by stop');
+        return;
+      }
     }
   }
 
@@ -236,6 +253,20 @@ class RouteExecutor {
   async waitForManualContinue() {
     return new Promise((resolve) => {
       this.manualContinueResolve = resolve;
+      
+      // Also resolve if stop is called
+      const checkStop = setInterval(() => {
+        if (this.shouldStop) {
+          clearInterval(checkStop);
+          if (this.manualContinueResolve === resolve) {
+            this.manualContinueResolve = null;
+          }
+          resolve();
+        }
+      }, 100);
+      
+      // Store interval ID for cleanup
+      this.manualWaitCheckInterval = checkStop;
     });
   }
 
@@ -247,6 +278,12 @@ class RouteExecutor {
       console.log('[RouteExecutor] Manual continue triggered');
       this.manualContinueResolve();
       this.manualContinueResolve = null;
+    }
+    
+    // Clean up check interval
+    if (this.manualWaitCheckInterval) {
+      clearInterval(this.manualWaitCheckInterval);
+      this.manualWaitCheckInterval = null;
     }
   }
 
@@ -342,6 +379,12 @@ class RouteExecutor {
     if (this.manualContinueResolve) {
       this.manualContinueResolve();
       this.manualContinueResolve = null;
+    }
+    
+    // Clean up check interval
+    if (this.manualWaitCheckInterval) {
+      clearInterval(this.manualWaitCheckInterval);
+      this.manualWaitCheckInterval = null;
     }
   }
 
