@@ -678,6 +678,15 @@ async function init() {
 }
 
 async function refreshPorts() {
+  // Prevent multiple simultaneous requests
+  if (refreshPortsBtn.disabled) {
+    return;
+  }
+
+  // Disable button and show loading state
+  refreshPortsBtn.disabled = true;
+  refreshPortsBtn.classList.add('refreshing');
+  
   try {
     logAction('Portliste wird aktualisiert');
     const ports = await rotor.listPorts();
@@ -704,8 +713,34 @@ async function refreshPorts() {
             portSelect.value = config.portPath;
         }
     }
+    
+    // Clear any previous error messages on success
+    if (connectionStatus.textContent.startsWith('Fehler:')) {
+      connectionStatus.textContent = 'Getrennt';
+      connectionStatus.classList.remove('connected');
+      connectionStatus.classList.add('disconnected');
+    }
   } catch (error) {
-    reportError(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logAction('Fehler beim Aktualisieren der Portliste', { error: errorMessage });
+    
+    // Show user-friendly error message
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+      connectionStatus.textContent = 'Fehler: Server nicht erreichbar';
+    } else if (errorMessage.includes('Server Error')) {
+      connectionStatus.textContent = `Fehler: Server-Fehler (${errorMessage})`;
+    } else {
+      connectionStatus.textContent = `Fehler: ${errorMessage}`;
+    }
+    connectionStatus.classList.remove('connected');
+    connectionStatus.classList.add('disconnected');
+    
+    // Also log to console for debugging
+    console.error('[refreshPorts] Error:', error);
+  } finally {
+    // Re-enable button and remove loading state
+    refreshPortsBtn.disabled = false;
+    refreshPortsBtn.classList.remove('refreshing');
   }
 }
 

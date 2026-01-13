@@ -1119,6 +1119,19 @@ main.dashboard {
   animation: sectionFadeIn 0.2s ease-out;
 }
 
+@keyframes iconRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+button.refreshing .icon {
+  animation: iconRotate 1s linear infinite;
+}
+
 @keyframes sectionFadeIn {
   from { opacity: 0; transform: translateX(8px); }
   to { opacity: 1; transform: translateX(0); }
