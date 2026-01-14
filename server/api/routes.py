@@ -7,10 +7,11 @@ import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from server.api.middleware import send_json, read_json_body
 from server.connection.port_scanner import list_available_ports
+from server.control.rotor_logic import RotorLogic
 from server.utils.logging import log, get_current_logging_level, set_logging_level
 
 if TYPE_CHECKING:
@@ -18,6 +19,26 @@ if TYPE_CHECKING:
 
 
 # --- Settings Routes ---
+
+def _parse_number(value: object) -> Optional[float]:
+    """Parse a numeric value from payload input."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _is_valid_direction(direction: object) -> bool:
+    """Validate manual direction payload."""
+    if not isinstance(direction, str):
+        return False
+    return direction in RotorLogic.DIRECTION_MAP
 
 def handle_get_settings(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     """Handle GET /api/settings - Get all configuration.
@@ -129,9 +150,19 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
     payload = read_json_body(handler)
     port = payload.get("port")
     baud_rate = payload.get("baudRate", 9600)
-    
-    if not port:
-        send_json(handler, {"error": "port required"}, HTTPStatus.BAD_REQUEST)
+
+    if not isinstance(port, str) or not port.strip():
+        send_json(handler, {"error": "port must be a non-empty string"}, HTTPStatus.BAD_REQUEST)
+        return
+
+    try:
+        baud_rate = int(baud_rate)
+    except (TypeError, ValueError):
+        send_json(handler, {"error": "baudRate must be an integer"}, HTTPStatus.BAD_REQUEST)
+        return
+
+    if baud_rate <= 0:
+        send_json(handler, {"error": "baudRate must be a positive integer"}, HTTPStatus.BAD_REQUEST)
         return
     
     with state.rotor_lock:
@@ -151,7 +182,7 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
                     )
                     return
             
-            state.rotor_connection.connect(port, int(baud_rate))
+            state.rotor_connection.connect(port, baud_rate)
             send_json(handler, {"status": "ok"})
             
             # Broadcast connection state to all clients
@@ -190,8 +221,16 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
     """
     try:
         payload = read_json_body(handler)
-        az = payload.get("az")
-        el = payload.get("el")
+        az = _parse_number(payload.get("az"))
+        el = _parse_number(payload.get("el"))
+
+        if az is None or el is None:
+            send_json(
+                handler,
+                {"error": "az and el must be numeric values"},
+                HTTPStatus.BAD_REQUEST
+            )
+            return
         
         if not state.rotor_logic:
             send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -223,6 +262,14 @@ def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None
     try:
         payload = read_json_body(handler)
         direction = payload.get("direction")
+
+        if not _is_valid_direction(direction):
+            send_json(
+                handler,
+                {"error": "direction must be one of: left, right, up, down, L, R, U, D"},
+                HTTPStatus.BAD_REQUEST
+            )
+            return
         
         if not state.rotor_logic:
             send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -253,8 +300,16 @@ def handle_set_target_raw(handler: BaseHTTPRequestHandler, state: "ServerState")
     """
     try:
         payload = read_json_body(handler)
-        az = payload.get("az")
-        el = payload.get("el")
+        az = _parse_number(payload.get("az"))
+        el = _parse_number(payload.get("el"))
+
+        if az is None or el is None:
+            send_json(
+                handler,
+                {"error": "az and el must be numeric values"},
+                HTTPStatus.BAD_REQUEST
+            )
+            return
         
         if not state.rotor_logic:
             send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -518,7 +573,8 @@ def handle_get_server_settings(handler: BaseHTTPRequestHandler, state: "ServerSt
         "pollingIntervalMs": int(state.rotor_connection.polling_interval_s * 1000) if state.rotor_connection else 500,
         "sessionTimeoutS": state.session_manager.session_timeout_s if state.session_manager else 300,
         "maxClients": state.session_manager.max_clients if state.session_manager else 10,
-        "loggingLevel": get_current_logging_level()
+        "loggingLevel": get_current_logging_level(),
+        "requireSession": bool(state.settings.get("serverRequireSession", False))
     }
     send_json(handler, settings)
 
@@ -573,6 +629,10 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
     if log_level is not None:
         if log_level not in ["DEBUG", "INFO", "WARNING", "ERROR"]:
             errors.append("Logging level must be one of: DEBUG, INFO, WARNING, ERROR")
+
+    require_session = payload.get("serverRequireSession")
+    if require_session is not None and not isinstance(require_session, bool):
+        errors.append("serverRequireSession must be a boolean")
     
     if errors:
         send_json(handler, {"error": "Validation failed", "details": errors}, HTTPStatus.BAD_REQUEST)
@@ -581,7 +641,8 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
     # Save to config
     update_dict = {}
     for key in ["serverHttpPort", "serverWebSocketPort", "serverPollingIntervalMs", 
-                "serverSessionTimeoutS", "serverMaxClients", "serverLoggingLevel"]:
+                "serverSessionTimeoutS", "serverMaxClients", "serverLoggingLevel",
+                "serverRequireSession"]:
         if key in payload:
             update_dict[key] = payload[key]
     

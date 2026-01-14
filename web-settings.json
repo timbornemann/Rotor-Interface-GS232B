@@ -62,6 +62,7 @@
   "serverSessionTimeoutS": 300,
   "serverMaxClients": 10,
   "serverLoggingLevel": "DEBUG",
+  "serverRequireSession": false,
   "serverHttpPortMin": 1024,
   "serverHttpPortMax": 65535,
   "serverWebSocketPortMin": 1024,

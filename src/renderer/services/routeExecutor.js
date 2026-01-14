@@ -37,6 +37,7 @@ class RouteExecutor {
       throw new Error('Another route is already executing');
     }
 
+    const routeSteps = Array.isArray(route?.steps) ? route.steps : [];
     this.currentRoute = route;
     this.isExecuting = true;
     this.shouldStop = false;
@@ -47,11 +48,11 @@ class RouteExecutor {
       type: 'route_started',
       route: route,
       stepIndex: 0,
-      totalSteps: this.countTotalSteps(route.steps)
+      totalSteps: this.countTotalSteps(routeSteps)
     });
 
     try {
-      await this.executeSteps(route.steps, { routeLevel: true });
+      await this.executeSteps(routeSteps, { routeLevel: true });
 
       if (!this.shouldStop) {
         console.log('[RouteExecutor] Route completed successfully');
@@ -75,14 +76,15 @@ class RouteExecutor {
    * Execute a sequence of steps
    */
   async executeSteps(steps, context = {}) {
-    for (let i = 0; i < steps.length; i++) {
+    const safeSteps = Array.isArray(steps) ? steps : [];
+    for (let i = 0; i < safeSteps.length; i++) {
       if (this.shouldStop) {
         console.log('[RouteExecutor] Execution stopped by user');
         this.emitStop();
         return;
       }
 
-      const step = steps[i];
+      const step = safeSteps[i];
       if (context.routeLevel) {
         this.currentStepIndex = i;
       }
@@ -353,7 +355,8 @@ class RouteExecutor {
       });
 
       // Execute nested steps
-      await this.executeSteps(step.steps, {
+      const nestedSteps = Array.isArray(step.steps) ? step.steps : [];
+      await this.executeSteps(nestedSteps, {
         loopIteration: currentIteration + 1,
         loopTotal: iterations
       });
@@ -414,10 +417,11 @@ class RouteExecutor {
    * Count total steps in a route (including nested)
    */
   countTotalSteps(steps) {
+    const safeSteps = Array.isArray(steps) ? steps : [];
     let count = 0;
-    for (const step of steps) {
+    for (const step of safeSteps) {
       count++;
-      if (step.type === 'loop' && step.steps) {
+      if (step.type === 'loop' && Array.isArray(step.steps)) {
         count += this.countTotalSteps(step.steps);
       }
     }

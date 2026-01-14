@@ -87,6 +87,7 @@ DEFAULT_CONFIG = {
     "serverSessionTimeoutS": 300,
     "serverMaxClients": 10,
     "serverLoggingLevel": "INFO",
+    "serverRequireSession": False,
     "serverHttpPortMin": 1024,
     "serverHttpPortMax": 65535,
     "serverWebSocketPortMin": 1024,
@@ -189,6 +190,7 @@ serverPollingIntervalMs=500
 serverSessionTimeoutS=300
 serverMaxClients=10
 serverLoggingLevel=INFO
+serverRequireSession=false
 serverHttpPortMin=1024
 serverHttpPortMax=65535
 serverWebSocketPortMin=1024
@@ -200,4 +202,3 @@ serverSessionTimeoutSMax=3600
 serverMaxClientsMin=1
 serverMaxClientsMax=100
 """
-

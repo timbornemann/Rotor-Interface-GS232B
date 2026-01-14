@@ -96,6 +96,9 @@ class RotorHandler(SimpleHTTPRequestHandler):
             True if request should proceed, False if blocked.
         """
         parsed = urlparse(self.path)
+        require_session = False
+        if self.state and self.state.settings:
+            require_session = bool(self.state.settings.get("serverRequireSession", False))
         
         # Skip session check for non-API paths and static files
         if not self._is_api_path(parsed.path):
@@ -111,6 +114,14 @@ class RotorHandler(SimpleHTTPRequestHandler):
         
         if is_blocked:
             send_suspended_response(self)
+            return False
+
+        if require_session and self.state.session_manager and session is None:
+            send_json(
+                self,
+                {"error": "Session required", "message": "Missing or invalid session ID."},
+                HTTPStatus.UNAUTHORIZED
+            )
             return False
         
         return True
@@ -198,6 +209,7 @@ class RotorHandler(SimpleHTTPRequestHandler):
 
             if parsed.path == "/api/rotor/set_target":
                 routes.handle_set_target(self, self.state)
+                return
             elif parsed.path == "/api/rotor/set_target_raw":
                 routes.handle_set_target_raw(self, self.state)
                 return
