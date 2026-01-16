@@ -248,6 +248,26 @@ class RotorService {
       });
   }
 
+  /**
+   * Move rotor to Home preset.
+   */
+  async home() {
+      await fetch(`${this.apiBase}/api/rotor/home`, {
+        method: 'POST',
+        headers: this.getSessionHeaders()
+      });
+  }
+
+  /**
+   * Move rotor to Park preset.
+   */
+  async park() {
+      await fetch(`${this.apiBase}/api/rotor/park`, {
+        method: 'POST',
+        headers: this.getSessionHeaders()
+      });
+  }
+
   // --- Configuration ---
   
   async getSettings() {

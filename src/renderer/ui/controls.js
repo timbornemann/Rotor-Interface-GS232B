@@ -11,6 +11,7 @@ class Controls {
     this.elSpeedRange = root.querySelector('#elSpeedRange');
     this.elSpeedInput = root.querySelector('#elSpeedInput');
     this.routeHint = root.querySelector('#routeHint');
+    this.presetControls = root.querySelector('#presetControls');
 
     this.buttons = Array.from(root.querySelectorAll('[data-command]'));
     this.bindEvents();
@@ -35,6 +36,13 @@ class Controls {
       if (this.elSpeedRange) this.elSpeedRange.value = elevationSpeedDegPerSec;
       if (this.elSpeedInput) this.elSpeedInput.value = elevationSpeedDegPerSec;
     }
+  }
+
+  setPresetControlsVisible(visible) {
+    if (!this.presetControls) {
+      return;
+    }
+    this.presetControls.classList.toggle('hidden', !visible);
   }
 
   bindEvents() {

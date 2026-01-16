@@ -201,6 +201,12 @@ def handle_disconnect(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
     """
     with state.rotor_lock:
         if state.rotor_connection and state.rotor_connection.is_connected():
+            settings = state.settings.get_all()
+            auto_park = settings.get("autoParkOnDisconnect", False)
+            presets_enabled = settings.get("parkPositionsEnabled", False)
+            if auto_park and presets_enabled and state.rotor_logic:
+                if not state.rotor_logic.park():
+                    log("[Routes] Auto-park on disconnect failed")
             state.rotor_connection.disconnect()
             send_json(handler, {"status": "ok", "message": "Disconnected"})
             
@@ -250,6 +256,40 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             {"error": "Failed to set target", "message": str(e)}, 
             HTTPStatus.INTERNAL_SERVER_ERROR
         )
+
+
+def handle_home(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/home - Move to home preset."""
+    if not state.rotor_logic:
+        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    if not state.rotor_connection or not state.rotor_connection.is_connected():
+        send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+        return
+    if not state.settings.get("parkPositionsEnabled", False):
+        send_json(handler, {"error": "Preset positions disabled"}, HTTPStatus.BAD_REQUEST)
+        return
+    if not state.rotor_logic.home():
+        send_json(handler, {"error": "Failed to move to home preset"}, HTTPStatus.BAD_REQUEST)
+        return
+    send_json(handler, {"status": "ok"})
+
+
+def handle_park(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/rotor/park - Move to park preset."""
+    if not state.rotor_logic:
+        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    if not state.rotor_connection or not state.rotor_connection.is_connected():
+        send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+        return
+    if not state.settings.get("parkPositionsEnabled", False):
+        send_json(handler, {"error": "Preset positions disabled"}, HTTPStatus.BAD_REQUEST)
+        return
+    if not state.rotor_logic.park():
+        send_json(handler, {"error": "Failed to move to park preset"}, HTTPStatus.BAD_REQUEST)
+        return
+    send_json(handler, {"status": "ok"})
 
 
 def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
