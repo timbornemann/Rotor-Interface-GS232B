@@ -106,9 +106,6 @@ DEFAULT_CONFIG = {
     "serverSessionTimeoutSMax": 3600,
     "serverMaxClientsMin": 1,
     "serverMaxClientsMax": 100,
-    
-    # Saved Routes (replaces savedPositions)
-    "savedRoutes": [],  # Array of route objects with steps (position, wait, loop)
 }
 
 # INI file template with sections and comments
