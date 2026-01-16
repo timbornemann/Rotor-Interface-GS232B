@@ -157,7 +157,7 @@ class RouteManager {
           <h3>Routen</h3>
           <div class="routes-actions">
             <button class="icon-btn" id="addRouteBtn" title="Neue Route erstellen">
-              <img src="./assets/icons/plus.png" alt="Erstellen" class="icon">
+              <img src="assets/icons/plus.png" alt="Erstellen" class="icon">
             </button>
           </div>
         </div>
@@ -184,9 +184,9 @@ class RouteManager {
   renderEmptyState() {
     return `
       <div class="routes-empty">
-        <img src="./assets/icons/satellite-dish.png" alt="Keine Routen" class="empty-icon">
+        <img src="assets/icons/satellite-dish.png" alt="Keine Routen" class="empty-icon">
         <p>Keine Routen vorhanden</p>
-        <p class="empty-hint">Klicken Sie auf <img src="./assets/icons/plus.png" class="inline-icon"> um eine neue Route zu erstellen</p>
+        <p class="empty-hint">Klicken Sie auf <img src="assets/icons/plus.png" class="inline-icon"> um eine neue Route zu erstellen</p>
       </div>
     `;
   }
@@ -225,7 +225,7 @@ class RouteManager {
       <div class="route-card ${isExecuting ? 'executing' : ''}" 
            data-route-id="${route.id}">
         <button class="route-delete-btn" data-route-id="${route.id}" title="Route löschen">
-          <img src="./assets/icons/trash.png" alt="Löschen" class="icon">
+          <img src="assets/icons/trash.png" alt="Löschen" class="icon">
         </button>
         
         <div class="route-header">
@@ -240,11 +240,11 @@ class RouteManager {
           
           ${isExecuting ? `
             <button class="route-stop-btn" data-route-id="${route.id}" title="Route stoppen">
-              <img src="./assets/icons/circle-pause.png" alt="Stoppen" class="icon">
+              <img src="assets/icons/circle-pause.png" alt="Stoppen" class="icon">
             </button>
           ` : `
             <button class="route-play-btn" data-route-id="${route.id}" title="Route starten">
-              <img src="./assets/icons/play.png" alt="Starten" class="icon">
+              <img src="assets/icons/play.png" alt="Starten" class="icon">
             </button>
           `}
         </div>
@@ -378,10 +378,10 @@ class RouteManager {
         return `
           <div class="step-card editable loop loop-start" data-step-path="${pathStr}" ${indentStyle}>
             <div class="step-header">
-              <img src="./assets/icons/repeat.png" alt="Loop" class="step-icon-img">
+              <img src="assets/icons/repeat.png" alt="Loop" class="step-icon-img">
               <span class="step-type-label">Loop Start</span>
               <button class="step-delete-btn" data-path="${pathStr}" title="Loop löschen">
-                <img src="./assets/icons/trash.png" alt="Löschen" class="icon-small">
+                <img src="assets/icons/trash.png" alt="Löschen" class="icon-small">
               </button>
             </div>
             <div class="step-inline-form">
@@ -402,7 +402,7 @@ class RouteManager {
         return `
           <div class="step-card loop-end" ${indentStyle}>
             <div class="step-header">
-              <img src="./assets/icons/repeat.png" alt="Loop" class="step-icon-img">
+              <img src="assets/icons/repeat.png" alt="Loop" class="step-icon-img">
               <span class="step-type-label">Loop End</span>
             </div>
           </div>
@@ -430,8 +430,8 @@ class RouteManager {
     const pathStr = stepPath.join('-');
     const indentStyle = depth > 0 ? `style="margin-left: ${depth * 24}px;"` : '';
     const icons = {
-      position: './assets/icons/map-pin.png',
-      wait: './assets/icons/timer.png'
+      position: 'assets/icons/map-pin.png',
+      wait: 'assets/icons/timer.png'
     };
     const iconSrc = icons[step.type] || '';
 
@@ -512,7 +512,7 @@ class RouteManager {
           ${iconSrc ? `<img src="${iconSrc}" alt="${step.type}" class="step-icon-img">` : ''}
           <span class="step-type-label">${this.getStepTypeLabel(step.type)}</span>
           <button class="step-delete-btn" data-path="${pathStr}" title="Schritt löschen">
-            <img src="./assets/icons/trash.png" alt="Löschen" class="icon-small">
+            <img src="assets/icons/trash.png" alt="Löschen" class="icon-small">
           </button>
         </div>
         ${formContent}
@@ -536,13 +536,13 @@ class RouteManager {
         ${isOpen ? `
           <div class="add-step-menu">
             <button class="add-step-option" data-type="position" data-parent-path="${pathStr}">
-              <img src="./assets/icons/map-pin.png" alt="Position" class="step-icon-img"> Position
+              <img src="assets/icons/map-pin.png" alt="Position" class="step-icon-img"> Position
             </button>
             <button class="add-step-option" data-type="wait" data-parent-path="${pathStr}">
-              <img src="./assets/icons/timer.png" alt="Warten" class="step-icon-img"> Warten
+              <img src="assets/icons/timer.png" alt="Warten" class="step-icon-img"> Warten
             </button>
             <button class="add-step-option" data-type="loop" data-parent-path="${pathStr}">
-              <img src="./assets/icons/repeat.png" alt="Loop" class="step-icon-img"> Loop
+              <img src="assets/icons/repeat.png" alt="Loop" class="step-icon-img"> Loop
             </button>
           </div>
         ` : ''}
