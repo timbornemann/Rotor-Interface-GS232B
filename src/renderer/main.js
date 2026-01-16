@@ -1078,9 +1078,7 @@ function updateConnectionStatusText() {
     connectionStatus.textContent = 'Getrennt';
     return;
   }
-  const portInfo = portSelect.selectedOptions[0]?.textContent || '';
-  let statusText = `Verbunden (${portInfo})`;
-  connectionStatus.textContent = statusText;
+  connectionStatus.textContent = 'Verbunden';
 }
 
 function setConnectionState(state) {
