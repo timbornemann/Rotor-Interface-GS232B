@@ -912,6 +912,12 @@ class RouteManager {
   handleToggleDropdown(dropdownPath) {
     const wasOpen = this.openDropdowns.has(dropdownPath);
     
+    // Save current input values before re-rendering
+    const route = this.draftRoute || this.routes.find(r => this.expandedRoutes.has(r.id));
+    if (route) {
+      this.saveCurrentInputValues(route);
+    }
+    
     if (wasOpen) {
       this.openDropdowns.delete(dropdownPath);
     } else {
