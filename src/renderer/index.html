@@ -58,10 +58,102 @@
       </div>
       <div id="elevationRoot" class="elevation">
         <svg viewBox="0 30 200 170" class="elevation-svg" id="elevationSvg">
+          <defs>
+            <!-- Professioneller Gradient für den Haupt-Bogen -->
+            <linearGradient id="elevationArcGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#2fd4ff;stop-opacity:0.5" />
+              <stop offset="25%" style="stop-color:#4dd9ff;stop-opacity:0.75" />
+              <stop offset="50%" style="stop-color:#2fd4ff;stop-opacity:0.9" />
+              <stop offset="75%" style="stop-color:#4dd9ff;stop-opacity:0.75" />
+              <stop offset="100%" style="stop-color:#2fd4ff;stop-opacity:0.5" />
+            </linearGradient>
+            
+            <!-- Verbesserter Gradient für den Indikator -->
+            <linearGradient id="indicatorGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#4dd9ff;stop-opacity:1" />
+              <stop offset="50%" style="stop-color:#2fd4ff;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#1a9fc7;stop-opacity:0.95" />
+            </linearGradient>
+            
+            <!-- Professioneller Gradient für den Indikator-Pfeil -->
+            <linearGradient id="indicatorArrowGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+              <stop offset="50%" style="stop-color:#ffb347;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#ff8c00;stop-opacity:1" />
+            </linearGradient>
+            
+            <!-- Verbesserter Glow-Filter für den Indikator -->
+            <filter id="indicatorGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+              <feOffset in="coloredBlur" dx="0" dy="0" result="offsetBlur"/>
+              <feComponentTransfer in="offsetBlur">
+                <feFuncA type="linear" slope="0.4"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode in="offsetBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            
+            <!-- Professioneller Shadow-Filter für Tiefe -->
+            <filter id="elevationShadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+              <feOffset dx="0" dy="2" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.4"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            
+            <!-- Stärkerer Glow für wichtige Elemente -->
+            <filter id="strongGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+              <feComponentTransfer in="coloredBlur">
+                <feFuncA type="linear" slope="0.5"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
           <g id="elevationScale"></g>
           <g id="elevationIndicator" class="elevation-indicator">
-            <line x1="100" y1="180" x2="100" y2="60" stroke="#2fd4ff" stroke-width="3" />
-            <polygon points="100,60 95,70 105,70" fill="#ffb347" />
+            <!-- Indikator-Linie mit Gradient und Schatten -->
+            <line x1="100" y1="180" x2="100" y2="62" 
+                  stroke="url(#indicatorGradient)" 
+                  stroke-width="5" 
+                  stroke-linecap="round"
+                  filter="url(#indicatorGlow)"
+                  opacity="0.95" />
+            <!-- Professioneller Pfeil-Indikator mit verbesserter Form -->
+            <path d="M 100 62 L 90 80 L 100 72 L 110 80 Z" 
+                  fill="url(#indicatorArrowGradient)"
+                  filter="url(#strongGlow)"
+                  stroke="rgba(255, 255, 255, 0.4)"
+                  stroke-width="1"
+                  opacity="0.95" />
+            <!-- Zusätzliche Highlight-Linie für Tiefe -->
+            <line x1="100" y1="180" x2="100" y2="62" 
+                  stroke="rgba(255, 255, 255, 0.2)" 
+                  stroke-width="2" 
+                  stroke-linecap="round"
+                  opacity="0.6" />
+            <!-- Professioneller Pivot-Punkt am Zentrum -->
+            <circle cx="100" cy="180" r="5.5" 
+                    fill="rgba(47, 212, 255, 0.3)" 
+                    filter="url(#elevationShadow)" />
+            <circle cx="100" cy="180" r="4.5" 
+                    fill="rgba(47, 212, 255, 0.9)" 
+                    stroke="rgba(255, 255, 255, 0.6)"
+                    stroke-width="1.5"
+                    filter="url(#elevationShadow)" />
+            <circle cx="100" cy="180" r="2.5" 
+                    fill="rgba(255, 255, 255, 1)" 
+                    filter="url(#strongGlow)" />
           </g>
         </svg>
       </div>
