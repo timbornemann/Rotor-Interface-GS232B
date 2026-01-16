@@ -1168,13 +1168,11 @@ function handleStatus(status) {
     updateConeSettings();
   }
   
-  if (typeof status.azimuth === 'number') {
-    // Normalisiere Azimut auf 0-360 Grad für die Anzeige
-    const normalizedAz = ((status.azimuth % 360) + 360) % 360;
-    azValue.textContent = `${normalizedAz.toFixed(0)}deg`;
+  if (typeof status.azimuthRaw === 'number') {
+    azValue.textContent = `${status.azimuthRaw.toFixed(0)}deg`;
   }
-  if (typeof status.elevation === 'number') {
-    elValue.textContent = `${status.elevation.toFixed(0)}deg`;
+  if (typeof status.elevationRaw === 'number') {
+    elValue.textContent = `${status.elevationRaw.toFixed(0)}deg`;
   }
   elevation.update(status.elevation);
   mapView.update(status.azimuth, status.elevation);
