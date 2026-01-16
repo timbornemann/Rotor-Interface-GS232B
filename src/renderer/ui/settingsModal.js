@@ -8,6 +8,7 @@ class SettingsModal {
     this.closeBtn = document.getElementById('closeSettingsBtn');
     this.saveBtn = document.getElementById('settingsSaveBtn');
     this.cancelBtn = document.getElementById('settingsCancelBtn');
+    this.resetBtn = document.getElementById('settingsResetBtn');
     this.navItems = document.querySelectorAll('.settings-nav-item');
     this.sections = document.querySelectorAll('.settings-section');
     this.currentConfig = null;
@@ -124,6 +125,11 @@ class SettingsModal {
 
     // Save handler
     this.saveBtn.addEventListener('click', () => this.save());
+    
+    // Reset handler
+    if (this.resetBtn) {
+      this.resetBtn.addEventListener('click', () => this.handleReset());
+    }
 
     // Range/Number sync for speed inputs
     this.setupRangeSync('settingsAzSpeedRange', 'settingsAzSpeedInput');
@@ -865,6 +871,47 @@ class SettingsModal {
       await window.alertModal.showAlert(message);
     } else {
       alert(message);
+    }
+  }
+
+  async handleReset() {
+    // Show confirmation dialog
+    const confirmed = await window.alertModal.showConfirm(
+      'Möchten Sie wirklich alle Einstellungen auf die Standardwerte zurücksetzen?\n\n' +
+      'Diese Aktion kann nicht rückgängig gemacht werden.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+    
+    try {
+      // Get the configStore from window
+      const configStore = window.configStore || new ConfigStore();
+      
+      // Reset to defaults
+      console.log('[SettingsModal] Resetting settings to defaults...');
+      const defaults = await configStore.resetToDefaults();
+      
+      // Update current config
+      this.currentConfig = defaults;
+      
+      // Reload form with default values
+      this.loadConfigIntoForm(defaults);
+      this.syncLocationPicker(defaults);
+      
+      // Show success message
+      await window.alertModal.showAlert('Alle Einstellungen wurden auf die Standardwerte zurückgesetzt.');
+      
+      // Automatically save and close
+      if (this.onSaveCallback) {
+        this.onSaveCallback(defaults);
+      }
+      this.close();
+      
+    } catch (error) {
+      console.error('[SettingsModal] Error resetting settings:', error);
+      await this.showError('Fehler beim Zurücksetzen: ' + error.message);
     }
   }
 

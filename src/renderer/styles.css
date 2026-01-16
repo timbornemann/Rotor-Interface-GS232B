@@ -82,9 +82,8 @@ body {
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--text);
-  padding: 0 1.5rem;
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0 1rem;
+  margin-left: 0.5rem;
   white-space: nowrap;
 }
 
@@ -165,6 +164,12 @@ button.secondary:not(:disabled):hover {
 
 button:active:not(:disabled) {
   transform: translateY(0) scale(0.98);
+}
+
+.status-and-settings {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .status-line {
@@ -1162,10 +1167,32 @@ main.dashboard {
 .modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 0.75rem;
   padding: 1.25rem 1.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.15);
+}
+
+.btn-danger {
+  background: rgba(247, 107, 107, 0.15);
+  border-color: rgba(247, 107, 107, 0.4);
+  color: #f76b6b;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(247, 107, 107, 0.4);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(247, 107, 107, 0.25);
+  border-color: rgba(247, 107, 107, 0.6);
+  transform: translateY(-1px);
+}
+
+.btn-danger:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 /* Alert Modal */
@@ -2673,6 +2700,7 @@ button.refreshing .icon {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .route-drag-handle {
@@ -2877,7 +2905,7 @@ button.refreshing .icon {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
-  margin-top: 0;
+  margin-top: 0.5rem;
   margin-left: -0.75rem;
   margin-right: -0.75rem;
   font-size: 0.8rem;

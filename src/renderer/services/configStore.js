@@ -276,4 +276,21 @@ class ConfigStore {
       console.log('[ConfigStore] Cache updated from external source');
     }
   }
+
+  /**
+   * Reset all settings to default values.
+   * @returns {Promise<object>} The reset configuration
+   */
+  async resetToDefaults() {
+    console.log('[ConfigStore] Resetting all settings to defaults...');
+    return await this.save({ ...defaultConfig });
+  }
+
+  /**
+   * Get the default configuration (for comparison or reset preview).
+   * @returns {object} The default configuration
+   */
+  getDefaults() {
+    return { ...defaultConfig };
+  }
 }

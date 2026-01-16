@@ -426,6 +426,7 @@ const routeManager = new RouteManager(document.getElementById('routeManagerRoot'
 // (WebSocket handlers will be set up in setupWebSocket() below)
 
 const configStore = new ConfigStore();
+window.configStore = configStore; // Make available globally for settings modal
 let config = configStore.loadSync();
 let connected = false;
 let unsubscribeStatus = null;

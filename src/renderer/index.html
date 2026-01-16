@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RotorControl GS-232B</title>
+  <title>Yaesu GS232B Rotor Control</title>
   <link rel="stylesheet" href="./styles.css" />
   <link
     rel="stylesheet"
@@ -32,14 +32,16 @@
       </button>
       <button id="connectBtn" class="primary">Verbinden</button>
       <button id="disconnectBtn" disabled>Trennen</button>
+      <div class="app-title">Yaesu GS232B Rotor Control</div>
     </div>
-    <div class="app-title">RotorControl GS-232B</div>
-    <div class="status-line">
-      <span id="connectionStatus" class="status-chip disconnected">Getrennt</span>
+    <div class="status-and-settings">
+      <div class="status-line">
+        <span id="connectionStatus" class="status-chip disconnected">Getrennt</span>
+      </div>
+      <button id="settingsBtn" class="secondary" type="button" title="Einstellungen">
+        <img src="./assets/icons/settings.png" alt="Einstellungen" class="icon">
+      </button>
     </div>
-    <button id="settingsBtn" class="secondary" type="button" title="Einstellungen">
-      <img src="./assets/icons/settings.png" alt="Einstellungen" class="icon">
-    </button>
   </header>
 
   <main class="dashboard">
@@ -723,6 +725,12 @@
               <p class="help-text">Startet den Server neu und wendet alle Änderungen an.</p>
               <button id="restartServerBtn" class="primary" type="button">Server neu starten</button>
               <div id="restartStatus" class="notice hidden"></div>
+            </div>
+
+            <div class="settings-card">
+              <h4 class="card-title">Einstellungen zurücksetzen</h4>
+              <p class="help-text">Setzt alle Einstellungen auf die Standardwerte zurück. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              <button id="settingsResetBtn" class="btn-danger" type="button" title="Alle Einstellungen auf Standardwerte zurücksetzen">Auf Standard zurücksetzen</button>
             </div>
           </section>
         </div>
