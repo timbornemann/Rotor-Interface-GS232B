@@ -8,6 +8,7 @@ from __future__ import annotations
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
+import socket
 
 from server.utils.logging import log
 from server.core.state import ServerState
@@ -16,6 +17,49 @@ from server.api.handler import RotorHandler
 
 DEFAULT_PORT = 8081
 DEFAULT_WEBSOCKET_PORT = 8082
+
+
+def get_local_ip_addresses():
+    """Get all local IP addresses of the machine.
+    
+    Returns:
+        List of IP addresses (IPv4) available on the machine.
+    """
+    ip_addresses = []
+    
+    try:
+        # Get hostname
+        hostname = socket.gethostname()
+        
+        # Get all addresses for this hostname
+        addr_info = socket.getaddrinfo(hostname, None)
+        
+        for info in addr_info:
+            # Filter IPv4 addresses (AF_INET)
+            if info[0] == socket.AF_INET:
+                ip = info[4][0]
+                # Skip localhost
+                if ip != '127.0.0.1' and not ip.startswith('127.'):
+                    if ip not in ip_addresses:
+                        ip_addresses.append(ip)
+        
+        # Fallback: Try to get IP by connecting to external host (doesn't actually connect)
+        if not ip_addresses:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                # Connect to Google DNS (doesn't send any data)
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                if ip not in ip_addresses and ip != '127.0.0.1':
+                    ip_addresses.append(ip)
+            except Exception:
+                pass
+            finally:
+                s.close()
+    except Exception:
+        pass
+    
+    return ip_addresses
 
 
 def run_server(
@@ -60,19 +104,50 @@ def run_server(
     with ThreadingHTTPServer(("0.0.0.0", state.http_port), handler_factory) as httpd:
         # Allow other components (e.g. restart endpoint) to shut down the HTTP server
         state.set_http_server(httpd)
-        log(f"Serving Rotor UI from {state.server_root} at http://localhost:{state.http_port}")
-        log(f"WebSocket server running on ws://localhost:{state.websocket_port}")
-        log("API V2 enabled (Server-Side Logic)")
-        log("Multi-client synchronization enabled")
+        
+        # Get all local IP addresses
+        local_ips = get_local_ip_addresses()
+        
+        # Print server information
+        log("=" * 60)
+        log("Server erfolgreich gestartet!")
+        log("=" * 60)
+        log("")
+        log("Web-Interface erreichbar unter:")
+        log(f"  - http://localhost:{state.http_port}")
+        for ip in local_ips:
+            log(f"  - http://{ip}:{state.http_port}")
+        log("")
+        log("REST API erreichbar unter:")
+        log(f"  - http://localhost:{state.http_port}/api/")
+        for ip in local_ips:
+            log(f"  - http://{ip}:{state.http_port}/api/")
+        log("")
+        log("WebSocket API erreichbar unter:")
+        log(f"  - ws://localhost:{state.websocket_port}")
+        for ip in local_ips:
+            log(f"  - ws://{ip}:{state.websocket_port}")
+        log("")
+        log("Features:")
+        log("  - API V2 (Server-Side Logic)")
+        log("  - Multi-Client-Synchronisation")
+        log("  - Echtzeit-Updates über WebSocket")
+        log("")
+        log("Zum Beenden: Strg+C drücken")
+        log("=" * 60)
+        
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            log("Shutting down...")
+            log("")
+            log("=" * 60)
+            log("Server wird heruntergefahren...")
+            log("=" * 60)
             try:
                 state.stop()
             except Exception as e:
-                log(f"Error during shutdown: {e}")
-            log("Server stopped")
+                log(f"Fehler beim Herunterfahren: {e}")
+            log("Server gestoppt")
         finally:
             restart_requested = state.is_restart_requested()
             # Detach server reference (avoid stale references across restarts/tests)

@@ -39,11 +39,9 @@ if exist "web-settings.json" (
 )
 
 echo.
-echo Server wird gestartet...
-echo HTTP-Port: %HTTP_PORT%
-echo WebSocket-Port: %WS_PORT%
-echo.
-echo Zum Beenden: Strg+C druecken
+echo Server wird initialisiert...
+echo   HTTP-Port: %HTTP_PORT%
+echo   WebSocket-Port: %WS_PORT%
 echo ========================================
 echo.
 
