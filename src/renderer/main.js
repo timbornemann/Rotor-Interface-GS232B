@@ -628,6 +628,10 @@ async function setupWebSocket() {
       logAction('Route erfolgreich abgeschlossen', { routeId: data.routeId });
     } else {
       logAction('Route mit Fehler beendet', { error: data.error });
+      // Show error alert
+      if (window.alertModal) {
+        window.alertModal.showAlert(`Route-Fehler: ${data.error || 'Unbekannter Fehler'}`);
+      }
     }
   });
   

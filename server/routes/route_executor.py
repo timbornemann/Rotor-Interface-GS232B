@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
+import traceback
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from server.utils.logging import log
@@ -178,7 +179,8 @@ class RouteExecutor:
                 self._broadcast_execution_completed(success=True)
         
         except Exception as e:
-            log(f"[RouteExecutor] Route execution error: {e}", level="ERROR")
+            error_msg = f"{e}\n{traceback.format_exc()}"
+            log(f"[RouteExecutor] Route execution error: {error_msg}", level="ERROR")
             self._broadcast_execution_completed(success=False, error=str(e))
         
         finally:
@@ -244,7 +246,8 @@ class RouteExecutor:
             })
         
         except Exception as e:
-            log(f"[RouteExecutor] Step execution error: {e}", level="ERROR")
+            error_msg = f"{e}\n{traceback.format_exc()}"
+            log(f"[RouteExecutor] Step execution error: {error_msg}", level="ERROR")
             raise
     
     def _execute_position_step(self, step: Dict[str, Any]) -> None:
@@ -293,8 +296,8 @@ class RouteExecutor:
         start_time = time.time()
         
         while not self._should_stop:
-            # Get current position from rotor logic
-            current_status = self.rotor_logic.get_current_status()
+            # Get current position from rotor connection
+            current_status = self.rotor_logic.connection.get_status()
             
             if not current_status:
                 # No status yet, keep waiting
