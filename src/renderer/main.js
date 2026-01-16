@@ -312,32 +312,6 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       reportError(error);
     }
   },
-  onGotoAzimuth: async (azimuth) => {
-    if (!connected) {
-      logAction('Azimut-Befehl verworfen, nicht verbunden', { azimuth });
-      controls.showRouteHint(null);
-      return;
-    }
-    // Goto-Eingabe ist ein Raw-Wert (Hardware-Position), wird direkt an Motor gesendet
-    // Validierung: Einfach gegen 0-360/450 für Azimut
-    const maxAz = config.azimuthMode === 450 ? 450 : 360;
-    if (azimuth < 0 || azimuth > maxAz) {
-      showLimitWarning(`Ziel-Azimut ${azimuth}° (Raw) liegt außerhalb des gültigen Bereichs (0…${maxAz}°).`);
-      logAction('Azimut-Befehl verworfen, Ziel ausserhalb Bereich', { raw: azimuth, max: maxAz });
-      controls.showRouteHint(null);
-      return;
-    }
-    
-    logAction('Azimut-Befehl senden (Raw)', { raw: azimuth });
-    try {
-      // Goto Azimut bricht Route ab
-      await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
-      // Sende Raw-Wert direkt an Motor, ohne Umrechnung
-      await rotor.setAzimuthRaw(azimuth);
-    } catch (error) {
-      reportError(error);
-    }
-  },
   onGotoAzimuthElevation: async (azimuth, elevation) => {
     if (!connected) {
       logAction('Azimut/Elevation-Befehl verworfen, nicht verbunden', { azimuth, elevation });

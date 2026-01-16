@@ -4,7 +4,6 @@ class Controls {
     this.callbacks = callbacks;
     this.gotoAzInput = root.querySelector('#gotoAzInput');
     this.gotoElInput = root.querySelector('#gotoElInput');
-    this.gotoAzBtn = root.querySelector('#gotoAzBtn');
     this.gotoAzElBtn = root.querySelector('#gotoAzElBtn');
     this.azSpeedRange = root.querySelector('#azSpeedRange');
     this.azSpeedInput = root.querySelector('#azSpeedInput');
@@ -21,7 +20,6 @@ class Controls {
     this.buttons.forEach((btn) => {
       btn.disabled = !enabled;
     });
-    if (this.gotoAzBtn) this.gotoAzBtn.disabled = !enabled;
     if (this.gotoAzElBtn) this.gotoAzElBtn.disabled = !enabled;
     if (this.gotoAzInput) this.gotoAzInput.disabled = !enabled;
     if (this.gotoElInput) this.gotoElInput.disabled = !enabled;
@@ -52,16 +50,6 @@ class Controls {
         void this.callbacks.onCommand(cmd);
       });
     });
-
-    if (this.gotoAzBtn && this.gotoAzInput) {
-      this.gotoAzBtn.addEventListener('click', (event) => {
-        event.preventDefault();
-        const az = Number(this.gotoAzInput.value);
-        if (Number.isFinite(az)) {
-          void this.callbacks.onGotoAzimuth(az);
-        }
-      });
-    }
 
     if (this.gotoAzElBtn && this.gotoAzInput && this.gotoElInput) {
       this.gotoAzElBtn.addEventListener('click', (event) => {
