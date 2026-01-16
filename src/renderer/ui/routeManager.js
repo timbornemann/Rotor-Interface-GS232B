@@ -202,6 +202,10 @@ class RouteManager {
     return `
       <div class="route-card ${isExecuting ? 'executing' : ''}" 
            data-route-id="${route.id}">
+        <button class="route-delete-btn" data-route-id="${route.id}" title="Route löschen">
+          <img src="./assets/icons/trash.png" alt="Löschen" class="icon">
+        </button>
+        
         <div class="route-header">
           <div class="route-drag-handle">
             <span class="drag-icon">⋮⋮</span>
@@ -210,12 +214,6 @@ class RouteManager {
           <div class="route-info" data-route-id="${route.id}">
             <div class="route-name">${this.escapeHtml(route.name)}</div>
             <div class="route-meta">${stepCount} ${stepCount === 1 ? 'Schritt' : 'Schritte'}</div>
-          </div>
-          
-          <div class="route-edit-delete-group">
-            <button class="route-delete-btn" data-route-id="${route.id}" title="Route löschen">
-              <img src="./assets/icons/trash.png" alt="Löschen" class="icon">
-            </button>
           </div>
           
           ${isExecuting ? `
