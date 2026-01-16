@@ -340,13 +340,14 @@ def handle_set_target_raw(handler: BaseHTTPRequestHandler, state: "ServerState")
     """
     try:
         payload = read_json_body(handler)
-        az = _parse_number(payload.get("az"))
-        el = _parse_number(payload.get("el"))
+        az = _parse_number(payload.get("az")) if "az" in payload else None
+        el = _parse_number(payload.get("el")) if "el" in payload else None
 
-        if az is None or el is None:
+        # At least one value must be provided
+        if az is None and el is None:
             send_json(
                 handler,
-                {"error": "az and el must be numeric values"},
+                {"error": "At least one of 'az' or 'el' must be provided as a numeric value"},
                 HTTPStatus.BAD_REQUEST
             )
             return
