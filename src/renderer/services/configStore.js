@@ -89,8 +89,9 @@ const defaultConfig = {
   elevationScaleFactorMin: 0.1,
   elevationScaleFactorMax: 2.0,
   
-  // Saved Routes (replaces savedPositions)
-  savedRoutes: [],  // Array of route objects with steps (position, wait, loop)
+  // NOTE: Routes are now stored separately in routes.json on the server
+  // and managed via the Route API endpoints. They are no longer part of
+  // the configuration stored in web-settings.json.
 };
 
 class ConfigStore {

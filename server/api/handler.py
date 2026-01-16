@@ -51,6 +51,10 @@ class RotorHandler(SimpleHTTPRequestHandler):
     # Regex patterns for client management routes
     SUSPEND_PATTERN = re.compile(r"^/api/clients/([^/]+)/suspend$")
     RESUME_PATTERN = re.compile(r"^/api/clients/([^/]+)/resume$")
+    
+    # Regex patterns for route management
+    ROUTE_START_PATTERN = re.compile(r"^/api/routes/([^/]+)/start$")
+    ROUTE_UPDATE_PATTERN = re.compile(r"^/api/routes/([^/]+)$")
 
     def __init__(
         self, 
@@ -170,6 +174,15 @@ class RotorHandler(SimpleHTTPRequestHandler):
             routes.handle_get_server_settings(self, self.state)
             return
         
+        # Route management endpoints
+        if parsed.path == "/api/routes":
+            routes.handle_get_routes(self, self.state)
+            return
+        
+        if parsed.path == "/api/routes/execution":
+            routes.handle_get_route_execution(self, self.state)
+            return
+        
         # API endpoint for getting own session ID
         if parsed.path == "/api/session":
             # This endpoint creates a session if one doesn't exist
@@ -255,6 +268,25 @@ class RotorHandler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/server/restart":
                 routes.handle_server_restart(self, self.state)
                 return
+            
+            # Route management routes
+            if parsed.path == "/api/routes":
+                routes.handle_create_route(self, self.state)
+                return
+            
+            route_start_match = self.ROUTE_START_PATTERN.match(parsed.path)
+            if route_start_match:
+                route_id = route_start_match.group(1)
+                routes.handle_start_route(self, self.state, route_id)
+                return
+            
+            if parsed.path == "/api/routes/stop":
+                routes.handle_stop_route(self, self.state)
+                return
+            
+            if parsed.path == "/api/routes/continue":
+                routes.handle_continue_route(self, self.state)
+                return
 
             send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)
         except Exception as e:
@@ -262,6 +294,62 @@ class RotorHandler(SimpleHTTPRequestHandler):
             import traceback
             from server.utils.logging import log
             log(f"[Handler] Error handling POST {parsed.path}: {e}")
+            log(f"[Handler] Traceback: {traceback.format_exc()}")
+            send_json(
+                self, 
+                {"error": "Internal server error", "message": str(e)}, 
+                HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+
+    def do_PUT(self) -> None:
+        """Handle PUT requests."""
+        parsed = urlparse(self.path)
+        
+        # Check session for API requests
+        if not self._check_session():
+            return
+        
+        try:
+            # Route update
+            route_update_match = self.ROUTE_UPDATE_PATTERN.match(parsed.path)
+            if route_update_match:
+                route_id = route_update_match.group(1)
+                routes.handle_update_route(self, self.state, route_id)
+                return
+            
+            send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)
+        except Exception as e:
+            import traceback
+            from server.utils.logging import log
+            log(f"[Handler] Error handling PUT {parsed.path}: {e}")
+            log(f"[Handler] Traceback: {traceback.format_exc()}")
+            send_json(
+                self, 
+                {"error": "Internal server error", "message": str(e)}, 
+                HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+    
+    def do_DELETE(self) -> None:
+        """Handle DELETE requests."""
+        parsed = urlparse(self.path)
+        
+        # Check session for API requests
+        if not self._check_session():
+            return
+        
+        try:
+            # Route deletion
+            route_delete_match = self.ROUTE_UPDATE_PATTERN.match(parsed.path)
+            if route_delete_match:
+                route_id = route_delete_match.group(1)
+                routes.handle_delete_route(self, self.state, route_id)
+                return
+            
+            send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)
+        except Exception as e:
+            import traceback
+            from server.utils.logging import log
+            log(f"[Handler] Error handling DELETE {parsed.path}: {e}")
             log(f"[Handler] Traceback: {traceback.format_exc()}")
             send_json(
                 self, 

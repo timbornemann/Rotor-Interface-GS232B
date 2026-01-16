@@ -79,49 +79,5 @@
   "serverSessionTimeoutSMax": 3600,
   "serverMaxClientsMin": 1,
   "serverMaxClientsMax": 100,
-  "savedRoutes": [
-    {
-      "id": "route_1768322835204_nml8scctc",
-      "name": "Norden",
-      "steps": [
-        {
-          "id": "route_1768328878054_s8olfbyfp",
-          "type": "loop",
-          "iterations": null,
-          "steps": [
-            {
-              "id": "route_1768328890547_d7qikea5f",
-              "type": "position",
-              "name": "Position",
-              "azimuth": 0,
-              "elevation": 0
-            },
-            {
-              "id": "route_1768328896940_52td5ybkc",
-              "type": "wait",
-              "duration": 2000,
-              "message": ""
-            },
-            {
-              "id": "route_1768328902089_a0pkic5pa",
-              "type": "position",
-              "name": "Position",
-              "azimuth": 180,
-              "elevation": 0
-            },
-            {
-              "id": "route_1768564515184_bhxk9pbb7",
-              "type": "wait",
-              "duration": 2000,
-              "message": ""
-            }
-          ]
-        }
-      ],
-      "order": 0,
-      "createdAt": "2026-01-13T16:47:15.204Z",
-      "description": ""
-    }
-  ],
   "savedPositions": []
 }

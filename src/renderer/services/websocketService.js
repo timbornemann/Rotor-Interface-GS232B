@@ -24,6 +24,11 @@ class WebSocketService {
       client_list_updated: new Set(),
       client_suspended: new Set(),
       settings_updated: new Set(),
+      route_list_updated: new Set(),
+      route_execution_started: new Set(),
+      route_execution_progress: new Set(),
+      route_execution_stopped: new Set(),
+      route_execution_completed: new Set(),
       connected: new Set(),
       disconnected: new Set()
     };
@@ -191,6 +196,26 @@ class WebSocketService {
           
         case 'settings_updated':
           this.emit('settings_updated', payload);
+          break;
+        
+        case 'route_list_updated':
+          this.emit('route_list_updated', payload);
+          break;
+        
+        case 'route_execution_started':
+          this.emit('route_execution_started', payload);
+          break;
+        
+        case 'route_execution_progress':
+          this.emit('route_execution_progress', payload);
+          break;
+        
+        case 'route_execution_stopped':
+          this.emit('route_execution_stopped', payload);
+          break;
+        
+        case 'route_execution_completed':
+          this.emit('route_execution_completed', payload);
           break;
           
         case 'pong':

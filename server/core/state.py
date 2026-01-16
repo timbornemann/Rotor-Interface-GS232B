@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from server.control.rotor_logic import RotorLogic
     from server.api.websocket import WebSocketManager
     from server.core.session_manager import SessionManager
+    from server.routes.route_manager import RouteManager
+    from server.routes.route_executor import RouteExecutor
 
 
 class ServerState:
@@ -59,6 +61,8 @@ class ServerState:
         self.rotor_logic: Optional["RotorLogic"] = None
         self.websocket_manager: Optional["WebSocketManager"] = None
         self.session_manager: Optional["SessionManager"] = None
+        self.route_manager: Optional["RouteManager"] = None
+        self.route_executor: Optional["RouteExecutor"] = None
         self.http_server: Any = None  # ThreadingHTTPServer instance (set by core.server)
         
         # Server configuration
@@ -90,6 +94,8 @@ class ServerState:
         from server.control.rotor_logic import RotorLogic
         from server.api.websocket import WebSocketManager
         from server.core.session_manager import SessionManager
+        from server.routes.route_manager import RouteManager
+        from server.routes.route_executor import RouteExecutor
         from server.utils.logging import log
         
         if config_dir:
@@ -131,6 +137,17 @@ class ServerState:
         # Cross-reference managers
         self.websocket_manager.set_session_manager(self.session_manager)
         self.session_manager.set_websocket_manager(self.websocket_manager)
+        
+        # Initialize route manager
+        routes_file = self.config_dir / "routes.json"
+        self.route_manager = RouteManager(routes_file=routes_file)
+        
+        # Initialize route executor
+        self.route_executor = RouteExecutor(
+            route_manager=self.route_manager,
+            rotor_logic=self.rotor_logic,
+            websocket_manager=self.websocket_manager
+        )
 
     def start(self) -> None:
         """Start all background processes."""
@@ -161,6 +178,8 @@ class ServerState:
 
     def stop(self) -> None:
         """Stop all background processes and cleanup."""
+        if self.route_executor:
+            self.route_executor.stop_route()
         if self.rotor_logic:
             self.rotor_logic.stop()
         if self.rotor_connection:
@@ -196,6 +215,8 @@ class ServerState:
         self.rotor_logic = None
         self.websocket_manager = None
         self.session_manager = None
+        self.route_manager = None
+        self.route_executor = None
         self.http_server = None
 
     def broadcast_connection_state(self) -> None:

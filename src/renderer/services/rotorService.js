@@ -358,6 +358,194 @@ class RotorService {
     }
   }
   
+  // --- Route Management ---
+  
+  /**
+   * Get all routes from the server.
+   * @returns {Promise<Array>} List of routes
+   */
+  async getRoutes() {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes`, {
+        headers: this.getSessionHeaders()
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        return data.routes || [];
+      }
+      const err = await resp.json();
+      throw new Error(err.error || 'Failed to get routes');
+    } catch (e) {
+      console.error('[RotorService] Failed to get routes', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
+  /**
+   * Create a new route on the server.
+   * @param {object} route - Route object with id, name, steps, etc.
+   * @returns {Promise<object>} Created route
+   */
+  async createRoute(route) {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getSessionHeaders()
+        },
+        body: JSON.stringify(route)
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Failed to create route');
+      }
+      const data = await resp.json();
+      return data.route;
+    } catch (e) {
+      console.error('[RotorService] Failed to create route', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
+  /**
+   * Update an existing route on the server.
+   * @param {string} routeId - Route ID to update
+   * @param {object} route - Updated route object
+   * @returns {Promise<object>} Updated route
+   */
+  async updateRoute(routeId, route) {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes/${routeId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.getSessionHeaders()
+        },
+        body: JSON.stringify(route)
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Failed to update route');
+      }
+      const data = await resp.json();
+      return data.route;
+    } catch (e) {
+      console.error('[RotorService] Failed to update route', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
+  /**
+   * Delete a route from the server.
+   * @param {string} routeId - Route ID to delete
+   * @returns {Promise<void>}
+   */
+  async deleteRoute(routeId) {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes/${routeId}`, {
+        method: 'DELETE',
+        headers: this.getSessionHeaders()
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Failed to delete route');
+      }
+    } catch (e) {
+      console.error('[RotorService] Failed to delete route', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
+  /**
+   * Start executing a route on the server.
+   * @param {string} routeId - Route ID to start
+   * @returns {Promise<void>}
+   */
+  async startRoute(routeId) {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes/${routeId}/start`, {
+        method: 'POST',
+        headers: this.getSessionHeaders()
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Failed to start route');
+      }
+    } catch (e) {
+      console.error('[RotorService] Failed to start route', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
+  /**
+   * Stop the currently executing route.
+   * @returns {Promise<void>}
+   */
+  async stopRoute() {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes/stop`, {
+        method: 'POST',
+        headers: this.getSessionHeaders()
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Failed to stop route');
+      }
+    } catch (e) {
+      console.error('[RotorService] Failed to stop route', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
+  /**
+   * Continue from a manual wait step.
+   * @returns {Promise<void>}
+   */
+  async continueRoute() {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes/continue`, {
+        method: 'POST',
+        headers: this.getSessionHeaders()
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || 'Failed to continue route');
+      }
+    } catch (e) {
+      console.error('[RotorService] Failed to continue route', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
+  /**
+   * Get current route execution state.
+   * @returns {Promise<object>} Execution state
+   */
+  async getRouteExecution() {
+    try {
+      const resp = await fetch(`${this.apiBase}/api/routes/execution`, {
+        headers: this.getSessionHeaders()
+      });
+      if (resp.ok) {
+        return await resp.json();
+      }
+      const err = await resp.json();
+      throw new Error(err.error || 'Failed to get route execution');
+    } catch (e) {
+      console.error('[RotorService] Failed to get route execution', e);
+      this.emitError(e);
+      throw e;
+    }
+  }
+  
   // Backwards compatibility wrappers called by main.js
   setSoftLimits(limits) { 
       // Handled via saveSettings in main 

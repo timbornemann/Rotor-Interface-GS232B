@@ -755,6 +755,203 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
     })
 
 
+# --- Route Management Routes ---
+
+def handle_get_routes(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/routes - Get all routes.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    if not state.route_manager:
+        send_json(handler, {"error": "Route manager not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    routes = state.route_manager.get_all_routes()
+    send_json(handler, {"routes": routes})
+
+
+def handle_create_route(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/routes - Create a new route.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    if not state.route_manager:
+        send_json(handler, {"error": "Route manager not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    try:
+        payload = read_json_body(handler)
+        route = state.route_manager.add_route(payload)
+        
+        # Broadcast update to all clients
+        if state.websocket_manager:
+            all_routes = state.route_manager.get_all_routes()
+            state.websocket_manager.broadcast_route_list_updated(all_routes)
+        
+        send_json(handler, {"status": "ok", "route": route})
+    except ValueError as e:
+        send_json(handler, {"error": str(e)}, HTTPStatus.BAD_REQUEST)
+    except Exception as e:
+        log(f"[Routes] Error creating route: {e}", level="ERROR")
+        send_json(handler, {"error": "Failed to create route"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_update_route(handler: BaseHTTPRequestHandler, state: "ServerState", route_id: str) -> None:
+    """Handle PUT /api/routes/<id> - Update a route.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+        route_id: ID of the route to update.
+    """
+    if not state.route_manager:
+        send_json(handler, {"error": "Route manager not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    try:
+        payload = read_json_body(handler)
+        route = state.route_manager.update_route(route_id, payload)
+        
+        if not route:
+            send_json(handler, {"error": "Route not found"}, HTTPStatus.NOT_FOUND)
+            return
+        
+        # Broadcast update to all clients
+        if state.websocket_manager:
+            all_routes = state.route_manager.get_all_routes()
+            state.websocket_manager.broadcast_route_list_updated(all_routes)
+        
+        send_json(handler, {"status": "ok", "route": route})
+    except Exception as e:
+        log(f"[Routes] Error updating route: {e}", level="ERROR")
+        send_json(handler, {"error": "Failed to update route"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_delete_route(handler: BaseHTTPRequestHandler, state: "ServerState", route_id: str) -> None:
+    """Handle DELETE /api/routes/<id> - Delete a route.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+        route_id: ID of the route to delete.
+    """
+    if not state.route_manager:
+        send_json(handler, {"error": "Route manager not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    try:
+        success = state.route_manager.delete_route(route_id)
+        
+        if not success:
+            send_json(handler, {"error": "Route not found"}, HTTPStatus.NOT_FOUND)
+            return
+        
+        # Broadcast update to all clients
+        if state.websocket_manager:
+            all_routes = state.route_manager.get_all_routes()
+            state.websocket_manager.broadcast_route_list_updated(all_routes)
+        
+        send_json(handler, {"status": "ok"})
+    except Exception as e:
+        log(f"[Routes] Error deleting route: {e}", level="ERROR")
+        send_json(handler, {"error": "Failed to delete route"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_start_route(handler: BaseHTTPRequestHandler, state: "ServerState", route_id: str) -> None:
+    """Handle POST /api/routes/<id>/start - Start executing a route.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+        route_id: ID of the route to start.
+    """
+    if not state.route_executor:
+        send_json(handler, {"error": "Route executor not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    if not state.rotor_connection or not state.rotor_connection.is_connected():
+        send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    try:
+        success = state.route_executor.start_route(route_id)
+        
+        if not success:
+            send_json(handler, {"error": "Failed to start route (already executing or not found)"}, HTTPStatus.BAD_REQUEST)
+            return
+        
+        send_json(handler, {"status": "ok"})
+    except Exception as e:
+        log(f"[Routes] Error starting route: {e}", level="ERROR")
+        send_json(handler, {"error": "Failed to start route"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_stop_route(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/routes/stop - Stop the currently executing route.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    if not state.route_executor:
+        send_json(handler, {"error": "Route executor not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    try:
+        state.route_executor.stop_route()
+        send_json(handler, {"status": "ok"})
+    except Exception as e:
+        log(f"[Routes] Error stopping route: {e}", level="ERROR")
+        send_json(handler, {"error": "Failed to stop route"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_continue_route(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/routes/continue - Continue from manual wait.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    if not state.route_executor:
+        send_json(handler, {"error": "Route executor not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    try:
+        success = state.route_executor.continue_from_manual_wait()
+        
+        if not success:
+            send_json(handler, {"error": "No manual wait is active"}, HTTPStatus.BAD_REQUEST)
+            return
+        
+        send_json(handler, {"status": "ok"})
+    except Exception as e:
+        log(f"[Routes] Error continuing route: {e}", level="ERROR")
+        send_json(handler, {"error": "Failed to continue route"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def handle_get_route_execution(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/routes/execution - Get current route execution state.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    if not state.route_executor:
+        send_json(handler, {"error": "Route executor not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+        return
+    
+    try:
+        execution_state = state.route_executor.get_execution_state()
+        send_json(handler, execution_state)
+    except Exception as e:
+        log(f"[Routes] Error getting execution state: {e}", level="ERROR")
+        send_json(handler, {"error": "Failed to get execution state"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
 def handle_server_restart(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     """Handle POST /api/server/restart - Restart server.
     

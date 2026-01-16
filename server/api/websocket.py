@@ -216,6 +216,79 @@ class WebSocketManager:
         }
         self._schedule_broadcast(json.dumps(message))
     
+    def broadcast_route_list_updated(self, routes: list) -> None:
+        """Broadcast updated route list to all clients.
+        
+        Args:
+            routes: List of route dictionaries.
+        """
+        message = {
+            "type": "route_list_updated",
+            "data": {
+                "routes": routes
+            }
+        }
+        self._schedule_broadcast(json.dumps(message))
+    
+    def broadcast_route_execution_started(self, route_id: str, route_name: str) -> None:
+        """Broadcast that route execution has started.
+        
+        Args:
+            route_id: ID of the route being executed.
+            route_name: Name of the route being executed.
+        """
+        message = {
+            "type": "route_execution_started",
+            "data": {
+                "routeId": route_id,
+                "routeName": route_name
+            }
+        }
+        self._schedule_broadcast(json.dumps(message))
+    
+    def broadcast_route_execution_progress(self, progress_data: Dict[str, Any]) -> None:
+        """Broadcast route execution progress update.
+        
+        Args:
+            progress_data: Progress data dictionary.
+        """
+        message = {
+            "type": "route_execution_progress",
+            "data": progress_data
+        }
+        self._schedule_broadcast(json.dumps(message))
+    
+    def broadcast_route_execution_stopped(self) -> None:
+        """Broadcast that route execution was stopped."""
+        message = {
+            "type": "route_execution_stopped",
+            "data": {}
+        }
+        self._schedule_broadcast(json.dumps(message))
+    
+    def broadcast_route_execution_completed(
+        self,
+        success: bool,
+        route_id: Optional[str] = None,
+        error: Optional[str] = None
+    ) -> None:
+        """Broadcast that route execution has completed.
+        
+        Args:
+            success: Whether execution completed successfully.
+            route_id: ID of the completed route.
+            error: Optional error message.
+        """
+        message = {
+            "type": "route_execution_completed",
+            "data": {
+                "success": success,
+                "routeId": route_id,
+                "error": error
+            }
+        }
+        self._schedule_broadcast(json.dumps(message))
+    
     def send_suspension_notice(self, session_id: str, message_text: str = "Your session has been suspended") -> None:
         """Send suspension notice to a specific client.
         

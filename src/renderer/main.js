@@ -12,9 +12,6 @@ if ('serviceWorker' in navigator) {
 const rotor = createRotorService(); // createRotorService is global from rotorService.js
 window.rotorService = rotor; // Make available globally for settings modal
 
-// Initialize Route Executor early so it's available for handlers
-const routeExecutor = new RouteExecutor(rotor);
-
 // Initialize WebSocket service for real-time updates
 const wsService = createWebSocketService(); // createWebSocketService is global from websocketService.js
 window.wsService = wsService; // Make available globally
@@ -86,7 +83,7 @@ mapView.setOnClick(async (azimuth, elevation) => {
   });
   try {
     // Klick auf Karte bricht Route ab
-    routeExecutor.stop();
+    await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
     // Sende Raw-Wert direkt an Motor
     await rotor.setAzimuthRaw(rawAzimuth);
   } catch (error) {
@@ -294,19 +291,19 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       // Abstract directions: 'left', 'right', 'up', 'down', 'stop', 'stop-azimuth', 'stop-elevation'
       if (['left', 'right', 'up', 'down'].includes(direction)) {
         // Manuelle Steuerung bricht Route ab
-        routeExecutor.stop();
+        await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
         await rotor.manualMove(direction);
       } else if (direction === 'home') {
         // Home bricht Route ab
-        routeExecutor.stop();
+        await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
         await rotor.home();
       } else if (direction === 'park') {
         // Park bricht Route ab
-        routeExecutor.stop();
+        await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
         await rotor.park();
       } else if (['stop', 'stop-azimuth', 'stop-elevation'].includes(direction)) {
         // Alles Stopp bricht auch Route ab
-        routeExecutor.stop();
+        await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
         await rotor.stopMotion();
       } else {
         console.warn(`Unknown direction: ${direction}`);
@@ -334,7 +331,7 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     logAction('Azimut-Befehl senden (Raw)', { raw: azimuth });
     try {
       // Goto Azimut bricht Route ab
-      routeExecutor.stop();
+      await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
       // Sende Raw-Wert direkt an Motor, ohne Umrechnung
       await rotor.setAzimuthRaw(azimuth);
     } catch (error) {
@@ -373,7 +370,7 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     logAction('Azimut/Elevation-Befehl senden (Raw)', { raw: { az: azimuth, el: elevation } });
     try {
       // Goto Az/El bricht Route ab
-      routeExecutor.stop();
+      await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
       // Sende Raw-Werte direkt an Motor, ohne Umrechnung
       await rotor.setAzElRaw({ az: azimuth, el: elevation });
     } catch (error) {
@@ -385,27 +382,37 @@ const controls = new Controls(document.querySelector('.controls-card'), {
   }
 });
 
-// Initialize Route Manager (with inline editing)
+// Initialize Route Manager (with server-side execution)
 const routeManager = new RouteManager(document.getElementById('routeManagerRoot'), {
   onAddRoute: async (route) => {
     logAction('Route hinzufügen', route);
-    const updatedRoutes = [...(config.savedRoutes || []), route];
-    config = await configStore.save({ savedRoutes: updatedRoutes });
-    routeManager.setRoutes(config.savedRoutes);
+    try {
+      await rotor.createRoute(route);
+      // Routes will be updated via WebSocket broadcast
+    } catch (error) {
+      logAction('Fehler beim Hinzufügen der Route', { error: error.message });
+      reportError(error);
+    }
   },
   onEditRoute: async (route) => {
     logAction('Route speichern', route);
-    const updatedRoutes = (config.savedRoutes || []).map(r => 
-      r.id === route.id ? route : r
-    );
-    config = await configStore.save({ savedRoutes: updatedRoutes });
-    routeManager.setRoutes(config.savedRoutes);
+    try {
+      await rotor.updateRoute(route.id, route);
+      // Routes will be updated via WebSocket broadcast
+    } catch (error) {
+      logAction('Fehler beim Speichern der Route', { error: error.message });
+      reportError(error);
+    }
   },
   onDeleteRoute: async (routeId) => {
     logAction('Route löschen', { id: routeId });
-    const updatedRoutes = (config.savedRoutes || []).filter(r => r.id !== routeId);
-    config = await configStore.save({ savedRoutes: updatedRoutes });
-    routeManager.setRoutes(config.savedRoutes);
+    try {
+      await rotor.deleteRoute(routeId);
+      // Routes will be updated via WebSocket broadcast
+    } catch (error) {
+      logAction('Fehler beim Löschen der Route', { error: error.message });
+      reportError(error);
+    }
   },
   onPlayRoute: async (route) => {
     if (!connected) {
@@ -415,57 +422,35 @@ const routeManager = new RouteManager(document.getElementById('routeManagerRoot'
     }
     logAction('Route starten', { id: route.id, name: route.name, steps: route.steps.length });
     try {
-      await routeExecutor.executeRoute(route);
+      await rotor.startRoute(route.id);
+      // Execution updates will come via WebSocket
     } catch (error) {
       logAction('Fehler bei Route-Ausführung', { error: error.message });
       reportError(error);
     }
   },
-  onStopRoute: () => {
+  onStopRoute: async () => {
     logAction('Route stoppen');
-    routeExecutor.stop();
+    try {
+      await rotor.stopRoute();
+    } catch (error) {
+      logAction('Fehler beim Stoppen der Route', { error: error.message });
+      reportError(error);
+    }
   },
-  onManualContinue: () => {
+  onManualContinue: async () => {
     logAction('Manuelles Fortfahren');
-    routeExecutor.continueFromManualWait();
+    try {
+      await rotor.continueRoute();
+    } catch (error) {
+      logAction('Fehler beim Fortfahren', { error: error.message });
+      reportError(error);
+    }
   }
 });
 
-// Setup route executor event listeners
-routeExecutor.onProgress((progressData) => {
-  // Update UI with progress
-  const routeId = routeExecutor.currentRoute?.id;
-  if (routeId) {
-    routeManager.setExecutionProgress(routeId, progressData);
-  }
-  
-  // Log significant progress events
-  if (progressData.type === 'step_started' || progressData.type === 'loop_iteration') {
-    logAction('Route-Fortschritt', progressData);
-  }
-});
-
-routeExecutor.onComplete((completeData) => {
-  logAction('Route abgeschlossen', { success: completeData.success, route: completeData.route?.name });
-  
-  // Clear execution state immediately
-  routeManager.clearExecution();
-  
-  if (completeData.success) {
-    // Success feedback
-    logAction('Route erfolgreich abgeschlossen', { route: completeData.route?.name });
-  } else {
-    // Error feedback
-    logAction('Route mit Fehler beendet', { error: completeData.error });
-  }
-});
-
-routeExecutor.onStop(() => {
-  logAction('Route gestoppt vom Benutzer');
-  
-  // Clear execution state immediately
-  routeManager.clearExecution();
-});
+// Route execution is now handled server-side via WebSocket events
+// (WebSocket handlers will be set up in setupWebSocket() below)
 
 const configStore = new ConfigStore();
 let config = configStore.loadSync();
@@ -487,14 +472,25 @@ configStore.load().then(loadedConfig => {
     config = loadedConfig;
     updateUIFromConfig();
     updateConeSettings(); // Ensure mapView has correct config after async load
-    // Update route manager with loaded routes
-    if (routeManager) {
-      routeManager.setRoutes(config.savedRoutes || []);
-    }
   }
+  
+  // Load routes from server (not from config anymore)
+  loadRoutesFromServer();
 }).catch(err => {
   console.warn('[main] Could not load config', err);
 });
+
+// Load routes from server
+async function loadRoutesFromServer() {
+  try {
+    const routes = await rotor.getRoutes();
+    if (routeManager) {
+      routeManager.setRoutes(routes);
+    }
+  } catch (err) {
+    console.warn('[main] Could not load routes from server', err);
+  }
+}
 
 // WebSocket setup for real-time synchronization
 async function setupWebSocket() {
@@ -574,10 +570,64 @@ async function setupWebSocket() {
         console.error('[main] Error updating speed after settings sync:', err);
       });
       updateConeSettings();
-      // Update route manager with synced routes
-      if (routeManager) {
-        routeManager.setRoutes(settings.savedRoutes || []);
+    }
+  });
+  
+  // Handle route list updates
+  wsService.on('route_list_updated', (data) => {
+    logAction('WebSocket: Routen-Liste aktualisiert');
+    if (routeManager && data.routes) {
+      routeManager.setRoutes(data.routes);
+    }
+  });
+  
+  // Handle route execution started
+  wsService.on('route_execution_started', (data) => {
+    logAction('WebSocket: Route gestartet', data);
+    if (routeManager && data.routeId) {
+      routeManager.setExecutionProgress(data.routeId, {
+        type: 'route_started',
+        routeName: data.routeName
+      });
+    }
+  });
+  
+  // Handle route execution progress
+  wsService.on('route_execution_progress', (data) => {
+    if (routeManager) {
+      // Extract route ID from current execution state
+      // The server doesn't send routeId in every progress update, so we need to track it
+      const executionState = routeManager.executingRouteId;
+      if (executionState) {
+        routeManager.setExecutionProgress(executionState, data);
       }
+    }
+    
+    // Log significant progress events
+    if (data.type === 'step_started' || data.type === 'loop_iteration') {
+      logAction('Route-Fortschritt', data);
+    }
+  });
+  
+  // Handle route execution stopped
+  wsService.on('route_execution_stopped', () => {
+    logAction('WebSocket: Route gestoppt');
+    if (routeManager) {
+      routeManager.clearExecution();
+    }
+  });
+  
+  // Handle route execution completed
+  wsService.on('route_execution_completed', (data) => {
+    logAction('WebSocket: Route abgeschlossen', data);
+    if (routeManager) {
+      routeManager.clearExecution();
+    }
+    
+    if (data.success) {
+      logAction('Route erfolgreich abgeschlossen', { routeId: data.routeId });
+    } else {
+      logAction('Route mit Fehler beendet', { error: data.error });
     }
   });
   
