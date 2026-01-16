@@ -1,3 +1,45 @@
 {
-  "routes": []
+  "routes": [
+    {
+      "id": "route_1768572298883_ttf93hzsa",
+      "name": "Turn 180",
+      "description": "",
+      "steps": [
+        {
+          "id": "route_1768572311642_e96ktpdmj",
+          "type": "loop",
+          "iterations": 1,
+          "steps": [
+            {
+              "id": "route_1768572315805_c205z4ir8",
+              "type": "position",
+              "name": "Position",
+              "azimuth": 0,
+              "elevation": 0
+            },
+            {
+              "id": "route_1768572318460_b8zd9uoaz",
+              "type": "wait",
+              "duration": 2000,
+              "message": ""
+            },
+            {
+              "id": "route_1768572323387_66ypjzwee",
+              "type": "position",
+              "name": "Position",
+              "azimuth": 180,
+              "elevation": 0
+            },
+            {
+              "id": "route_1768572329071_3cm979jie",
+              "type": "wait",
+              "duration": 2000,
+              "message": ""
+            }
+          ]
+        }
+      ],
+      "order": 0
+    }
+  ]
 }

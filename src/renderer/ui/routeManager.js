@@ -32,6 +32,28 @@ class RouteManager {
     this.routes.sort((a, b) => (a.order || 0) - (b.order || 0));
     this.render();
   }
+  
+  /**
+   * Save current input values from DOM to route object before re-rendering
+   */
+  saveCurrentInputValues(route) {
+    if (!route) return;
+    
+    const routeCard = this.root.querySelector(`[data-route-id="${route.id}"]`);
+    if (!routeCard || !routeCard.classList.contains('editing')) return;
+    
+    // Save route name
+    const nameInput = routeCard.querySelector('.route-name-input');
+    if (nameInput) {
+      route.name = nameInput.value;
+    }
+    
+    // Save route description
+    const descInput = routeCard.querySelector('.route-description-input');
+    if (descInput) {
+      route.description = descInput.value;
+    }
+  }
 
   /**
    * Enable/disable controls based on connection state
@@ -722,6 +744,11 @@ class RouteManager {
         this.openDropdowns.clear();
         // Only re-render if there were open dropdowns
         if (this.root.querySelector('.add-step-dropdown.open')) {
+          // Save current input values before re-rendering
+          const route = this.draftRoute || this.routes.find(r => this.expandedRoutes.has(r.id));
+          if (route) {
+            this.saveCurrentInputValues(route);
+          }
           this.render();
         }
       }
@@ -860,6 +887,11 @@ class RouteManager {
     if (this.expandedRoutes.has(routeId)) {
       this.expandedRoutes.delete(routeId);
     } else {
+      // Save current input values before expanding another route
+      const currentRoute = this.draftRoute || this.routes.find(r => this.expandedRoutes.has(r.id));
+      if (currentRoute) {
+        this.saveCurrentInputValues(currentRoute);
+      }
       this.expandedRoutes.add(routeId);
     }
     this.render();
@@ -907,6 +939,9 @@ class RouteManager {
     const route = this.draftRoute || this.routes.find(r => this.expandedRoutes.has(r.id));
     if (!route) return;
     
+    // Save current input values before re-rendering
+    this.saveCurrentInputValues(route);
+    
     // Create new step
     const newStep = this.createStepOfType(type);
     
@@ -949,6 +984,9 @@ class RouteManager {
   handleDeleteStep(pathStr) {
     const route = this.draftRoute || this.routes.find(r => this.expandedRoutes.has(r.id));
     if (!route) return;
+    
+    // Save current input values before re-rendering
+    this.saveCurrentInputValues(route);
     
     const path = pathStr.split('-').map(Number);
     this.deleteStepByPath(route, path);
