@@ -28,7 +28,6 @@ const pollingInput = document.getElementById('pollingInput');
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 const connectionStatus = document.getElementById('connectionStatus');
-const modeStatus = document.getElementById('modeStatus');
 const azValue = document.getElementById('azValue');
 const elValue = document.getElementById('elValue');
 const gotoAzInput = document.getElementById('gotoAzInput');
@@ -669,7 +668,6 @@ function updateUIFromConfig() {
   updateLimitInputsFromConfig();
   updateSpeedInputsFromConfig();
   updateRampInputsFromConfig();
-  updateModeLabel();
   updateConeSettings();
   controls.setPresetControlsVisible(Boolean(config.parkPositionsEnabled));
   
@@ -1161,12 +1159,6 @@ function handleStatus(status) {
     connectionStatus.classList.add('connected');
     connectionStatus.classList.remove('disconnected');
   }
-}
-
-function updateModeLabel() {
-  const mode = config.azimuthMode || 360;
-  modeStatus.textContent = `Modus: ${mode}deg`;
-  logAction('Modus-Label aktualisiert', { label: modeStatus.textContent });
 }
 
 function updateConeSettings() {

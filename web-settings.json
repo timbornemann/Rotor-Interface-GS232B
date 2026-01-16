@@ -8,7 +8,7 @@
   "mapZoomLevel": 15,
   "mapZoomMin": 5,
   "mapZoomMax": 25,
-  "coneAngle": 180,
+  "coneAngle": 45,
   "coneLength": 1000,
   "azimuthDisplayOffset": 0,
   "coneAngleMin": 1,
@@ -78,5 +78,7 @@
   "serverSessionTimeoutSMin": 60,
   "serverSessionTimeoutSMax": 3600,
   "serverMaxClientsMin": 1,
-  "serverMaxClientsMax": 100
+  "serverMaxClientsMax": 100,
+  "savedRoutes": [],
+  "savedPositions": []
 }
