@@ -70,6 +70,14 @@ const defaultConfig = {
   azimuthMaxLimit: 360,
   elevationMinLimit: 0,
   elevationMaxLimit: 90,
+
+  // Presets
+  parkPositionsEnabled: false,
+  homeAzimuth: 0,
+  homeElevation: 0,
+  parkAzimuth: 0,
+  parkElevation: 0,
+  autoParkOnDisconnect: false,
   
   // Calibration
   azimuthOffset: 0,

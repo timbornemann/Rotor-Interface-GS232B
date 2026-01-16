@@ -214,6 +214,14 @@ class RotorHandler(SimpleHTTPRequestHandler):
                 routes.handle_set_target_raw(self, self.state)
                 return
 
+            if parsed.path == "/api/rotor/home":
+                routes.handle_home(self, self.state)
+                return
+
+            if parsed.path == "/api/rotor/park":
+                routes.handle_park(self, self.state)
+                return
+
             if parsed.path == "/api/rotor/manual":
                 routes.handle_manual(self, self.state)
                 return

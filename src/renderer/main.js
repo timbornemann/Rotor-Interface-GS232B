@@ -289,6 +289,10 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       // Abstract directions: 'left', 'right', 'up', 'down', 'stop', 'stop-azimuth', 'stop-elevation'
       if (['left', 'right', 'up', 'down'].includes(direction)) {
         await rotor.manualMove(direction);
+      } else if (direction === 'home') {
+        await rotor.home();
+      } else if (direction === 'park') {
+        await rotor.park();
       } else if (['stop', 'stop-azimuth', 'stop-elevation'].includes(direction)) {
         await rotor.stopMotion();
       } else {
@@ -625,6 +629,7 @@ function updateUIFromConfig() {
   updateRampInputsFromConfig();
   updateModeLabel();
   updateConeSettings();
+  controls.setPresetControlsVisible(Boolean(config.parkPositionsEnabled));
   
   
   if (mapCoordinatesInput && config.mapLatitude !== null && config.mapLongitude !== null) {

@@ -111,6 +111,11 @@
           <button data-command="stop" class="danger">Alles Stopp</button>
         </div>
 
+        <div class="preset-controls hidden" id="presetControls">
+          <button data-command="home" class="secondary">Home</button>
+          <button data-command="park" class="secondary">Park</button>
+        </div>
+
 
         <div class="goto-form">
           <label>
@@ -515,6 +520,45 @@
                   <label for="settingsElScaleFactorInput">Elevation-Faktor</label>
                   <input id="settingsElScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
                 </div>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h4 class="card-title">Home/Park Presets</h4>
+              <p class="help-text">Feste Positionen für Home und Park (Raw-Hardwarewerte).</p>
+              <div class="form-row">
+                <label class="toggle-label">
+                  <input id="settingsParkPositionsEnabled" type="checkbox" class="toggle-input" />
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-text">Presets aktivieren</span>
+                </label>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="settingsHomeAzInput">Home Azimut (Raw)</label>
+                  <input id="settingsHomeAzInput" type="number" min="0" max="450" step="1" value="0" />
+                </div>
+                <div class="form-group">
+                  <label for="settingsHomeElInput">Home Elevation (Raw)</label>
+                  <input id="settingsHomeElInput" type="number" min="0" max="90" step="1" value="0" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="settingsParkAzInput">Park Azimut (Raw)</label>
+                  <input id="settingsParkAzInput" type="number" min="0" max="450" step="1" value="0" />
+                </div>
+                <div class="form-group">
+                  <label for="settingsParkElInput">Park Elevation (Raw)</label>
+                  <input id="settingsParkElInput" type="number" min="0" max="90" step="1" value="0" />
+                </div>
+              </div>
+              <div class="form-row">
+                <label class="toggle-label">
+                  <input id="settingsAutoParkOnDisconnect" type="checkbox" class="toggle-input" />
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-text">Auto-Park bei Disconnect</span>
+                </label>
               </div>
             </div>
 

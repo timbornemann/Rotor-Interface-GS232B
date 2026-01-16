@@ -458,6 +458,35 @@ main.dashboard {
   margin-top: 1rem;
 }
 
+.preset-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.8rem;
+}
+
+.preset-controls button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 0.6rem 0.5rem;
+  transition: all 0.2s ease;
+  min-height: 42px;
+}
+
+.preset-controls button:hover:not(:disabled) {
+  background: rgba(47, 212, 255, 0.15);
+  border-color: rgba(47, 212, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.preset-controls button:active:not(:disabled) {
+  transform: translateY(0);
+  background: rgba(47, 212, 255, 0.2);
+}
+
 .control-grid button {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.1);

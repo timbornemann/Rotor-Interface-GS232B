@@ -69,6 +69,14 @@ DEFAULT_CONFIG = {
     "azimuthMaxLimit": 450,
     "elevationMinLimit": 0,
     "elevationMaxLimit": 90,
+
+    # Presets
+    "parkPositionsEnabled": False,
+    "homeAzimuth": 0,
+    "homeElevation": 0,
+    "parkAzimuth": 0,
+    "parkElevation": 0,
+    "autoParkOnDisconnect": False,
     
     # Calibration
     "azimuthOffset": 0,
@@ -170,6 +178,15 @@ azimuthMinLimit=0
 azimuthMaxLimit=450
 elevationMinLimit=0
 elevationMaxLimit=90
+
+[Presets]
+; Home/Park presets (raw hardware positions)
+parkPositionsEnabled=false
+homeAzimuth=0
+homeElevation=0
+parkAzimuth=0
+parkElevation=0
+autoParkOnDisconnect=false
 
 [Calibration]
 ; Calibration offsets and scaling factors

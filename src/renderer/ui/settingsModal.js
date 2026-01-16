@@ -68,6 +68,14 @@ class SettingsModal {
       azimuthMaxLimit: { id: 'settingsAzMaxLimit', type: 'number' },
       elevationMinLimit: { id: 'settingsElMinLimit', type: 'number' },
       elevationMaxLimit: { id: 'settingsElMaxLimit', type: 'number' },
+
+      // Presets
+      parkPositionsEnabled: { id: 'settingsParkPositionsEnabled', type: 'checkbox' },
+      homeAzimuth: { id: 'settingsHomeAzInput', type: 'number' },
+      homeElevation: { id: 'settingsHomeElInput', type: 'number' },
+      parkAzimuth: { id: 'settingsParkAzInput', type: 'number' },
+      parkElevation: { id: 'settingsParkElInput', type: 'number' },
+      autoParkOnDisconnect: { id: 'settingsAutoParkOnDisconnect', type: 'checkbox' },
       
       // Server Settings
       serverHttpPort: { id: 'settingsServerHttpPort', type: 'number' },
@@ -122,6 +130,7 @@ class SettingsModal {
     this.setupRangeSync('settingsElSpeedRange', 'settingsElSpeedInput');
     this.setupLocationSearch();
     this.setupCoordinateSync();
+    this.setupPresetToggle();
 
     // Port refresh button
     const refreshBtn = document.getElementById('settingsRefreshPortsBtn');
@@ -189,6 +198,33 @@ class SettingsModal {
         range.value = input.value;
       });
     }
+  }
+
+  setupPresetToggle() {
+    const presetToggle = document.getElementById('settingsParkPositionsEnabled');
+    if (!presetToggle) {
+      return;
+    }
+
+    const updatePresetFields = () => {
+      const isEnabled = presetToggle.checked;
+      const fieldIds = [
+        'settingsHomeAzInput',
+        'settingsHomeElInput',
+        'settingsParkAzInput',
+        'settingsParkElInput',
+        'settingsAutoParkOnDisconnect'
+      ];
+      fieldIds.forEach((id) => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.disabled = !isEnabled;
+        }
+      });
+    };
+
+    presetToggle.addEventListener('change', updatePresetFields);
+    updatePresetFields();
   }
 
   switchSection(tabName) {
@@ -434,6 +470,12 @@ class SettingsModal {
       } else {
         element.value = value;
       }
+    }
+
+    // Ensure preset fields enable/disable state is synced
+    const presetToggle = document.getElementById('settingsParkPositionsEnabled');
+    if (presetToggle) {
+      presetToggle.dispatchEvent(new Event('change'));
     }
 
     // Sync range inputs with their number inputs

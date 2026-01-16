@@ -82,7 +82,12 @@ class RotorLogic:
             "azimuthOffset": 0.0,
             "elevationOffset": 0.0,
             "azimuthScaleFactor": 1.0,
-            "elevationScaleFactor": 1.0
+            "elevationScaleFactor": 1.0,
+            "parkPositionsEnabled": False,
+            "homeAzimuth": 0.0,
+            "homeElevation": 0.0,
+            "parkAzimuth": 0.0,
+            "parkElevation": 0.0
         }
 
     def start(self) -> None:
@@ -130,8 +135,57 @@ class RotorLogic:
         self.config["elevationOffset"] = safe_float("elevationOffset", 0.0)
         self.config["azimuthScaleFactor"] = safe_float("azimuthScaleFactor", 1.0)
         self.config["elevationScaleFactor"] = safe_float("elevationScaleFactor", 1.0)
+        self.config["parkPositionsEnabled"] = new_config.get("parkPositionsEnabled", False) in [True, "true", "True", 1]
+        self.config["homeAzimuth"] = safe_float("homeAzimuth", 0.0)
+        self.config["homeElevation"] = safe_float("homeElevation", 0.0)
+        self.config["parkAzimuth"] = safe_float("parkAzimuth", 0.0)
+        self.config["parkElevation"] = safe_float("parkElevation", 0.0)
         
         logger.info("Config updated: %s", self.config)
+
+    def _move_to_preset(self, preset: str) -> bool:
+        """Move rotor to a preset position (home or park).
+        
+        Args:
+            preset: Preset name, either "home" or "park".
+        
+        Returns:
+            True if the command was sent, False otherwise.
+        """
+        if not self.connection.is_connected():
+            logger.warning("Cannot move to %s: Not connected", preset)
+            return False
+
+        if not self.config.get("parkPositionsEnabled", False):
+            logger.warning("Cannot move to %s: presets disabled", preset)
+            return False
+
+        az_key = f"{preset}Azimuth"
+        el_key = f"{preset}Elevation"
+        az = self.config.get(az_key)
+        el = self.config.get(el_key)
+        if az is None or el is None:
+            logger.warning("Cannot move to %s: preset values missing", preset)
+            return False
+
+        try:
+            az_value = float(az)
+            el_value = float(el)
+        except (TypeError, ValueError):
+            logger.warning("Cannot move to %s: invalid preset values", preset)
+            return False
+
+        self.set_target_raw(az_value, el_value)
+        logger.info("Preset move issued: %s -> az=%s el=%s", preset, az_value, el_value)
+        return True
+
+    def home(self) -> bool:
+        """Move rotor to the Home preset."""
+        return self._move_to_preset("home")
+
+    def park(self) -> bool:
+        """Move rotor to the Park preset."""
+        return self._move_to_preset("park")
 
     def set_target(self, az: Optional[float], el: Optional[float]) -> None:
         """Set a target position (Move Command).
@@ -421,4 +475,3 @@ class RotorLogic:
         if elapsed >= ramp_down_time:
             self.stopping = False
             self.connection.send_command("S")
-
