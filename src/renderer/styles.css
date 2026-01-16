@@ -2616,32 +2616,55 @@ button.refreshing .icon {
 .route-card {
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
   border-radius: 10px;
   padding: 0.75rem;
+  padding-bottom: 0;
   transition: all 0.2s ease;
   position: relative;
+  overflow: visible;
 }
 
 .route-card:hover {
   background: rgba(0, 0, 0, 0.4);
   border-color: rgba(47, 212, 255, 0.2);
+  border-bottom: none;
+}
+
+.route-card:hover .route-expand-btn {
+  border-color: rgba(47, 212, 255, 0.2);
+  border-top-color: rgba(47, 212, 255, 0.15);
 }
 
 .route-card.executing {
   border-color: rgba(47, 212, 255, 0.6);
+  border-bottom: none;
   background: rgba(47, 212, 255, 0.08);
   /* Animation removed - could block scrolling */
+}
+
+.route-card.executing .route-expand-btn {
+  border-color: rgba(47, 212, 255, 0.6);
+  border-top-color: rgba(47, 212, 255, 0.4);
 }
 
 .route-card.editing {
   background: rgba(47, 212, 255, 0.05);
   border-color: rgba(47, 212, 255, 0.3);
+  border-bottom: none;
   padding: 1rem;
+  padding-bottom: 0;
 }
 
 .route-card.editing:hover {
   background: rgba(47, 212, 255, 0.05);
   border-color: rgba(47, 212, 255, 0.4);
+  border-bottom: none;
+}
+
+.route-card.editing:hover .route-expand-btn {
+  border-color: rgba(47, 212, 255, 0.4);
+  border-top-color: rgba(47, 212, 255, 0.3);
 }
 
 .route-header {
@@ -2840,7 +2863,7 @@ button.refreshing .icon {
 }
 
 .route-expand-btn {
-  width: 100%;
+  width: calc(100% + 1.5rem);
   padding: 0.5rem;
   display: flex;
   align-items: center;
@@ -2849,10 +2872,12 @@ button.refreshing .icon {
   border-radius: 0 0 10px 10px;
   transition: all 0.2s ease;
   background: rgba(255, 255, 255, 0.02);
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
-  margin-top: 0.5rem;
+  margin-top: 0;
+  margin-left: -0.75rem;
+  margin-right: -0.75rem;
   font-size: 0.8rem;
   color: var(--muted);
 }
