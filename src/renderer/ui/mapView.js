@@ -10,6 +10,8 @@ class MapView {
     this.latitude = null;
     this.longitude = null;
     this.satelliteMapEnabled = false;
+    this.mapSource = 'arcgis'; // 'arcgis', 'osm', 'google'
+    this.mapType = 'satellite'; // 'satellite', 'terrain', 'standard'
     this.mapImage = null;
     this.mapLoading = false;
     this.zoomLevel = 15;
@@ -297,6 +299,48 @@ class MapView {
     }
   }
 
+  setMapConfig(enabled, source = 'arcgis', type = 'satellite') {
+    this.satelliteMapEnabled = enabled;
+    this.mapSource = source;
+    this.mapType = type;
+    if (enabled && this.latitude !== null && this.longitude !== null) {
+      this.tileCache.clear();
+      this.loadMap();
+    } else {
+      this.mapImage = null;
+      this.update(this.lastAzimuth || 0, this.lastElevation || 0);
+    }
+  }
+
+  // Generiere Tile-URL basierend auf Quelle und Typ
+  getTileUrl(zoom, tileX, tileY) {
+    if (this.mapSource === 'osm') {
+      // OpenStreetMap - nur Standard-Karten (ignoriert mapType)
+      return `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`;
+    } else if (this.mapSource === 'google') {
+      // Google Maps - verschiedene Typen
+      // Hinweis: Google Maps Tiles können ohne API-Key rate-limited sein
+      if (this.mapType === 'satellite') {
+        return `https://mt0.google.com/vt/lyrs=s&x=${tileX}&y=${tileY}&z=${zoom}`;
+      } else if (this.mapType === 'terrain') {
+        return `https://mt0.google.com/vt/lyrs=t&x=${tileX}&y=${tileY}&z=${zoom}`;
+      } else {
+        // Standard/Roadmap
+        return `https://mt0.google.com/vt/lyrs=m&x=${tileX}&y=${tileY}&z=${zoom}`;
+      }
+    } else {
+      // ArcGIS (Standard)
+      if (this.mapType === 'satellite') {
+        return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`;
+      } else if (this.mapType === 'terrain') {
+        return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/${zoom}/${tileY}/${tileX}`;
+      } else {
+        // Standard/Street
+        return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${zoom}/${tileY}/${tileX}`;
+      }
+    }
+  }
+
   // Berechne Pixel-Position innerhalb eines Tiles für gegebene Koordinaten
   getPixelPositionInTile(lat, lon, zoom, tileX, tileY) {
     const n = Math.pow(2, zoom);
@@ -355,7 +399,7 @@ class MapView {
           const tx = centerTileXFloor + dx;
           const ty = centerTileYFloor + dy;
           if (tx >= 0 && tx < n && ty >= 0 && ty < n) {
-            const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
+            const url = this.getTileUrl(zoom, tx, ty);
             tiles.push({ url, dx, dy, tx, ty });
           }
         }

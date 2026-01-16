@@ -80,5 +80,7 @@
   "serverMaxClientsMin": 1,
   "serverMaxClientsMax": 100,
   "savedRoutes": [],
-  "savedPositions": []
+  "savedPositions": [],
+  "mapSource": "google",
+  "mapType": "satellite"
 }

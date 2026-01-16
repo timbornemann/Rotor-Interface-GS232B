@@ -31,6 +31,8 @@ const defaultConfig = {
   mapLatitude: null,
   mapLongitude: null,
   satelliteMapEnabled: false,
+  mapSource: 'arcgis', // 'arcgis', 'osm', 'google'
+  mapType: 'satellite', // 'satellite', 'terrain', 'standard'
   mapZoomLevel: 15,
   mapZoomMin: 5,
   mapZoomMax: 25,

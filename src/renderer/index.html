@@ -382,8 +382,26 @@
                 <label class="toggle-label">
                   <input id="settingsSatelliteMapToggle" type="checkbox" class="toggle-input" />
                   <span class="toggle-switch"></span>
-                  <span class="toggle-text">Satellitenkarte anzeigen</span>
+                  <span class="toggle-text">Karte anzeigen</span>
                 </label>
+              </div>
+              <div class="form-group">
+                <label for="settingsMapSourceSelect">Kartenquelle</label>
+                <select id="settingsMapSourceSelect">
+                  <option value="arcgis">ArcGIS (aktuell)</option>
+                  <option value="osm">OpenStreetMap</option>
+                  <option value="google">Google Maps</option>
+                </select>
+                <p class="help-text">Wähle die Quelle für die Kartenkacheln.</p>
+              </div>
+              <div class="form-group">
+                <label for="settingsMapTypeSelect">Kartentyp</label>
+                <select id="settingsMapTypeSelect">
+                  <option value="satellite">Satellit</option>
+                  <option value="terrain">Terrain</option>
+                  <option value="standard">Standard</option>
+                </select>
+                <p class="help-text">Wähle den Typ der Kartenansicht.</p>
               </div>
             </div>
             

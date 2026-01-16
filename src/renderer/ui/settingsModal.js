@@ -36,6 +36,8 @@ class SettingsModal {
       
       // Map
       satelliteMapEnabled: { id: 'settingsSatelliteMapToggle', type: 'checkbox' },
+      mapSource: { id: 'settingsMapSourceSelect', type: 'select' },
+      mapType: { id: 'settingsMapTypeSelect', type: 'select' },
       mapZoomLevel: { id: 'settingsMapZoomLevel', type: 'number' },
       mapZoomMin: { id: 'settingsMapZoomMin', type: 'number' },
       mapZoomMax: { id: 'settingsMapZoomMax', type: 'number' },
@@ -137,6 +139,7 @@ class SettingsModal {
     this.setupLocationSearch();
     this.setupCoordinateSync();
     this.setupPresetToggle();
+    this.setupMapSourceTypeSync();
 
     // Port refresh button
     const refreshBtn = document.getElementById('settingsRefreshPortsBtn');
@@ -224,6 +227,33 @@ class SettingsModal {
 
     presetToggle.addEventListener('change', updatePresetFields);
     updatePresetFields();
+  }
+
+  setupMapSourceTypeSync() {
+    const mapSourceSelect = document.getElementById('settingsMapSourceSelect');
+    const mapTypeSelect = document.getElementById('settingsMapTypeSelect');
+    
+    if (!mapSourceSelect || !mapTypeSelect) {
+      return;
+    }
+
+    const updateMapTypeAvailability = () => {
+      const source = mapSourceSelect.value;
+      // OpenStreetMap unterstützt nur Standard-Karten
+      if (source === 'osm') {
+        mapTypeSelect.disabled = true;
+        // Setze auf Standard, falls nicht bereits gesetzt
+        if (mapTypeSelect.value !== 'standard') {
+          mapTypeSelect.value = 'standard';
+        }
+      } else {
+        mapTypeSelect.disabled = false;
+      }
+    };
+
+    mapSourceSelect.addEventListener('change', updateMapTypeAvailability);
+    // Initial update
+    updateMapTypeAvailability();
   }
 
   switchSection(tabName) {

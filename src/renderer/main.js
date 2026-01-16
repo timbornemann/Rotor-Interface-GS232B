@@ -682,7 +682,9 @@ function updateUIFromConfig() {
   if (config.mapLatitude !== null && config.mapLongitude !== null) {
     mapView.setCoordinates(config.mapLatitude, config.mapLongitude);
   }
-  mapView.setSatelliteMapEnabled(config.satelliteMapEnabled || false);
+  const mapSource = config.mapSource || 'arcgis';
+  const mapType = config.mapType || 'satellite';
+  mapView.setMapConfig(config.satelliteMapEnabled || false, mapSource, mapType);
   updateOffsetInputsFromConfig();
   updateScaleFactorInputsFromConfig();
 }
