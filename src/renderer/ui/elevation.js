@@ -21,10 +21,24 @@ class Elevation {
     const centerX = 100;
     const centerY = 180;
     
-    // Mehrschichtige Hintergrund-Bögen für professionelle Tiefe
+    // Viertelkreis-Bogen: von rechts (0°) nach oben (90°)
+    // Nach außen gewölbt (konvex) - der Bogen wölbt sich vom Pivot-Punkt weg
+    // Start: rechts (centerX + radius, centerY)
+    // Ende: oben (centerX, centerY - radius)
+    // Der Bogen wird um den Pivot-Punkt (centerX, centerY) gezeichnet
+    const arcStartX = centerX + radius; // Rechts (0°)
+    const arcStartY = centerY;
+    const arcEndX = centerX; // Oben (90°)
+    const arcEndY = centerY - radius;
+    
+    // Arc-Parameter: large-arc-flag=0 (kleiner Bogen), sweep-flag=0 (gegen Uhrzeigersinn)
+    // Dies erzeugt einen nach außen gewölbten Bogen
+    const arcPath = `M ${arcStartX} ${arcStartY} A ${radius} ${radius} 0 0 0 ${arcEndX} ${arcEndY}`;
+    
+    // Mehrschichtige Hintergrund-Bögen für professionelle Tiefe (nur Viertelkreis)
     // Tiefste Schicht - sehr subtil
     const bgArc1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    bgArc1.setAttribute('d', `M ${centerX - radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX + radius} ${centerY}`);
+    bgArc1.setAttribute('d', arcPath);
     bgArc1.setAttribute('fill', 'none');
     bgArc1.setAttribute('stroke', 'rgba(47, 212, 255, 0.08)');
     bgArc1.setAttribute('stroke-width', '4');
@@ -32,15 +46,15 @@ class Elevation {
     
     // Mittlere Schicht
     const bgArc2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    bgArc2.setAttribute('d', `M ${centerX - radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX + radius} ${centerY}`);
+    bgArc2.setAttribute('d', arcPath);
     bgArc2.setAttribute('fill', 'none');
     bgArc2.setAttribute('stroke', 'rgba(47, 212, 255, 0.12)');
     bgArc2.setAttribute('stroke-width', '3');
     scaleGroup.appendChild(bgArc2);
     
-    // Haupt-Bogen mit Gradient und Schatten
+    // Haupt-Bogen mit Gradient und Schatten (Viertelkreis)
     const mainArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    mainArc.setAttribute('d', `M ${centerX - radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX + radius} ${centerY}`);
+    mainArc.setAttribute('d', arcPath);
     mainArc.setAttribute('fill', 'none');
     mainArc.setAttribute('stroke', 'url(#elevationArcGradient)');
     mainArc.setAttribute('stroke-width', '3');
@@ -48,10 +62,15 @@ class Elevation {
     mainArc.setAttribute('filter', 'url(#elevationShadow)');
     scaleGroup.appendChild(mainArc);
     
-    // Innerer Bogen für zusätzliche Tiefe
-    const innerArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    // Innerer Bogen für zusätzliche Tiefe (Viertelkreis)
     const innerRadius = radius - 8;
-    innerArc.setAttribute('d', `M ${centerX - innerRadius} ${centerY} A ${innerRadius} ${innerRadius} 0 0 1 ${centerX + innerRadius} ${centerY}`);
+    const innerStartX = centerX + innerRadius;
+    const innerStartY = centerY;
+    const innerEndX = centerX;
+    const innerEndY = centerY - innerRadius;
+    const innerArcPath = `M ${innerStartX} ${innerStartY} A ${innerRadius} ${innerRadius} 0 0 0 ${innerEndX} ${innerEndY}`;
+    const innerArc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    innerArc.setAttribute('d', innerArcPath);
     innerArc.setAttribute('fill', 'none');
     innerArc.setAttribute('stroke', 'rgba(47, 212, 255, 0.25)');
     innerArc.setAttribute('stroke-width', '1');
@@ -86,9 +105,8 @@ class Elevation {
       }
       scaleGroup.appendChild(line);
       
-      // Text-Labels auf beiden Seiten des Bogens
+      // Text-Label außen (nur ein Label pro Winkel)
       if (isLabeled) {
-        // Label außen (rechts vom Bogen)
         const textOuter = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         const outerOffset = 30;
         const textOuterX = x - Math.cos(rad) * outerOffset;
@@ -103,24 +121,6 @@ class Elevation {
         textOuter.setAttribute('class', 'scale-label scale-label-outer');
         textOuter.textContent = `${angle}°`;
         scaleGroup.appendChild(textOuter);
-        
-        // Label innen (links vom Bogen) - nur für bestimmte Winkel
-        if (angle >= 15 && angle <= 75) {
-          const textInner = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          const innerOffset = 15;
-          const textInnerX = x - Math.cos(rad) * innerOffset;
-          const textInnerY = y + Math.sin(rad) * innerOffset;
-          textInner.setAttribute('x', textInnerX.toString());
-          textInner.setAttribute('y', textInnerY.toString());
-          textInner.setAttribute('text-anchor', 'middle');
-          textInner.setAttribute('dominant-baseline', 'middle');
-          textInner.setAttribute('fill', 'rgba(47, 212, 255, 0.6)');
-          textInner.setAttribute('font-size', '11');
-          textInner.setAttribute('font-weight', '600');
-          textInner.setAttribute('class', 'scale-label scale-label-inner');
-          textInner.textContent = `${angle}°`;
-          scaleGroup.appendChild(textInner);
-        }
       }
     }
   }
