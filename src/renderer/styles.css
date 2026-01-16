@@ -520,6 +520,10 @@ main.dashboard {
   border-color: rgba(247, 107, 107, 0.5);
 }
 
+.control-grid button[data-command="stop"] {
+  grid-column: span 3;
+}
+
 .speed-controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

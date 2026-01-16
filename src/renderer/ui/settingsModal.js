@@ -208,19 +208,12 @@ class SettingsModal {
 
     const updatePresetFields = () => {
       const isEnabled = presetToggle.checked;
-      const fieldIds = [
-        'settingsHomeAzInput',
-        'settingsHomeElInput',
-        'settingsParkAzInput',
-        'settingsParkElInput',
-        'settingsAutoParkOnDisconnect'
-      ];
-      fieldIds.forEach((id) => {
-        const element = document.getElementById(id);
-        if (element) {
-          element.disabled = !isEnabled;
-        }
-      });
+      // Nur Auto-Park bei Disconnect hängt von der Aktivierung ab
+      // Home/Park-Positionen können immer eingestellt werden
+      const autoParkElement = document.getElementById('settingsAutoParkOnDisconnect');
+      if (autoParkElement) {
+        autoParkElement.disabled = !isEnabled;
+      }
     };
 
     presetToggle.addEventListener('change', updatePresetFields);
