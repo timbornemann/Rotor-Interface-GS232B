@@ -93,7 +93,7 @@ mapView.setOnClick(async (azimuth, elevation) => {
 const lastStatusValue = document.getElementById('lastStatusValue');
 const mapCoordinatesInput = document.getElementById('mapCoordinatesInput');
 const loadMapBtn = document.getElementById('loadMapBtn');
-const satelliteMapToggle = document.getElementById('satelliteMapToggle');
+// satelliteMapToggle removed - now in settings modal
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const azLimitMinInput = document.getElementById('azLimitMinInput');
@@ -676,7 +676,7 @@ function updateUIFromConfig() {
   if (mapCoordinatesInput && config.mapLatitude !== null && config.mapLongitude !== null) {
     mapCoordinatesInput.value = `${config.mapLatitude}, ${config.mapLongitude}`;
   }
-  if (satelliteMapToggle) satelliteMapToggle.checked = config.satelliteMapEnabled || false;
+  // Satellite map toggle is now in settings modal, no need to update here
 
   mapView.setZoomLimits(config.mapZoomMin, config.mapZoomMax, config.mapZoomLevel);
   if (config.mapLatitude !== null && config.mapLongitude !== null) {
@@ -736,9 +736,7 @@ async function init() {
   if (loadMapBtn) {
     loadMapBtn.addEventListener('click', () => void handleLoadMap());
   }
-  if (satelliteMapToggle) {
-    satelliteMapToggle.addEventListener('change', () => void handleSatelliteMapToggle());
-  }
+  // Satellite map toggle is now in settings modal, no event handler needed here
   if (zoomInBtn) {
     zoomInBtn.addEventListener('click', () => mapView.setZoom(mapView.zoomLevel + 1));
   }
@@ -1189,7 +1187,8 @@ async function handleLoadMap() {
     config = await configStore.save({ mapLatitude: lat, mapLongitude: lon });
     updateConeSettings(); // Ensure mapView has latest config
 
-    if (satelliteMapToggle.checked) {
+    // Load map if satellite map is enabled (check from config)
+    if (config.satelliteMapEnabled) {
       loadMapBtn.disabled = true;
       loadMapBtn.textContent = 'Lädt...';
       await mapView.loadMap();
@@ -1203,20 +1202,8 @@ async function handleLoadMap() {
   }
 }
 
-async function handleSatelliteMapToggle() {
-  const enabled = satelliteMapToggle.checked;
-  logAction('Satellitenansicht zweck', { enabled });
-  mapView.setSatelliteMapEnabled(enabled);
-  config = await configStore.save({ satelliteMapEnabled: enabled });
-  updateConeSettings(); // Ensure mapView has latest config
-
-  if (enabled && mapView.latitude !== null) {
-      // Refresh map
-      try {
-           await mapView.loadMap();
-      } catch(e) { reportError(e); }
-  }
-}
+// handleSatelliteMapToggle removed - functionality moved to settings modal
+// The settings modal handles satellite map toggle changes via the save callback
 
 function reportError(error) {
   const message = error instanceof Error ? error.message : String(error);

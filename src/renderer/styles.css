@@ -1654,6 +1654,11 @@ button.refreshing .icon {
 .toggle-text {
   font-size: 0.9rem;
   color: var(--text);
+}
+
+.toggle-text {
+  font-size: 0.9rem;
+  color: var(--text);
   flex: 1;
   line-height: 1.4;
 }
