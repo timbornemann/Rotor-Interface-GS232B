@@ -141,12 +141,12 @@ class MapView {
   }
 
   setupZoomHandlers() {
-    // Mausrad-Zoom
-    this.canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -1 : 1;
-      this.setZoom(this.zoomLevel + delta);
-    });
+    // Mausrad-Zoom deaktiviert - nur Plus/Minus-Buttons werden verwendet
+    // this.canvas.addEventListener('wheel', (e) => {
+    //   e.preventDefault();
+    //   const delta = e.deltaY > 0 ? -1 : 1;
+    //   this.setZoom(this.zoomLevel + delta);
+    // });
   }
 
   setupClickHandler() {
