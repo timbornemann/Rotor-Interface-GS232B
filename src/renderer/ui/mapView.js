@@ -670,38 +670,212 @@ class MapView {
     const leftY = Math.sin(leftRad) * lengthInPixels;
     const rightX = Math.cos(rightRad) * lengthInPixels;
     const rightY = Math.sin(rightRad) * lengthInPixels;
+
     
-    // Zeichne Kegel (als gefülltes Dreieck)
-    ctx.fillStyle = 'rgba(47, 212, 255, 0.3)'; // Transparentes Blau
+    // ===== RADAR-STRAHL DESIGN =====
+    
+    // 1. Basis-Füllung mit Gradient (vom Zentrum zur Spitze)
+    const baseGradient = ctx.createLinearGradient(0, 0, tipX, tipY);
+    baseGradient.addColorStop(0, 'rgba(47, 212, 255, 0.54)');
+    baseGradient.addColorStop(0.5, 'rgba(47, 212, 255, 0.36)');
+    baseGradient.addColorStop(1, 'rgba(47, 212, 255, 0.14)');
+    
+    ctx.fillStyle = baseGradient;
     ctx.beginPath();
-    ctx.moveTo(0, 0); // Spitze am Zentrum
-    ctx.lineTo(leftX, leftY); // Linke Kante
-    ctx.lineTo(rightX, rightY); // Rechte Kante
+    ctx.moveTo(0, 0);
+    ctx.lineTo(leftX, leftY);
+    ctx.lineTo(rightX, rightY);
     ctx.closePath();
     ctx.fill();
     
-    // Zeichne Kegel-Outline
-    ctx.strokeStyle = '#2fd4ff';
-    ctx.lineWidth = 2;
+    // 2. Radar-Scan-Linien (konzentrische Bögen im Kegel)
+    const scanSteps = 8;
+    for (let i = 1; i <= scanSteps; i++) {
+      const progress = i / scanSteps;
+      const scanLength = lengthInPixels * progress;
+      
+      // Berechne Punkte auf linker und rechter Kante
+      const scanLeftX = Math.cos(leftRad) * scanLength;
+      const scanLeftY = Math.sin(leftRad) * scanLength;
+      const scanRightX = Math.cos(rightRad) * scanLength;
+      const scanRightY = Math.sin(rightRad) * scanLength;
+      
+      // Zeichne Bogen zwischen den Punkten
+      ctx.strokeStyle = `rgba(47, 212, 255, ${0.66 - progress * 0.3})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(scanLeftX, scanLeftY);
+      
+      // Zeichne mehrere Segmente für einen glatten Bogen
+      const segments = 12;
+      for (let s = 0; s <= segments; s++) {
+        const t = s / segments;
+        const currentRad = leftRad + (rightRad - leftRad) * t;
+        const x = Math.cos(currentRad) * scanLength;
+        const y = Math.sin(currentRad) * scanLength;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    
+    // 3. Radiale Scan-Linien (vom Zentrum nach außen)
+    const radialLines = 5;
+    for (let i = 0; i <= radialLines; i++) {
+      const t = i / radialLines;
+      const currentRad = leftRad + (rightRad - leftRad) * t;
+      const endX = Math.cos(currentRad) * lengthInPixels;
+      const endY = Math.sin(currentRad) * lengthInPixels;
+      
+      // Gestrichelte Linie mit abnehmendem Alpha
+      ctx.strokeStyle = `rgba(47, 212, 255, ${0.54 - Math.abs(t - 0.5) * 0.24})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    
+    // 4. Haupt-Kanten (scharf und präzise)
+    ctx.strokeStyle = 'rgba(47, 212, 255, 0.95)';
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     ctx.moveTo(0, 0);
-    ctx.lineTo(leftX, leftY); // Linke Kante
-    ctx.lineTo(rightX, rightY); // Rechte Kante
-    ctx.closePath();
+    ctx.lineTo(leftX, leftY);
     ctx.stroke();
     
-    // Zeichne Mittelstrich (vom Zentrum zur Spitze)
-    ctx.strokeStyle = '#2fd4ff';
-    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(rightX, rightY);
+    ctx.stroke();
+    
+    // 5. Äußerer Bogen an der Spitze
+    ctx.strokeStyle = 'rgba(47, 212, 255, 0.9)';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    for (let s = 0; s <= 20; s++) {
+      const t = s / 20;
+      const currentRad = leftRad + (rightRad - leftRad) * t;
+      const x = Math.cos(currentRad) * lengthInPixels;
+      const y = Math.sin(currentRad) * lengthInPixels;
+      if (s === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+    
+    // 6. Mittel-Achse (Ziellinie)
+    ctx.strokeStyle = 'rgba(47, 212, 255, 0.78)';
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([8, 4]);
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(tipX, tipY);
     ctx.stroke();
-
-    // Zeichne Spitze (Kreis)
-    ctx.fillStyle = '#ffb347';
+    ctx.setLineDash([]);
+    
+    // Overlay mit voller Linie für Highlight
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(tipX, tipY, 6, 0, Math.PI * 2);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+    
+    // 7. Reichweiten-Markierungen
+    const rangeMarkers = [0.25, 0.5, 0.75, 1.0];
+    rangeMarkers.forEach((progress, index) => {
+      const markerLength = lengthInPixels * progress;
+      
+      // Zeichne kurze Markierungen auf der Mittelachse
+      const markerX = Math.cos(rad) * markerLength;
+      const markerY = Math.sin(rad) * markerLength;
+      
+      // Kleiner Kreis als Marker
+      ctx.fillStyle = index === rangeMarkers.length - 1 
+        ? 'rgba(255, 179, 71, 0.9)' 
+        : 'rgba(47, 212, 255, 0.72)';
+      ctx.beginPath();
+      ctx.arc(markerX, markerY, 3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Ring um den Marker
+      ctx.strokeStyle = index === rangeMarkers.length - 1
+        ? 'rgba(255, 179, 71, 0.95)'
+        : 'rgba(47, 212, 255, 0.84)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(markerX, markerY, 4.8, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    
+    // 8. Ziel-Punkt an der Spitze (Target)
+    // Äußerer Ring
+    ctx.strokeStyle = 'rgba(255, 179, 71, 0.72)';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Mittlerer Ring
+    ctx.strokeStyle = 'rgba(255, 179, 71, 0.9)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 5, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Zentraler Punkt
+    ctx.fillStyle = 'rgba(255, 179, 71, 1.0)';
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Highlight-Punkt
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 9. Fadenkreuz am Ziel
+    const crosshairSize = 12;
+    ctx.strokeStyle = 'rgba(255, 179, 71, 0.84)';
+    ctx.lineWidth = 1.2;
+    
+    // Horizontal
+    ctx.beginPath();
+    ctx.moveTo(tipX - crosshairSize, tipY);
+    ctx.lineTo(tipX - 6, tipY);
+    ctx.moveTo(tipX + 6, tipY);
+    ctx.lineTo(tipX + crosshairSize, tipY);
+    ctx.stroke();
+    
+    // Vertikal
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY - crosshairSize);
+    ctx.lineTo(tipX, tipY - 6);
+    ctx.moveTo(tipX, tipY + 6);
+    ctx.lineTo(tipX, tipY + crosshairSize);
+    ctx.stroke();
+    
+    // 10. Zentrum-Ursprung
+    ctx.fillStyle = 'rgba(47, 212, 255, 0.9)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.strokeStyle = 'rgba(47, 212, 255, 1.0)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Zentraler Punkt
+    ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.restore();
