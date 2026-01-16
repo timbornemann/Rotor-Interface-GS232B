@@ -99,7 +99,7 @@
             {
               "id": "route_1768328896940_52td5ybkc",
               "type": "wait",
-              "duration": 5000,
+              "duration": 2000,
               "message": ""
             },
             {
@@ -108,6 +108,12 @@
               "name": "Position",
               "azimuth": 180,
               "elevation": 0
+            },
+            {
+              "id": "route_1768564515184_bhxk9pbb7",
+              "type": "wait",
+              "duration": 2000,
+              "message": ""
             }
           ]
         }

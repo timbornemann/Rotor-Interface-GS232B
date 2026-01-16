@@ -12,6 +12,9 @@ if ('serviceWorker' in navigator) {
 const rotor = createRotorService(); // createRotorService is global from rotorService.js
 window.rotorService = rotor; // Make available globally for settings modal
 
+// Initialize Route Executor early so it's available for handlers
+const routeExecutor = new RouteExecutor(rotor);
+
 // Initialize WebSocket service for real-time updates
 const wsService = createWebSocketService(); // createWebSocketService is global from websocketService.js
 window.wsService = wsService; // Make available globally
@@ -82,6 +85,8 @@ mapView.setOnClick(async (azimuth, elevation) => {
     candidates: candidates.map(c => c.toFixed(1))
   });
   try {
+    // Klick auf Karte bricht Route ab
+    routeExecutor.stop();
     // Sende Raw-Wert direkt an Motor
     await rotor.setAzimuthRaw(rawAzimuth);
   } catch (error) {
@@ -288,12 +293,20 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     try {
       // Abstract directions: 'left', 'right', 'up', 'down', 'stop', 'stop-azimuth', 'stop-elevation'
       if (['left', 'right', 'up', 'down'].includes(direction)) {
+        // Manuelle Steuerung bricht Route ab
+        routeExecutor.stop();
         await rotor.manualMove(direction);
       } else if (direction === 'home') {
+        // Home bricht Route ab
+        routeExecutor.stop();
         await rotor.home();
       } else if (direction === 'park') {
+        // Park bricht Route ab
+        routeExecutor.stop();
         await rotor.park();
       } else if (['stop', 'stop-azimuth', 'stop-elevation'].includes(direction)) {
+        // Alles Stopp bricht auch Route ab
+        routeExecutor.stop();
         await rotor.stopMotion();
       } else {
         console.warn(`Unknown direction: ${direction}`);
@@ -320,6 +333,8 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     
     logAction('Azimut-Befehl senden (Raw)', { raw: azimuth });
     try {
+      // Goto Azimut bricht Route ab
+      routeExecutor.stop();
       // Sende Raw-Wert direkt an Motor, ohne Umrechnung
       await rotor.setAzimuthRaw(azimuth);
     } catch (error) {
@@ -357,6 +372,8 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     
     logAction('Azimut/Elevation-Befehl senden (Raw)', { raw: { az: azimuth, el: elevation } });
     try {
+      // Goto Az/El bricht Route ab
+      routeExecutor.stop();
       // Sende Raw-Werte direkt an Motor, ohne Umrechnung
       await rotor.setAzElRaw({ az: azimuth, el: elevation });
     } catch (error) {
@@ -367,9 +384,6 @@ const controls = new Controls(document.querySelector('.controls-card'), {
     handleSpeedChange(speedSettings).catch(reportError);
   }
 });
-
-// Initialize Route Executor
-const routeExecutor = new RouteExecutor(rotor);
 
 // Initialize Route Manager (with inline editing)
 const routeManager = new RouteManager(document.getElementById('routeManagerRoot'), {
