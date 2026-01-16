@@ -24,7 +24,6 @@
   <header class="top-bar">
     <div class="connection-group">
       <label>
-        Port
         <select id="portSelect"></select>
       </label>
       <button id="refreshPortsBtn" class="secondary" type="button" title="Ports aktualisieren">
@@ -46,18 +45,22 @@
 
   <main class="dashboard">
     <section class="card elevation-card">
-      <div class="az-values">
-        <div class="az-value-item">
-          <span>Azimut</span>
-          <strong id="azValue">--deg</strong>
-        </div>
-        <div class="az-value-item">
-          <span>Elevation</span>
-          <strong id="elValue">--deg</strong>
-        </div>
+      <div class="card-header">
+        <h2>Rotorposition</h2>
       </div>
-      <div id="elevationRoot" class="elevation">
-        <svg viewBox="0 30 200 170" class="elevation-svg" id="elevationSvg">
+      <div class="elevation-container">
+        <div class="az-values">
+          <div class="az-value-item">
+            <span>Azimut</span>
+            <strong id="azValue">--deg</strong>
+          </div>
+          <div class="az-value-item">
+            <span>Elevation</span>
+            <strong id="elValue">--deg</strong>
+          </div>
+        </div>
+        <div id="elevationRoot" class="elevation">
+        <svg viewBox="60 30 140 170" class="elevation-svg" id="elevationSvg">
           <defs>
             <!-- Professioneller Gradient für den Haupt-Bogen -->
             <linearGradient id="elevationArcGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -156,6 +159,7 @@
                     filter="url(#strongGlow)" />
           </g>
         </svg>
+      </div>
       </div>
       
       <!-- Route Manager -->
