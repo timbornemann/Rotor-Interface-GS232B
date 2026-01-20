@@ -386,17 +386,9 @@ class CalibrationWizard {
    * Handle confirm button click
    */
   async handleConfirm() {
-    // Save calibration point with current values
-    this.calibrationPoints.push({
-      raw: this.currentRawValue,
-      actual: this.currentTargetValue
-    });
-
-    console.log('[CalibrationWizard] Point confirmed:', {
-      raw: this.currentRawValue,
-      actual: this.currentTargetValue
-    });
-
+    // Save point immediately to backend
+    await this.savePointImmediately(this.currentRawValue, this.currentTargetValue);
+    
     // Move to next position
     this.currentStep++;
     await this.processNextPosition();
@@ -437,23 +429,56 @@ class CalibrationWizard {
       return;
     }
 
-    // Save calibration point with adjusted value
-    this.calibrationPoints.push({
-      raw: this.currentRawValue,
-      actual: adjustedValue
-    });
+    // Save adjusted point immediately to backend
+    await this.savePointImmediately(this.currentRawValue, adjustedValue);
 
-    console.log('[CalibrationWizard] Adjusted point saved:', {
-      raw: this.currentRawValue,
-      actual: adjustedValue
-    });
-
-    // Hide adjustment panel
+    // Hide adjustment panel and continue
     this.adjustmentPanel.classList.add('hidden');
-
-    // Move to next position
     this.currentStep++;
     await this.processNextPosition();
+  }
+
+  /**
+   * Save a calibration point immediately to the backend
+   * @param {number} rawValue - Raw COM port value
+   * @param {number} actualValue - Actual position value
+   */
+  async savePointImmediately(rawValue, actualValue) {
+    try {
+      const response = await fetch(`${window.rotorService.apiBase}/api/calibration/add-point`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...window.rotorService.getSessionHeaders()
+        },
+        body: JSON.stringify({
+          axis: this.axis,
+          rawValue: rawValue,
+          actualValue: actualValue
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[CalibrationWizard] Point saved:', { 
+        raw: rawValue, 
+        actual: actualValue,
+        replaced: result.replaced 
+      });
+      
+      // Keep local copy for summary at the end
+      this.calibrationPoints.push({ raw: rawValue, actual: actualValue });
+      
+    } catch (error) {
+      console.error('[CalibrationWizard] Error saving point:', error);
+      // Show error but continue wizard
+      alert(`Fehler beim Speichern: ${error.message}\nPunkt wird lokal gespeichert und am Ende nochmal versucht.`);
+      // Still keep locally for retry at the end
+      this.calibrationPoints.push({ raw: rawValue, actual: actualValue });
+    }
   }
 
   /**
@@ -471,7 +496,11 @@ class CalibrationWizard {
    * Handle cancel button click
    */
   async handleCancel() {
-    if (confirm('Kalibrierung wirklich abbrechen? Alle bisherigen Messwerte gehen verloren.')) {
+    const message = this.calibrationPoints.length > 0
+      ? `Kalibrierung wirklich abbrechen?\n\n${this.calibrationPoints.length} Punkte wurden bereits gespeichert und bleiben erhalten.`
+      : 'Kalibrierung wirklich abbrechen?';
+      
+    if (confirm(message)) {
       this.isRunning = false;
       this.hideModal();
       
@@ -483,7 +512,7 @@ class CalibrationWizard {
   }
 
   /**
-   * Finish calibration and save points
+   * Finish calibration
    */
   async finishCalibration() {
     if (this.calibrationPoints.length < 2) {
@@ -497,65 +526,24 @@ class CalibrationWizard {
       return;
     }
 
-    // Update status
-    this.statusText.textContent = 'Speichere Kalibrierdaten...';
-    this.instructionText.textContent = 'Bitte warten...';
+    // Points already saved during wizard
+    // Just show summary and close
+    this.statusText.textContent = 'Kalibrierung abgeschlossen!';
+    this.instructionText.textContent = `${this.calibrationPoints.length} Kalibrierpunkte wurden gespeichert.`;
     this.confirmBtn.disabled = true;
     this.adjustBtn.disabled = true;
     this.skipBtn.disabled = true;
 
-    try {
-      // Clear existing calibration points for this axis
-      await fetch(`${window.rotorService.apiBase}/api/calibration/clear`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...window.rotorService.getSessionHeaders()
-        },
-        body: JSON.stringify({ axis: this.axis })
-      });
-
-      // Add all new calibration points
-      for (const point of this.calibrationPoints) {
-        await fetch(`${window.rotorService.apiBase}/api/calibration/add-point`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...window.rotorService.getSessionHeaders()
-          },
-          body: JSON.stringify({
-            axis: this.axis,
-            rawValue: point.raw,
-            actualValue: point.actual
-          })
-        });
-      }
-
-      // Success
-      this.statusText.textContent = 'Kalibrierung abgeschlossen!';
-      this.instructionText.textContent = `${this.calibrationPoints.length} Kalibrierpunkte wurden gespeichert.`;
-
-      // Call completion callback
-      if (this.onCompleteCallback) {
-        this.onCompleteCallback(this.calibrationPoints);
-      }
-
-      // Close modal after delay
-      setTimeout(() => {
-        this.isRunning = false;
-        this.hideModal();
-      }, 2000);
-
-    } catch (error) {
-      console.error('[CalibrationWizard] Error saving calibration:', error);
-      this.statusText.textContent = 'Fehler beim Speichern';
-      this.instructionText.textContent = `Fehler: ${error.message}`;
-      
-      setTimeout(() => {
-        this.isRunning = false;
-        this.hideModal();
-      }, 3000);
+    // Call completion callback
+    if (this.onCompleteCallback) {
+      this.onCompleteCallback(this.calibrationPoints);
     }
+
+    // Close modal after delay
+    setTimeout(() => {
+      this.isRunning = false;
+      this.hideModal();
+    }, 2000);
   }
 }
 

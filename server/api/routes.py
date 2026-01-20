@@ -1041,9 +1041,24 @@ def handle_add_calibration_point(handler: BaseHTTPRequestHandler, state: "Server
     if not isinstance(points, list):
         points = []
     
-    # Add new point
+    # Create new point
     new_point = {"raw": float(raw_value), "actual": float(actual_value)}
-    points.append(new_point)
+    
+    # Check if a point with similar raw value exists (±5° tolerance)
+    tolerance = 5.0
+    replaced = False
+    for i, point in enumerate(points):
+        if abs(point.get("raw", 0) - raw_value) <= tolerance:
+            # Replace existing point with new measurement
+            points[i] = new_point
+            replaced = True
+            log(f"[API] Replaced existing calibration point at index {i} for {axis}: old_raw={point.get('raw')}, new_raw={raw_value}")
+            break
+    
+    if not replaced:
+        # Add as new point
+        points.append(new_point)
+        log(f"[API] Added new calibration point for {axis}: raw={raw_value}, actual={actual_value}")
     
     # Sort by raw value to maintain order
     points.sort(key=lambda p: p.get("raw", 0))
@@ -1061,9 +1076,9 @@ def handle_add_calibration_point(handler: BaseHTTPRequestHandler, state: "Server
     
     send_json(handler, {
         "status": "ok",
-        "points": points
+        "points": points,
+        "replaced": replaced
     })
-    log(f"[API] Added calibration point for {axis}: raw={raw_value}, actual={actual_value}")
 
 
 def handle_remove_calibration_point(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
