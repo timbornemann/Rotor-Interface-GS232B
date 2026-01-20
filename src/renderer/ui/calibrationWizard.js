@@ -113,19 +113,38 @@ class CalibrationWizard {
             </div>
 
             <div class="wizard-adjustment hidden" id="wizardAdjustmentPanel">
-              <p class="adjustment-instruction">Feinabstimmung: Passen Sie den Wert an, bis die Position auf der Karte stimmt.</p>
-              <div class="adjustment-controls">
-                <button class="adjust-btn" id="wizardAdjustMinus">-1°</button>
-                <input type="number" id="wizardAdjustmentValue" class="adjustment-input" step="0.5" />
-                <button class="adjust-btn" id="wizardAdjustPlus">+1°</button>
+              <div class="adjustment-header">
+                <img src="./assets/icons/ruler-dimension-line.png" alt="" class="adjustment-icon">
+                <span>Tatsächliche Position eingeben</span>
               </div>
-              <button class="wizard-btn primary" id="wizardSaveAdjustment">Wert übernehmen</button>
+              <div class="adjustment-controls">
+                <button class="adjust-btn" id="wizardAdjustMinus" title="Um 1° verringern">
+                  <img src="./assets/icons/minus.png" alt="-" class="icon-small">
+                </button>
+                <input type="number" id="wizardAdjustmentValue" class="adjustment-input" step="0.5" placeholder="Aktuelle Position in °" />
+                <button class="adjust-btn" id="wizardAdjustPlus" title="Um 1° erhöhen">
+                  <img src="./assets/icons/plus.png" alt="+" class="icon-small">
+                </button>
+              </div>
+              <button class="wizard-btn primary" id="wizardSaveAdjustment">
+                <img src="./assets/icons/play.png" alt="" class="btn-icon">
+                Speichern und weiter
+              </button>
             </div>
 
             <div class="wizard-actions" id="wizardActions">
-              <button class="wizard-btn secondary" id="wizardSkipBtn">Überspringen</button>
-              <button class="wizard-btn secondary" id="wizardAdjustBtn">Anpassen</button>
-              <button class="wizard-btn primary" id="wizardConfirmBtn">Position bestätigen</button>
+              <button class="wizard-btn secondary small" id="wizardSkipBtn">
+                <img src="./assets/icons/play.png" alt="" class="btn-icon">
+                Überspringen
+              </button>
+              <button class="wizard-btn warning" id="wizardAdjustBtn">
+                <img src="./assets/icons/ruler-dimension-line.png" alt="" class="btn-icon">
+                Korrigieren
+              </button>
+              <button class="wizard-btn primary" id="wizardConfirmBtn">
+                <img src="./assets/icons/play.png" alt="" class="btn-icon">
+                Bestätigen
+              </button>
             </div>
           </div>
         </div>
@@ -234,7 +253,10 @@ class CalibrationWizard {
       // Display values
       this.rawValueDisplay.textContent = `${rawValue.toFixed(1)}°`;
       this.statusText.textContent = 'Position erreicht';
-      this.instructionText.textContent = `Stimmt die Position auf der Karte mit ${targetPosition}° überein?`;
+      this.instructionText.innerHTML = `
+        Ziel-Position: <strong>${targetPosition}°</strong><br>
+        Prüfen Sie am Rotor: Stimmt die Position?
+      `;
 
       // Enable buttons
       this.confirmBtn.disabled = false;
@@ -329,9 +351,15 @@ class CalibrationWizard {
    */
   showAdjustment() {
     this.adjustmentPanel.classList.remove('hidden');
+    // Pre-fill with target value as starting point
     this.adjustmentValue.value = this.currentTargetValue;
+    this.adjustmentValue.focus();
+    this.adjustmentValue.select();
     this.confirmBtn.disabled = true;
     this.adjustBtn.disabled = true;
+    
+    // Update instruction text
+    this.instructionText.innerHTML = `Position korrigieren`;
   }
 
   /**
