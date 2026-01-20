@@ -623,8 +623,8 @@
             </div>
 
             <div class="settings-card">
-              <h4 class="card-title">Skalierungsfaktoren</h4>
-              <p class="help-text">Korrigiert mechanische Übersetzungsverhältnisse. Wert &lt; 1 wenn Motor zu weit dreht.</p>
+              <h4 class="card-title">Skalierungsfaktoren (Linear)</h4>
+              <p class="help-text">Einfache lineare Kalibrierung. Für präzise Kalibrierung nutzen Sie den Kalibrierungs-Wizard.</p>
               <div class="form-row">
                 <div class="form-group">
                   <label for="settingsAzScaleFactorInput">Azimut-Faktor</label>
@@ -633,6 +633,77 @@
                 <div class="form-group">
                   <label for="settingsElScaleFactorInput">Elevation-Faktor</label>
                   <input id="settingsElScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <h4 class="card-title">Geführte Multi-Point-Kalibrierung</h4>
+              <p class="help-text">
+                Präzise Kalibrierung mit mehreren Messpunkten. Der Wizard führt Sie durch verschiedene Positionen
+                und korrigiert nicht-lineare Abweichungen vom Potentiometer.
+              </p>
+              
+              <div class="calibration-wizard-section">
+                <div class="form-row">
+                  <button type="button" class="wizard-start-btn primary" id="startAzimuthCalibrationBtn">
+                    <img src="./assets/icons/gauge.png" alt="Kalibrieren" class="icon">
+                    Azimut kalibrieren
+                  </button>
+                  <button type="button" class="wizard-start-btn primary" id="startElevationCalibrationBtn">
+                    <img src="./assets/icons/gauge.png" alt="Kalibrieren" class="icon">
+                    Elevation kalibrieren
+                  </button>
+                </div>
+
+                <div class="calibration-points-display">
+                  <div class="points-section">
+                    <h5>Azimut-Kalibrierpunkte <span id="azimuthPointsCount" class="points-badge">0</span></h5>
+                    <div class="points-table-container">
+                      <table class="points-table" id="azimuthPointsTable">
+                        <thead>
+                          <tr>
+                            <th>Raw (COM)</th>
+                            <th>Tatsächlich</th>
+                            <th>Aktion</th>
+                          </tr>
+                        </thead>
+                        <tbody id="azimuthPointsTableBody">
+                          <tr class="empty-row">
+                            <td colspan="3">Keine Kalibrierpunkte vorhanden</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <button type="button" class="clear-points-btn secondary" id="clearAzimuthPointsBtn">
+                      <img src="./assets/icons/trash.png" alt="Löschen" class="icon">
+                      Alle Azimut-Punkte löschen
+                    </button>
+                  </div>
+
+                  <div class="points-section">
+                    <h5>Elevation-Kalibrierpunkte <span id="elevationPointsCount" class="points-badge">0</span></h5>
+                    <div class="points-table-container">
+                      <table class="points-table" id="elevationPointsTable">
+                        <thead>
+                          <tr>
+                            <th>Raw (COM)</th>
+                            <th>Tatsächlich</th>
+                            <th>Aktion</th>
+                          </tr>
+                        </thead>
+                        <tbody id="elevationPointsTableBody">
+                          <tr class="empty-row">
+                            <td colspan="3">Keine Kalibrierpunkte vorhanden</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <button type="button" class="clear-points-btn secondary" id="clearElevationPointsBtn">
+                      <img src="./assets/icons/trash.png" alt="Löschen" class="icon">
+                      Alle Elevation-Punkte löschen
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -895,6 +966,7 @@
   <script src="./ui/controls.js"></script>
   <script src="./ui/routeManager.js"></script>
   <script src="./ui/alertModal.js"></script>
+  <script src="./ui/calibrationWizard.js"></script>
   <script src="./ui/settingsModal.js"></script>
   <!-- Hauptlogik zuletzt -->
   <script src="./main.js"></script>

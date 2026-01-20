@@ -977,3 +977,199 @@ def handle_server_restart(handler: BaseHTTPRequestHandler, state: "ServerState")
     
     restart_thread = threading.Thread(target=delayed_restart, daemon=True)
     restart_thread.start()
+
+
+# --- Calibration Routes ---
+
+def handle_get_calibration_points(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/calibration/points - Get all calibration points.
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    config = state.settings.get_all()
+    
+    response = {
+        "azimuthCalibrationPoints": config.get("azimuthCalibrationPoints", []),
+        "elevationCalibrationPoints": config.get("elevationCalibrationPoints", [])
+    }
+    
+    send_json(handler, response)
+
+
+def handle_add_calibration_point(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/calibration/add-point - Add a calibration point.
+    
+    Expected payload:
+    {
+        "axis": "azimuth" | "elevation",
+        "rawValue": number,
+        "actualValue": number
+    }
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    try:
+        payload = read_json_body(handler)
+    except Exception as e:
+        send_json(handler, {"error": f"Invalid JSON: {e}"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    axis = payload.get("axis")
+    raw_value = payload.get("rawValue")
+    actual_value = payload.get("actualValue")
+    
+    # Validate axis
+    if axis not in ["azimuth", "elevation"]:
+        send_json(handler, {"error": "Invalid axis. Must be 'azimuth' or 'elevation'"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    # Validate values
+    if not isinstance(raw_value, (int, float)) or not isinstance(actual_value, (int, float)):
+        send_json(handler, {"error": "rawValue and actualValue must be numbers"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    # Get current config
+    config = state.settings.get_all()
+    
+    # Get calibration points array
+    points_key = f"{axis}CalibrationPoints"
+    points = config.get(points_key, [])
+    if not isinstance(points, list):
+        points = []
+    
+    # Add new point
+    new_point = {"raw": float(raw_value), "actual": float(actual_value)}
+    points.append(new_point)
+    
+    # Sort by raw value to maintain order
+    points.sort(key=lambda p: p.get("raw", 0))
+    
+    # Update config
+    state.settings.update({points_key: points})
+    
+    # Update rotor logic
+    if state.rotor_logic:
+        state.rotor_logic.update_config(state.settings.get_all())
+    
+    # Broadcast via WebSocket
+    if state.ws_server:
+        state.ws_server.broadcast_settings_update(state.settings.get_all())
+    
+    send_json(handler, {
+        "status": "ok",
+        "points": points
+    })
+    log(f"[API] Added calibration point for {axis}: raw={raw_value}, actual={actual_value}")
+
+
+def handle_remove_calibration_point(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/calibration/remove-point - Remove a calibration point.
+    
+    Expected payload:
+    {
+        "axis": "azimuth" | "elevation",
+        "index": number  (index in the array)
+    }
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    try:
+        payload = read_json_body(handler)
+    except Exception as e:
+        send_json(handler, {"error": f"Invalid JSON: {e}"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    axis = payload.get("axis")
+    index = payload.get("index")
+    
+    # Validate axis
+    if axis not in ["azimuth", "elevation"]:
+        send_json(handler, {"error": "Invalid axis. Must be 'azimuth' or 'elevation'"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    # Validate index
+    if not isinstance(index, int) or index < 0:
+        send_json(handler, {"error": "index must be a non-negative integer"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    # Get current config
+    config = state.settings.get_all()
+    
+    # Get calibration points array
+    points_key = f"{axis}CalibrationPoints"
+    points = config.get(points_key, [])
+    if not isinstance(points, list):
+        points = []
+    
+    # Check index bounds
+    if index >= len(points):
+        send_json(handler, {"error": "Index out of bounds"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    # Remove point
+    removed_point = points.pop(index)
+    
+    # Update config
+    state.settings.update({points_key: points})
+    
+    # Update rotor logic
+    if state.rotor_logic:
+        state.rotor_logic.update_config(state.settings.get_all())
+    
+    # Broadcast via WebSocket
+    if state.ws_server:
+        state.ws_server.broadcast_settings_update(state.settings.get_all())
+    
+    send_json(handler, {
+        "status": "ok",
+        "removed": removed_point,
+        "points": points
+    })
+    log(f"[API] Removed calibration point for {axis} at index {index}")
+
+
+def handle_clear_calibration_points(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle POST /api/calibration/clear - Clear all calibration points for an axis.
+    
+    Expected payload:
+    {
+        "axis": "azimuth" | "elevation"
+    }
+    
+    Args:
+        handler: The HTTP request handler instance.
+        state: The server state singleton.
+    """
+    try:
+        payload = read_json_body(handler)
+    except Exception as e:
+        send_json(handler, {"error": f"Invalid JSON: {e}"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    axis = payload.get("axis")
+    
+    # Validate axis
+    if axis not in ["azimuth", "elevation"]:
+        send_json(handler, {"error": "Invalid axis. Must be 'azimuth' or 'elevation'"}, HTTPStatus.BAD_REQUEST)
+        return
+    
+    # Clear points
+    points_key = f"{axis}CalibrationPoints"
+    state.settings.update({points_key: []})
+    
+    # Update rotor logic
+    if state.rotor_logic:
+        state.rotor_logic.update_config(state.settings.get_all())
+    
+    # Broadcast via WebSocket
+    if state.ws_server:
+        state.ws_server.broadcast_settings_update(state.settings.get_all())
+    
+    send_json(handler, {"status": "ok", "axis": axis})
+    log(f"[API] Cleared all calibration points for {axis}")

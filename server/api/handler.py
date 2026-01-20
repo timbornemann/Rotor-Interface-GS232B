@@ -183,6 +183,11 @@ class RotorHandler(SimpleHTTPRequestHandler):
             routes.handle_get_route_execution(self, self.state)
             return
         
+        # Calibration endpoints
+        if parsed.path == "/api/calibration/points":
+            routes.handle_get_calibration_points(self, self.state)
+            return
+        
         # API endpoint for getting own session ID
         if parsed.path == "/api/session":
             # This endpoint creates a session if one doesn't exist
@@ -286,6 +291,19 @@ class RotorHandler(SimpleHTTPRequestHandler):
             
             if parsed.path == "/api/routes/continue":
                 routes.handle_continue_route(self, self.state)
+                return
+            
+            # Calibration endpoints
+            if parsed.path == "/api/calibration/add-point":
+                routes.handle_add_calibration_point(self, self.state)
+                return
+            
+            if parsed.path == "/api/calibration/remove-point":
+                routes.handle_remove_calibration_point(self, self.state)
+                return
+            
+            if parsed.path == "/api/calibration/clear":
+                routes.handle_clear_calibration_points(self, self.state)
                 return
 
             send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)

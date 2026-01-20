@@ -7,9 +7,14 @@ Translates abstract direction commands to GS-232B protocol commands.
 import time
 import threading
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
-from server.control.math_utils import clamp, shortest_angular_delta
+from server.control.math_utils import (
+    clamp, 
+    shortest_angular_delta,
+    interpolate_calibration,
+    inverse_interpolate_calibration
+)
 
 # Configure logging
 logger = logging.getLogger("RotorLogic")
@@ -83,6 +88,8 @@ class RotorLogic:
             "elevationOffset": 0.0,
             "azimuthScaleFactor": 1.0,
             "elevationScaleFactor": 1.0,
+            "azimuthCalibrationPoints": [],
+            "elevationCalibrationPoints": [],
             "parkPositionsEnabled": False,
             "homeAzimuth": 0.0,
             "homeElevation": 0.0,
@@ -135,6 +142,15 @@ class RotorLogic:
         self.config["elevationOffset"] = safe_float("elevationOffset", 0.0)
         self.config["azimuthScaleFactor"] = safe_float("azimuthScaleFactor", 1.0)
         self.config["elevationScaleFactor"] = safe_float("elevationScaleFactor", 1.0)
+        
+        # Multi-Point Calibration
+        self.config["azimuthCalibrationPoints"] = new_config.get("azimuthCalibrationPoints", [])
+        if not isinstance(self.config["azimuthCalibrationPoints"], list):
+            self.config["azimuthCalibrationPoints"] = []
+        self.config["elevationCalibrationPoints"] = new_config.get("elevationCalibrationPoints", [])
+        if not isinstance(self.config["elevationCalibrationPoints"], list):
+            self.config["elevationCalibrationPoints"] = []
+        
         self.config["parkPositionsEnabled"] = new_config.get("parkPositionsEnabled", False) in [True, "true", "True", 1]
         self.config["homeAzimuth"] = safe_float("homeAzimuth", 0.0)
         self.config["homeElevation"] = safe_float("homeElevation", 0.0)
@@ -280,6 +296,9 @@ class RotorLogic:
     def _get_calibrated_status(self) -> Optional[Dict[str, float]]:
         """Get current status with calibration applied.
         
+        Uses multi-point calibration if available, otherwise falls back to
+        linear calibration (offset + scale factor).
+        
         Returns:
             Dictionary with calibrated 'azimuth' and 'elevation' or None.
         """
@@ -292,30 +311,70 @@ class RotorLogic:
         
         if az_raw is None or el_raw is None:
             return None
-            
-        az_cal = (az_raw + self.config["azimuthOffset"]) / self.config.get("azimuthScaleFactor", 1.0)
-        el_cal = (el_raw + self.config["elevationOffset"]) / self.config.get("elevationScaleFactor", 1.0)
+        
+        # Azimuth Calibration: Try multi-point first, then linear
+        az_cal_points = self.config.get("azimuthCalibrationPoints", [])
+        if az_cal_points and len(az_cal_points) >= 2:
+            az_cal = interpolate_calibration(az_raw, az_cal_points)
+            if az_cal is None:
+                # Fallback to linear if interpolation fails
+                az_cal = (az_raw + self.config["azimuthOffset"]) / self.config.get("azimuthScaleFactor", 1.0)
+        else:
+            # Linear calibration
+            az_cal = (az_raw + self.config["azimuthOffset"]) / self.config.get("azimuthScaleFactor", 1.0)
+        
+        # Elevation Calibration: Try multi-point first, then linear
+        el_cal_points = self.config.get("elevationCalibrationPoints", [])
+        if el_cal_points and len(el_cal_points) >= 2:
+            el_cal = interpolate_calibration(el_raw, el_cal_points)
+            if el_cal is None:
+                # Fallback to linear if interpolation fails
+                el_cal = (el_raw + self.config["elevationOffset"]) / self.config.get("elevationScaleFactor", 1.0)
+        else:
+            # Linear calibration
+            el_cal = (el_raw + self.config["elevationOffset"]) / self.config.get("elevationScaleFactor", 1.0)
         
         return {"azimuth": az_cal, "elevation": el_cal}
     
     def _send_direct_target(self, az: Optional[float], el: Optional[float]) -> None:
         """Send direct target command (W or M) without ramping.
         
+        Uses inverse multi-point calibration if available, otherwise falls back to
+        linear calibration (offset + scale factor).
+        
         Args:
             az: Target azimuth in calibrated degrees (from frontend).
             el: Target elevation in calibrated degrees (from frontend).
         """
         # Convert Target Degrees (Calibrated) -> Raw Command Values
-        # Formula: calibrated = (raw + offset) / scale
-        # Inverse: raw = (calibrated * scale) - offset
         
         vals = []
         if az is not None:
-            raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
+            # Try multi-point calibration first
+            az_cal_points = self.config.get("azimuthCalibrationPoints", [])
+            if az_cal_points and len(az_cal_points) >= 2:
+                raw_az = inverse_interpolate_calibration(az, az_cal_points)
+                if raw_az is None:
+                    # Fallback to linear
+                    raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
+            else:
+                # Linear calibration: Inverse formula: raw = (calibrated * scale) - offset
+                raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
+            
             vals.append(f"{int(round(raw_az)):03d}")
         
         if el is not None:
-            raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
+            # Try multi-point calibration first
+            el_cal_points = self.config.get("elevationCalibrationPoints", [])
+            if el_cal_points and len(el_cal_points) >= 2:
+                raw_el = inverse_interpolate_calibration(el, el_cal_points)
+                if raw_el is None:
+                    # Fallback to linear
+                    raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
+            else:
+                # Linear calibration: Inverse formula
+                raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
+            
             if len(vals) == 0:
                 # If only EL provided, we need current AZ for the W command
                 status = self.connection.get_status()

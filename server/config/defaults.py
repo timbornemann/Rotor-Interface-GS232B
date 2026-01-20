@@ -88,6 +88,10 @@ DEFAULT_CONFIG = {
     "elevationScaleFactorMin": 0.1,
     "elevationScaleFactorMax": 2.0,
     
+    # Multi-Point Calibration (Advanced)
+    "azimuthCalibrationPoints": [],
+    "elevationCalibrationPoints": [],
+    
     # Server Settings
     "serverHttpPort": 8081,
     "serverWebSocketPort": 8082,
@@ -195,6 +199,12 @@ azimuthScaleFactorMin=0.1
 azimuthScaleFactorMax=2.0
 elevationScaleFactorMin=0.1
 elevationScaleFactorMax=2.0
+
+; Multi-Point Calibration (Advanced)
+; These are stored as JSON arrays in web-settings.json
+; Format: [{"raw": 0, "actual": 0}, {"raw": 47, "actual": 90}, ...]
+azimuthCalibrationPoints=[]
+elevationCalibrationPoints=[]
 
 [Server]
 ; Server configuration settings

@@ -153,6 +153,28 @@ class SettingsModal {
       restartBtn.addEventListener('click', () => this.handleServerRestart());
     }
 
+    // Calibration wizard buttons
+    const startAzCalibBtn = document.getElementById('startAzimuthCalibrationBtn');
+    if (startAzCalibBtn) {
+      startAzCalibBtn.addEventListener('click', () => this.startCalibration('azimuth'));
+    }
+
+    const startElCalibBtn = document.getElementById('startElevationCalibrationBtn');
+    if (startElCalibBtn) {
+      startElCalibBtn.addEventListener('click', () => this.startCalibration('elevation'));
+    }
+
+    // Clear calibration points buttons
+    const clearAzPointsBtn = document.getElementById('clearAzimuthPointsBtn');
+    if (clearAzPointsBtn) {
+      clearAzPointsBtn.addEventListener('click', () => this.clearCalibrationPoints('azimuth'));
+    }
+
+    const clearElPointsBtn = document.getElementById('clearElevationPointsBtn');
+    if (clearElPointsBtn) {
+      clearElPointsBtn.addEventListener('click', () => this.clearCalibrationPoints('elevation'));
+    }
+
     // Keyboard handling
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) {
@@ -277,6 +299,11 @@ class SettingsModal {
       if (this.locationMap) {
         this.locationMap.invalidateSize();
       }
+    }
+
+    // Load calibration points when switching to calibration tab
+    if (tabName === 'calibration') {
+      this.loadCalibrationPoints();
     }
   }
 
@@ -962,5 +989,189 @@ class SettingsModal {
       this.onSaveCallback(mergedConfig);
     }
     this.close();
+  }
+
+  // --- Calibration Wizard Methods ---
+
+  async startCalibration(axis) {
+    if (!window.calibrationWizard) {
+      console.error('[SettingsModal] CalibrationWizard not available');
+      await this.showError('Kalibrierungs-Wizard ist nicht verfügbar.');
+      return;
+    }
+
+    // Check if rotor is connected
+    if (!window.rotorService || !window.rotorService.isConnected()) {
+      await this.showError('Bitte verbinden Sie zuerst den Rotor.');
+      return;
+    }
+
+    // Close settings modal during calibration
+    this.close();
+
+    // Start wizard
+    try {
+      await window.calibrationWizard.start(axis, async (points) => {
+        console.log(`[SettingsModal] Calibration completed for ${axis}:`, points);
+        // Reload calibration points display
+        await this.loadCalibrationPoints();
+        // Show success message
+        if (window.alertModal) {
+          await window.alertModal.showAlert(
+            `Kalibrierung abgeschlossen!\n${points.length} Punkte für ${axis === 'azimuth' ? 'Azimut' : 'Elevation'} wurden gespeichert.`
+          );
+        }
+      });
+    } catch (error) {
+      console.error('[SettingsModal] Calibration error:', error);
+      await this.showError(`Fehler bei der Kalibrierung: ${error.message}`);
+    }
+  }
+
+  async loadCalibrationPoints() {
+    try {
+      if (!window.rotorService) {
+        console.warn('[SettingsModal] Rotor service not available');
+        return;
+      }
+
+      const response = await fetch(`${window.rotorService.apiBase}/api/calibration/points`, {
+        headers: window.rotorService.getSessionHeaders()
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Update azimuth points
+      this.displayCalibrationPoints('azimuth', data.azimuthCalibrationPoints || []);
+      
+      // Update elevation points
+      this.displayCalibrationPoints('elevation', data.elevationCalibrationPoints || []);
+
+    } catch (error) {
+      console.error('[SettingsModal] Error loading calibration points:', error);
+    }
+  }
+
+  displayCalibrationPoints(axis, points) {
+    const tableBody = document.getElementById(`${axis}PointsTableBody`);
+    const countBadge = document.getElementById(`${axis}PointsCount`);
+
+    if (!tableBody || !countBadge) {
+      return;
+    }
+
+    // Update count badge
+    countBadge.textContent = points.length;
+
+    if (points.length === 0) {
+      tableBody.innerHTML = `
+        <tr class="empty-row">
+          <td colspan="3">Keine Kalibrierpunkte vorhanden</td>
+        </tr>
+      `;
+      return;
+    }
+
+    // Sort by raw value
+    const sortedPoints = [...points].sort((a, b) => a.raw - b.raw);
+
+    tableBody.innerHTML = sortedPoints.map((point, index) => `
+      <tr>
+        <td>${point.raw.toFixed(1)}°</td>
+        <td>${point.actual.toFixed(1)}°</td>
+        <td>
+          <button class="delete-point-btn" data-axis="${axis}" data-index="${index}">
+            Löschen
+          </button>
+        </td>
+      </tr>
+    `).join('');
+
+    // Attach event handlers for delete buttons
+    tableBody.querySelectorAll('.delete-point-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const btnAxis = e.target.dataset.axis;
+        const btnIndex = parseInt(e.target.dataset.index, 10);
+        this.deleteCalibrationPoint(btnAxis, btnIndex);
+      });
+    });
+  }
+
+  async deleteCalibrationPoint(axis, index) {
+    try {
+      if (!window.rotorService) {
+        console.warn('[SettingsModal] Rotor service not available');
+        return;
+      }
+
+      const response = await fetch(`${window.rotorService.apiBase}/api/calibration/remove-point`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...window.rotorService.getSessionHeaders()
+        },
+        body: JSON.stringify({ axis, index })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      // Reload points display
+      await this.loadCalibrationPoints();
+
+    } catch (error) {
+      console.error('[SettingsModal] Error deleting calibration point:', error);
+      await this.showError(`Fehler beim Löschen: ${error.message}`);
+    }
+  }
+
+  async clearCalibrationPoints(axis) {
+    // Confirm action
+    const confirmed = window.alertModal
+      ? await window.alertModal.showConfirm(
+          `Alle ${axis === 'azimuth' ? 'Azimut' : 'Elevation'}-Kalibrierpunkte wirklich löschen?`
+        )
+      : confirm(`Alle ${axis === 'azimuth' ? 'Azimut' : 'Elevation'}-Kalibrierpunkte wirklich löschen?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      if (!window.rotorService) {
+        console.warn('[SettingsModal] Rotor service not available');
+        return;
+      }
+
+      const response = await fetch(`${window.rotorService.apiBase}/api/calibration/clear`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...window.rotorService.getSessionHeaders()
+        },
+        body: JSON.stringify({ axis })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      // Reload points display
+      await this.loadCalibrationPoints();
+
+      // Show success message
+      if (window.alertModal) {
+        await window.alertModal.showAlert('Kalibrierpunkte wurden gelöscht.');
+      }
+
+    } catch (error) {
+      console.error('[SettingsModal] Error clearing calibration points:', error);
+      await this.showError(`Fehler beim Löschen: ${error.message}`);
+    }
   }
 }
