@@ -20,6 +20,9 @@ class SettingsModal {
     this.locationSearchAbort = null;
     this.pendingLocation = null;
     this.locationMapReady = false;
+    this.connectionState = { connected: false };
+    this.healthStatus = null;
+    this.reconnectStatus = null;
     
     // Settings field definitions for easy maintenance
     this.settingsFields = {
@@ -162,8 +165,17 @@ class SettingsModal {
     
     // Setup WebSocket listener for client list updates
     this.setupWebSocketListeners();
+    this.cacheConnectionStatusElements();
 
     console.log('[SettingsModal] Initialized successfully');
+  }
+
+  cacheConnectionStatusElements() {
+    this.healthStatusEl = document.getElementById('settingsHealthStatus');
+    this.healthLastSeenEl = document.getElementById('settingsHealthLastSeen');
+    this.reconnectStatusEl = document.getElementById('settingsReconnectStatus');
+    this.reconnectNextEl = document.getElementById('settingsReconnectNext');
+    this.disconnectReasonEl = document.getElementById('settingsDisconnectReason');
   }
   
   setupWebSocketListeners() {
@@ -175,6 +187,30 @@ class SettingsModal {
         }
       });
       this.wsUnsubscribers.push(unsubscribe);
+
+      const unsubscribeHealth = window.wsService.on('connection_health_changed', (data) => {
+        this.healthStatus = data;
+        if (this.modal && !this.modal.classList.contains('hidden')) {
+          this.updateHealthStatus(data);
+        }
+      });
+      this.wsUnsubscribers.push(unsubscribeHealth);
+
+      const unsubscribeReconnect = window.wsService.on('reconnect_status_changed', (data) => {
+        this.reconnectStatus = data;
+        if (this.modal && !this.modal.classList.contains('hidden')) {
+          this.updateReconnectStatus(data);
+        }
+      });
+      this.wsUnsubscribers.push(unsubscribeReconnect);
+
+      const unsubscribeConnection = window.wsService.on('connection_state_changed', (state) => {
+        this.connectionState = state || { connected: false };
+        if (this.modal && !this.modal.classList.contains('hidden')) {
+          this.updateReconnectStatus(this.reconnectStatus);
+        }
+      });
+      this.wsUnsubscribers.push(unsubscribeConnection);
       
       // Listen for settings updates from other clients
       const unsubscribeSettings = window.wsService.on('settings_updated', (settings) => {
@@ -193,6 +229,121 @@ class SettingsModal {
       });
       this.wsUnsubscribers.push(unsubscribeSettings);
     }
+  }
+
+  async refreshConnectionHealth() {
+    if (typeof window.rotorService === 'undefined') {
+      return;
+    }
+    try {
+      const resp = await fetch(`${window.rotorService.apiBase}/api/rotor/health`, {
+        headers: window.rotorService.getSessionHeaders()
+      });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      this.connectionState = { connected: Boolean(data.connected) };
+      this.healthStatus = data.health || null;
+      this.reconnectStatus = data.reconnect || null;
+      if (this.disconnectReasonEl) {
+        this.disconnectReasonEl.textContent = data.lastDisconnectReason || '-';
+      }
+      this.updateHealthStatus(this.healthStatus);
+      this.updateReconnectStatus(this.reconnectStatus);
+    } catch (error) {
+      console.warn('[SettingsModal] Could not load health status', error);
+    }
+  }
+
+  updateHealthStatus(status) {
+    if (!this.healthStatusEl || !this.healthLastSeenEl) {
+      return;
+    }
+    if (!status) {
+      this.healthStatusEl.textContent = 'Unbekannt';
+      this.healthStatusEl.className = 'connection-status-pill neutral';
+      this.healthLastSeenEl.textContent = '-';
+      return;
+    }
+    if (status.healthy) {
+      this.healthStatusEl.textContent = 'OK';
+      this.healthStatusEl.className = 'connection-status-pill ok';
+    } else {
+      this.healthStatusEl.textContent = 'Störung';
+      this.healthStatusEl.className = 'connection-status-pill warning';
+    }
+    this.healthLastSeenEl.textContent = this.formatAge(status.lastSeenMs);
+  }
+
+  updateReconnectStatus(status) {
+    if (!this.reconnectStatusEl || !this.reconnectNextEl || !this.disconnectReasonEl) {
+      return;
+    }
+    const isConnected = Boolean(this.connectionState && this.connectionState.connected);
+    if (!status) {
+      this.reconnectStatusEl.textContent = isConnected ? 'Verbunden' : 'Getrennt';
+      this.reconnectStatusEl.className = `connection-status-pill ${isConnected ? 'ok' : 'error'}`;
+      this.reconnectNextEl.textContent = '-';
+      return;
+    }
+
+    if (status.reconnecting) {
+      const attemptText = status.attempt ? ` (${status.attempt}${status.maxAttempts ? `/${status.maxAttempts}` : ''})` : '';
+      this.reconnectStatusEl.textContent = `Retry${attemptText}`;
+      this.reconnectStatusEl.className = 'connection-status-pill warning';
+      this.reconnectNextEl.textContent = this.formatCountdown(status.nextRetryMs);
+    } else {
+      this.reconnectStatusEl.textContent = isConnected ? 'Verbunden' : 'Inaktiv';
+      this.reconnectStatusEl.className = `connection-status-pill ${isConnected ? 'ok' : 'neutral'}`;
+      this.reconnectNextEl.textContent = '-';
+    }
+
+    if (status.lastDisconnectReason) {
+      this.disconnectReasonEl.textContent = status.lastDisconnectReason;
+    } else if (status.lastError) {
+      this.disconnectReasonEl.textContent = status.lastError;
+    }
+  }
+
+  formatAge(timestampMs) {
+    if (!timestampMs) {
+      return '-';
+    }
+    const diff = Date.now() - timestampMs;
+    if (!Number.isFinite(diff) || diff < 0) {
+      return '-';
+    }
+    if (diff < 1000) {
+      return 'gerade eben';
+    }
+    if (diff < 60000) {
+      return `vor ${Math.round(diff / 1000)}s`;
+    }
+    if (diff < 3600000) {
+      return `vor ${Math.round(diff / 60000)}m`;
+    }
+    return `vor ${Math.round(diff / 3600000)}h`;
+  }
+
+  formatCountdown(targetMs) {
+    if (!targetMs) {
+      return '-';
+    }
+    const diff = targetMs - Date.now();
+    if (diff <= 0) {
+      return 'gleich';
+    }
+    if (diff < 1000) {
+      return '<1s';
+    }
+    if (diff < 60000) {
+      return `${Math.ceil(diff / 1000)}s`;
+    }
+    if (diff < 3600000) {
+      return `${Math.ceil(diff / 60000)}m`;
+    }
+    return `${Math.ceil(diff / 3600000)}h`;
   }
 
   setupRangeSync(rangeId, inputId) {
@@ -451,6 +602,8 @@ class SettingsModal {
     
     // Refresh ports
     await this.refreshPorts();
+
+    await this.refreshConnectionHealth();
     
     // Reset to first section
     this.switchSection('connection');

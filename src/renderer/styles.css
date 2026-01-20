@@ -1445,6 +1445,63 @@ button.refreshing .icon {
   color: #ff8f8f;
 }
 
+.connection-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.connection-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.connection-status-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.connection-status-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.connection-status-value {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.connection-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.connection-status-pill.ok {
+  background: rgba(46, 204, 113, 0.2);
+  color: #9bf6b1;
+}
+
+.connection-status-pill.warning {
+  background: rgba(243, 156, 18, 0.2);
+  color: #ffd28a;
+}
+
+.connection-status-pill.error {
+  background: rgba(231, 76, 60, 0.2);
+  color: #ffb0a8;
+}
+
 .map-search-results {
   margin-top: 0.75rem;
   display: grid;

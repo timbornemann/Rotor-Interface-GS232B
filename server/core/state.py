@@ -69,6 +69,18 @@ class ServerState:
         self.http_port: int = 8081
         self.websocket_port: int = 8082
         self._restart_requested: bool = False
+        self.last_disconnect_reason: Optional[str] = None
+        self.reconnect_status: dict = {
+            "reconnecting": False,
+            "attempt": 0,
+            "maxAttempts": None,
+            "nextRetryMs": None,
+            "lastError": None
+        }
+        self.health_status: dict = {
+            "healthy": False,
+            "lastSeenMs": None
+        }
         
         # Thread safety
         self.rotor_lock = threading.Lock()
@@ -120,6 +132,12 @@ class ServerState:
         
         # Initialize rotor connection with polling interval
         self.rotor_connection = RotorConnection(polling_interval_ms=polling_interval_ms)
+        self.rotor_connection.set_event_handlers(
+            on_disconnect_reason=self._handle_disconnect_reason,
+            on_reconnect_status=self._handle_reconnect_status,
+            on_health_status=self._handle_health_status,
+            on_connection_state_change=self._handle_connection_state_change
+        )
         
         # Initialize rotor logic with connection
         self.rotor_logic = RotorLogic(self.rotor_connection)
@@ -218,6 +236,18 @@ class ServerState:
         self.route_manager = None
         self.route_executor = None
         self.http_server = None
+        self.last_disconnect_reason = None
+        self.reconnect_status = {
+            "reconnecting": False,
+            "attempt": 0,
+            "maxAttempts": None,
+            "nextRetryMs": None,
+            "lastError": None
+        }
+        self.health_status = {
+            "healthy": False,
+            "lastSeenMs": None
+        }
 
     def broadcast_connection_state(self) -> None:
         """Broadcast current connection state to all WebSocket clients."""
@@ -236,6 +266,37 @@ class ServerState:
                 port=None,
                 baud_rate=None
             )
+
+    def _handle_disconnect_reason(self, reason: str) -> None:
+        self.last_disconnect_reason = reason
+
+    def _handle_reconnect_status(self, status: dict) -> None:
+        self.reconnect_status = status
+        if self.websocket_manager:
+            payload = dict(status)
+            payload["lastDisconnectReason"] = self.last_disconnect_reason
+            self.websocket_manager.broadcast_reconnect_status(payload)
+
+    def _handle_health_status(self, status: dict) -> None:
+        self.health_status = status
+        if self.websocket_manager:
+            self.websocket_manager.broadcast_health_status(status)
+
+    def _handle_connection_state_change(self, connected: bool, port: Optional[str], baud_rate: Optional[int]) -> None:
+        if self.websocket_manager:
+            self.websocket_manager.broadcast_connection_state(
+                connected=connected,
+                port=port,
+                baud_rate=baud_rate
+            )
+
+    def get_reconnect_status(self) -> dict:
+        payload = dict(self.reconnect_status)
+        payload["lastDisconnectReason"] = self.last_disconnect_reason
+        return payload
+
+    def get_health_status(self) -> dict:
+        return dict(self.health_status)
 
     @classmethod
     def get_instance(cls) -> "ServerState":

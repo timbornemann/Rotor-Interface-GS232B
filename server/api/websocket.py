@@ -116,6 +116,16 @@ class WebSocketManager:
         
         try:
             await websocket.send(json.dumps(connection_data))
+            reconnect_data = {
+                "type": "reconnect_status_changed",
+                "data": state.get_reconnect_status()
+            }
+            await websocket.send(json.dumps(reconnect_data))
+            health_data = {
+                "type": "connection_health_changed",
+                "data": state.get_health_status()
+            }
+            await websocket.send(json.dumps(health_data))
         except Exception as e:
             log(f"[WebSocket] Error sending initial state: {e}")
     
@@ -187,6 +197,22 @@ class WebSocketManager:
                 "port": port,
                 "baudRate": baud_rate
             }
+        }
+        self._schedule_broadcast(json.dumps(message))
+
+    def broadcast_reconnect_status(self, status: Dict[str, Any]) -> None:
+        """Broadcast reconnect status change to all clients."""
+        message = {
+            "type": "reconnect_status_changed",
+            "data": status
+        }
+        self._schedule_broadcast(json.dumps(message))
+
+    def broadcast_health_status(self, status: Dict[str, Any]) -> None:
+        """Broadcast connection health change to all clients."""
+        message = {
+            "type": "connection_health_changed",
+            "data": status
         }
         self._schedule_broadcast(json.dumps(message))
     

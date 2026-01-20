@@ -157,6 +157,10 @@ class RotorHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/rotor/status":
             routes.handle_get_status(self, self.state)
             return
+
+        if parsed.path == "/api/rotor/health":
+            routes.handle_get_health(self, self.state)
+            return
         
         if parsed.path == "/api/rotor/position":
             routes.handle_get_position(self, self.state)

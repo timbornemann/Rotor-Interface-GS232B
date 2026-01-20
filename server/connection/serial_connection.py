@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import time
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from server.utils.logging import log
 from server.connection.port_scanner import SERIAL_AVAILABLE
@@ -30,7 +30,15 @@ class RotorConnection:
     - Parsing of status responses (AZ=xxx EL=xxx format)
     """
 
-    def __init__(self, polling_interval_ms: int = 500) -> None:
+    def __init__(
+        self,
+        polling_interval_ms: int = 500,
+        heartbeat_interval_s: float = 2.0,
+        health_timeout_s: float = 6.0,
+        reconnect_base_delay_s: float = 1.0,
+        reconnect_max_delay_s: float = 30.0,
+        max_reconnect_attempts: int = 0
+    ) -> None:
         """Initialize the rotor connection.
         
         Args:
@@ -49,6 +57,47 @@ class RotorConnection:
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
         self.write_lock = threading.Lock()
+        self.health_thread: Optional[threading.Thread] = None
+        self.health_active = False
+        self.heartbeat_interval_s = heartbeat_interval_s
+        self.health_timeout_s = health_timeout_s
+        self.last_read_time: Optional[float] = None
+        self.last_heartbeat_time: float = 0.0
+        self.health_status = {"healthy": False, "lastSeenMs": None}
+        self.health_lock = threading.Lock()
+        self._last_health_broadcast_ms = 0
+        self.reconnect_thread: Optional[threading.Thread] = None
+        self.reconnect_active = False
+        self.reconnect_attempts = 0
+        self.reconnect_base_delay_s = reconnect_base_delay_s
+        self.reconnect_max_delay_s = reconnect_max_delay_s
+        self.max_reconnect_attempts = max_reconnect_attempts
+        self.reconnect_status = {
+            "reconnecting": False,
+            "attempt": 0,
+            "maxAttempts": max_reconnect_attempts if max_reconnect_attempts > 0 else None,
+            "nextRetryMs": None,
+            "lastError": None
+        }
+        self.reconnect_lock = threading.Lock()
+        self._reconnect_enabled = False
+        self.on_disconnect_reason: Optional[Callable[[str], None]] = None
+        self.on_reconnect_status: Optional[Callable[[Dict[str, Any]], None]] = None
+        self.on_health_status: Optional[Callable[[Dict[str, Any]], None]] = None
+        self.on_connection_state_change: Optional[Callable[[bool, Optional[str], Optional[int]], None]] = None
+
+    def set_event_handlers(
+        self,
+        on_disconnect_reason: Optional[Callable[[str], None]] = None,
+        on_reconnect_status: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_health_status: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_connection_state_change: Optional[Callable[[bool, Optional[str], Optional[int]], None]] = None
+    ) -> None:
+        """Attach event handlers for connection changes."""
+        self.on_disconnect_reason = on_disconnect_reason
+        self.on_reconnect_status = on_reconnect_status
+        self.on_health_status = on_health_status
+        self.on_connection_state_change = on_connection_state_change
 
     def is_connected(self) -> bool:
         """Check if connected to a port.
@@ -69,7 +118,7 @@ class RotorConnection:
             RuntimeError: If pyserial is not installed or connection fails.
         """
         if self.is_connected():
-            self.disconnect()
+            self.disconnect(reason="Reconnecting to new port")
      
         if not SERIAL_AVAILABLE:
             raise RuntimeError("pyserial is not installed. Install with: pip install pyserial")
@@ -88,31 +137,49 @@ class RotorConnection:
             self.baud_rate = baud_rate
             self.read_active = True
             self.polling_active = True
+            self.health_active = True
+            self._reconnect_enabled = True
+            self.reconnect_attempts = 0
+            self.last_read_time = time.time()
+            self.last_heartbeat_time = time.time()
             
             # Start background threads
             self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
             self.read_thread.start()
             self.polling_thread = threading.Thread(target=self._polling_loop, daemon=True)
             self.polling_thread.start()
+            self.health_thread = threading.Thread(target=self._health_loop, daemon=True)
+            self.health_thread.start()
+            self._update_reconnect_status(reconnecting=False, attempt=0, next_retry_ms=None, last_error=None)
+            self._update_health_status(healthy=True, last_seen_ms=int(self.last_read_time * 1000))
+            if self.on_connection_state_change:
+                self.on_connection_state_change(True, self.port, self.baud_rate)
             
             log(f"[RotorConnection] Connected to {port} at {baud_rate} baud")
         except Exception as e:
             self.serial = None
             raise RuntimeError(f"Failed to connect to {port}: {e}")
 
-    def disconnect(self) -> None:
+    def disconnect(self, reason: Optional[str] = None) -> None:
         """Disconnect from the port."""
+        self._close_connection(reason=reason, allow_reconnect=False)
+
+    def get_health_status(self) -> Dict[str, Any]:
+        """Get current health status snapshot."""
+        with self.health_lock:
+            return dict(self.health_status)
+
+    def get_reconnect_status(self) -> Dict[str, Any]:
+        """Get current reconnect status snapshot."""
+        with self.reconnect_lock:
+            return dict(self.reconnect_status)
+
+    def _close_connection(self, reason: Optional[str], allow_reconnect: bool) -> None:
+        if reason and self.on_disconnect_reason:
+            self.on_disconnect_reason(reason)
         self.read_active = False
         self.polling_active = False
-        
-        # Wait for threads to finish
-        if self.read_thread and self.read_thread.is_alive():
-            self.read_thread.join(timeout=2.0)
-        self.read_thread = None
-
-        if self.polling_thread and self.polling_thread.is_alive():
-            self.polling_thread.join(timeout=2.0)
-        self.polling_thread = None
+        self.health_active = False
         
         # Close serial connection
         if self.serial:
@@ -121,14 +188,170 @@ class RotorConnection:
                     self.serial.close()
                 except Exception as e:
                     log(f"[RotorConnection] Error closing port: {e}")
+
+        self._join_threads()
+        if not allow_reconnect:
+            self._reconnect_enabled = False
+            self._update_reconnect_status(reconnecting=False, attempt=self.reconnect_attempts, next_retry_ms=None, last_error=None)
+            self._stop_reconnect_thread()
+        else:
+            self._start_reconnect()
         
         # Reset state
         self.serial = None
-        self.port = None
+        if not allow_reconnect:
+            self.port = None
         self.buffer = ""
         with self.status_lock:
             self.status = None
+        self._update_health_status(healthy=False, last_seen_ms=self.health_status.get("lastSeenMs"))
+        if self.on_connection_state_change:
+            self.on_connection_state_change(False, None, None)
         log("[RotorConnection] Disconnected")
+
+    def _join_threads(self) -> None:
+        current_thread = threading.current_thread()
+        if self.read_thread and self.read_thread.is_alive() and self.read_thread is not current_thread:
+            self.read_thread.join(timeout=2.0)
+        self.read_thread = None
+
+        if self.polling_thread and self.polling_thread.is_alive() and self.polling_thread is not current_thread:
+            self.polling_thread.join(timeout=2.0)
+        self.polling_thread = None
+
+        if self.health_thread and self.health_thread.is_alive() and self.health_thread is not current_thread:
+            self.health_thread.join(timeout=2.0)
+        self.health_thread = None
+
+    def _start_reconnect(self) -> None:
+        if not self._reconnect_enabled or not self.port:
+            return
+        if self.reconnect_thread and self.reconnect_thread.is_alive():
+            return
+        self.reconnect_active = True
+        self.reconnect_thread = threading.Thread(target=self._reconnect_loop, daemon=True)
+        self.reconnect_thread.start()
+
+    def _stop_reconnect_thread(self) -> None:
+        self.reconnect_active = False
+        current_thread = threading.current_thread()
+        if self.reconnect_thread and self.reconnect_thread.is_alive() and self.reconnect_thread is not current_thread:
+            self.reconnect_thread.join(timeout=2.0)
+        self.reconnect_thread = None
+
+    def _update_reconnect_status(
+        self,
+        reconnecting: bool,
+        attempt: int,
+        next_retry_ms: Optional[int],
+        last_error: Optional[str]
+    ) -> None:
+        with self.reconnect_lock:
+            self.reconnect_status = {
+                "reconnecting": reconnecting,
+                "attempt": attempt,
+                "maxAttempts": self.max_reconnect_attempts if self.max_reconnect_attempts > 0 else None,
+                "nextRetryMs": next_retry_ms,
+                "lastError": last_error
+            }
+            status_snapshot = dict(self.reconnect_status)
+        if self.on_reconnect_status:
+            self.on_reconnect_status(status_snapshot)
+
+    def _update_health_status(self, healthy: bool, last_seen_ms: Optional[int]) -> None:
+        now_ms = int(time.time() * 1000)
+        should_broadcast = False
+        with self.health_lock:
+            previous = dict(self.health_status)
+            self.health_status = {
+                "healthy": healthy,
+                "lastSeenMs": last_seen_ms
+            }
+            if previous.get("healthy") != healthy:
+                should_broadcast = True
+            elif last_seen_ms and (now_ms - self._last_health_broadcast_ms >= 1000):
+                should_broadcast = True
+        if should_broadcast:
+            self._last_health_broadcast_ms = now_ms
+            if self.on_health_status:
+                self.on_health_status(dict(self.health_status))
+
+    def _handle_connection_error(self, reason: str) -> None:
+        if self.on_disconnect_reason:
+            self.on_disconnect_reason(reason)
+        log(f"[RotorConnection] Connection error: {reason}")
+        self._update_health_status(healthy=False, last_seen_ms=self.health_status.get("lastSeenMs"))
+        self._close_connection(reason=None, allow_reconnect=True)
+
+    def _reconnect_loop(self) -> None:
+        while self.reconnect_active and self._reconnect_enabled:
+            if self.max_reconnect_attempts > 0 and self.reconnect_attempts >= self.max_reconnect_attempts:
+                self._update_reconnect_status(
+                    reconnecting=False,
+                    attempt=self.reconnect_attempts,
+                    next_retry_ms=None,
+                    last_error="Max reconnect attempts reached"
+                )
+                return
+            self.reconnect_attempts += 1
+            delay = min(
+                self.reconnect_base_delay_s * (1.5 ** max(self.reconnect_attempts - 1, 0)),
+                self.reconnect_max_delay_s
+            )
+            next_retry_ms = int((time.time() + delay) * 1000)
+            self._update_reconnect_status(
+                reconnecting=True,
+                attempt=self.reconnect_attempts,
+                next_retry_ms=next_retry_ms,
+                last_error=self.reconnect_status.get("lastError")
+            )
+            log(f"[RotorConnection] Reconnect attempt {self.reconnect_attempts} in {delay:.1f}s")
+            time.sleep(delay)
+            if not self.reconnect_active or not self._reconnect_enabled:
+                return
+            try:
+                if not SERIAL_AVAILABLE:
+                    raise RuntimeError("pyserial is not installed. Install with: pip install pyserial")
+                self.serial = serial.Serial(
+                    port=self.port,
+                    baudrate=self.baud_rate,
+                    bytesize=8,
+                    parity=serial.PARITY_NONE,
+                    stopbits=serial.STOPBITS_ONE,
+                    timeout=1.0,
+                    write_timeout=1.0
+                )
+                self.read_active = True
+                self.polling_active = True
+                self.health_active = True
+                self.last_read_time = time.time()
+                self.last_heartbeat_time = time.time()
+                self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
+                self.read_thread.start()
+                self.polling_thread = threading.Thread(target=self._polling_loop, daemon=True)
+                self.polling_thread.start()
+                self.health_thread = threading.Thread(target=self._health_loop, daemon=True)
+                self.health_thread.start()
+                self._update_reconnect_status(
+                    reconnecting=False,
+                    attempt=self.reconnect_attempts,
+                    next_retry_ms=None,
+                    last_error=None
+                )
+                self._update_health_status(healthy=True, last_seen_ms=int(self.last_read_time * 1000))
+                if self.on_connection_state_change:
+                    self.on_connection_state_change(True, self.port, self.baud_rate)
+                log(f"[RotorConnection] Reconnected to {self.port} at {self.baud_rate} baud")
+                return
+            except Exception as e:
+                self._update_reconnect_status(
+                    reconnecting=True,
+                    attempt=self.reconnect_attempts,
+                    next_retry_ms=None,
+                    last_error=str(e)
+                )
+                log(f"[RotorConnection] Reconnect failed: {e}")
+                continue
 
     def send_command(self, command: str) -> None:
         """Send a command to the rotor.
@@ -200,8 +423,32 @@ class RotorConnection:
                     elapsed += chunk
                         
             except Exception as e:
-                log(f"[RotorConnection] Polling error: {e}")
+                self._handle_connection_error(f"Polling error: {e}")
                 time.sleep(1.0)
+
+    def _health_loop(self) -> None:
+        """Background thread to monitor connection health and heartbeat."""
+        while self.health_active:
+            if not self.serial or not self.serial.is_open:
+                time.sleep(0.5)
+                continue
+            now = time.time()
+            last_read = self.last_read_time or now
+            if self.health_timeout_s > 0 and (now - last_read) > self.health_timeout_s:
+                self._handle_connection_error(
+                    f"No data received for {now - last_read:.1f}s (health timeout)"
+                )
+                time.sleep(1.0)
+                continue
+            if self.heartbeat_interval_s > 0 and (now - self.last_heartbeat_time) >= self.heartbeat_interval_s:
+                try:
+                    self.send_command("C2")
+                    self.last_heartbeat_time = now
+                except Exception as e:
+                    self._handle_connection_error(f"Heartbeat failed: {e}")
+                    time.sleep(1.0)
+                    continue
+            time.sleep(0.5)
 
     def _read_loop(self) -> None:
         """Background thread to read data from the serial port."""
@@ -229,6 +476,7 @@ class RotorConnection:
             except Exception:
                 # Don't spam log on repetitive errors, just break if fatal
                 if not self.serial or not self.serial.is_open:
+                    self._handle_connection_error("Serial connection closed")
                     break
                 time.sleep(1)
 
@@ -258,4 +506,6 @@ class RotorConnection:
         
         with self.status_lock:
             self.status = status
-
+        now_ms = int(time.time() * 1000)
+        self.last_read_time = time.time()
+        self._update_health_status(healthy=True, last_seen_ms=now_ms)

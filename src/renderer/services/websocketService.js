@@ -21,6 +21,8 @@ class WebSocketService {
     // Event listeners
     this.listeners = {
       connection_state_changed: new Set(),
+      reconnect_status_changed: new Set(),
+      connection_health_changed: new Set(),
       client_list_updated: new Set(),
       client_suspended: new Set(),
       settings_updated: new Set(),
@@ -178,6 +180,14 @@ class WebSocketService {
       switch (type) {
         case 'connection_state_changed':
           this.emit('connection_state_changed', payload);
+          break;
+
+        case 'reconnect_status_changed':
+          this.emit('reconnect_status_changed', payload);
+          break;
+
+        case 'connection_health_changed':
+          this.emit('connection_health_changed', payload);
           break;
           
         case 'client_list_updated':

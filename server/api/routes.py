@@ -123,6 +123,9 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
                 "connected": True,
                 "port": state.rotor_connection.port,
                 "baudRate": state.rotor_connection.baud_rate,
+                "health": state.get_health_status(),
+                "reconnect": state.get_reconnect_status(),
+                "lastDisconnectReason": state.last_disconnect_reason,
                 "status": {
                     "rawLine": status.get("raw") if status else None,
                     "timestamp": status.get("timestamp") if status else None,
@@ -135,7 +138,23 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
                 "clientCount": client_count
             })
         else:
-            send_json(handler, {"connected": False, "clientCount": client_count})
+            send_json(handler, {
+                "connected": False,
+                "clientCount": client_count,
+                "health": state.get_health_status(),
+                "reconnect": state.get_reconnect_status(),
+                "lastDisconnectReason": state.last_disconnect_reason
+            })
+
+
+def handle_get_health(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/rotor/health - Get health/reconnect status."""
+    send_json(handler, {
+        "connected": bool(state.rotor_connection and state.rotor_connection.is_connected()),
+        "health": state.get_health_status(),
+        "reconnect": state.get_reconnect_status(),
+        "lastDisconnectReason": state.last_disconnect_reason
+    })
 
 
 # --- Connection Routes ---
@@ -207,7 +226,7 @@ def handle_disconnect(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             if auto_park and presets_enabled and state.rotor_logic:
                 if not state.rotor_logic.park():
                     log("[Routes] Auto-park on disconnect failed")
-            state.rotor_connection.disconnect()
+            state.rotor_connection.disconnect(reason="Manuelle Trennung")
             send_json(handler, {"status": "ok", "message": "Disconnected"})
             
             # Broadcast disconnection to all clients
