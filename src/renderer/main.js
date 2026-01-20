@@ -495,7 +495,7 @@ async function setupWebSocket() {
   // Handle connection state broadcasts from server
   wsService.on('connection_state_changed', (state) => {
     logAction('WebSocket: Verbindungsstatus empfangen', state);
-    
+    if (!state.connected && lastCommandValue) lastCommandValue.textContent = '--';
     // Update local connection state
     rotor.handleConnectionStateUpdate(state);
     
@@ -1154,7 +1154,14 @@ function handleStatus(status) {
   const el = typeof status.elevationRaw === 'number' ? status.elevationRaw.toFixed(0) : '--';
   lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
   logAction('Status aktualisiert', { status, display: lastStatusValue.textContent });
-  
+
+  if (status.lastCommandSent && status.lastCommandSent.command) {
+    const cmdTime = new Date(status.lastCommandSent.timestamp).toLocaleTimeString();
+    lastCommandValue.textContent = `${cmdTime} | ${status.lastCommandSent.command}`;
+  } else {
+    lastCommandValue.textContent = '--';
+  }
+
   if (connected) {
     updateConnectionStatusText();
     connectionStatus.classList.add('connected');

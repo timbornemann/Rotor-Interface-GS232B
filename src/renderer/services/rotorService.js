@@ -612,7 +612,8 @@ class RotorService {
                       azimuthRaw: s.rph.azimuth,
                       elevationRaw: s.rph.elevation,
                       rawLine: s.rawLine,
-                      timestamp: s.timestamp
+                      timestamp: s.timestamp,
+                      lastCommandSent: data.lastCommandSent || null
                   };
                   
                   this.currentStatus = newStatus;

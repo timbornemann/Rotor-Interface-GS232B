@@ -49,6 +49,9 @@ class RotorConnection:
         self.status: Optional[Dict[str, Any]] = None
         self.status_lock = threading.Lock()
         self.write_lock = threading.Lock()
+        self._last_command: Optional[str] = None
+        self._last_command_timestamp: Optional[int] = None
+        self._last_command_lock = threading.Lock()
 
     def is_connected(self) -> bool:
         """Check if connected to a port.
@@ -128,6 +131,9 @@ class RotorConnection:
         self.buffer = ""
         with self.status_lock:
             self.status = None
+        with self._last_command_lock:
+            self._last_command = None
+            self._last_command_timestamp = None
         log("[RotorConnection] Disconnected")
 
     def send_command(self, command: str) -> None:
@@ -143,21 +149,41 @@ class RotorConnection:
             raise RuntimeError("Not connected to rotor")
         
         command_with_cr = command if command.endswith('\r') else f"{command}\r"
+        cmd_display = command.rstrip('\r\n')
         try:
             with self.write_lock:
                 self.serial.write(command_with_cr.encode('utf-8'))
+            with self._last_command_lock:
+                # C2 (Statusabfrage) nicht als „letzter Befehl“ speichern – wird zu oft gesendet
+                if cmd_display.upper() != 'C2':
+                    self._last_command = cmd_display
+                    self._last_command_timestamp = int(time.time() * 1000)
             log(f"[RotorConnection] Sent: {command_with_cr!r}")
         except Exception as e:
             raise RuntimeError(f"Failed to send command: {e}")
 
     def get_status(self) -> Optional[Dict[str, Any]]:
         """Get the current status.
-        
+
         Returns:
             The current status dictionary or None if no status available.
         """
         with self.status_lock:
             return self.status
+
+    def get_last_command(self) -> Optional[Dict[str, Any]]:
+        """Get the last command sent to the rotor.
+
+        Returns:
+            {"command": str, "timestamp": int} or None if no command sent yet.
+        """
+        with self._last_command_lock:
+            if self._last_command is None:
+                return None
+            return {
+                "command": self._last_command,
+                "timestamp": self._last_command_timestamp
+            }
 
     def set_polling_interval(self, polling_interval_ms: int) -> None:
         """Update the polling interval dynamically.

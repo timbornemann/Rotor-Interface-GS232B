@@ -125,6 +125,7 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
                     offset = config.get("elevationOffset", 0.0) or 0.0
                     calibrated["elevation"] = (elevation_raw + offset) / scale
 
+            last_cmd = state.rotor_connection.get_last_command()
             send_json(handler, {
                 "connected": True,
                 "port": state.rotor_connection.port,
@@ -138,6 +139,7 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
                     },
                     "calibrated": calibrated
                 },
+                "lastCommandSent": last_cmd,
                 "clientCount": client_count
             })
         else:

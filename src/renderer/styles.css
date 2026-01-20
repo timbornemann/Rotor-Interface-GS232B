@@ -758,6 +758,28 @@ main.dashboard {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.last-command {
+  margin-top: 0.75rem;
+}
+
+.last-command-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.last-command-value {
+  font-size: 0.9rem;
+  font-family: 'Courier New', monospace;
+  color: var(--text);
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .logo-container {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
@@ -942,6 +964,28 @@ main.dashboard {
   }
   
   .controls-card .last-status-value {
+    font-size: 0.9rem;
+    font-family: 'Courier New', monospace;
+    color: var(--text);
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .controls-card .last-command {
+    margin-top: 0.75rem;
+  }
+
+  .controls-card .last-command-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+
+  .controls-card .last-command-value {
     font-size: 0.9rem;
     font-family: 'Courier New', monospace;
     color: var(--text);
@@ -2322,6 +2366,30 @@ button.refreshing .icon {
   }
 
   .last-status-value {
+    font-size: 0.85rem;
+    font-family: 'Courier New', monospace;
+    color: var(--text);
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .last-command {
+    margin-top: 0.75rem;
+  }
+
+  .last-command-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+
+  .last-command-value {
     font-size: 0.85rem;
     font-family: 'Courier New', monospace;
     color: var(--text);
