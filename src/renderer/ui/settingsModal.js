@@ -175,6 +175,17 @@ class SettingsModal {
       clearElPointsBtn.addEventListener('click', () => this.clearCalibrationPoints('elevation'));
     }
 
+    // Manual calibration point buttons
+    const addManualPointBtn = document.getElementById('addManualCalibrationPointBtn');
+    if (addManualPointBtn) {
+      addManualPointBtn.addEventListener('click', () => this.addManualCalibrationPoint());
+    }
+
+    const useCurrentPosBtn = document.getElementById('useCurrentPositionBtn');
+    if (useCurrentPosBtn) {
+      useCurrentPosBtn.addEventListener('click', () => this.useCurrentPosition());
+    }
+
     // Keyboard handling
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) {
@@ -1172,6 +1183,140 @@ class SettingsModal {
     } catch (error) {
       console.error('[SettingsModal] Error clearing calibration points:', error);
       await this.showError(`Fehler beim Löschen: ${error.message}`);
+    }
+  }
+
+  async addManualCalibrationPoint() {
+    const axisSelect = document.getElementById('manualCalibrationAxis');
+    const rawInput = document.getElementById('manualCalibrationRaw');
+    const actualInput = document.getElementById('manualCalibrationActual');
+
+    if (!axisSelect || !rawInput || !actualInput) {
+      console.error('[SettingsModal] Manual calibration form elements not found');
+      return;
+    }
+
+    const axis = axisSelect.value;
+    const rawValue = parseFloat(rawInput.value);
+    const actualValue = parseFloat(actualInput.value);
+
+    // Validate inputs
+    if (isNaN(rawValue) || isNaN(actualValue)) {
+      await this.showError('Bitte geben Sie gültige Zahlenwerte ein.');
+      return;
+    }
+
+    // Validate ranges
+    if (axis === 'azimuth') {
+      const maxLimit = this.currentConfig?.azimuthMaxLimit || 450;
+      if (actualValue < 0 || actualValue > maxLimit) {
+        await this.showError(`Tatsächliche Position muss zwischen 0° und ${maxLimit}° liegen.`);
+        return;
+      }
+    } else if (axis === 'elevation') {
+      const maxLimit = this.currentConfig?.elevationMaxLimit || 90;
+      if (actualValue < 0 || actualValue > maxLimit) {
+        await this.showError(`Tatsächliche Position muss zwischen 0° und ${maxLimit}° liegen.`);
+        return;
+      }
+    }
+
+    try {
+      if (!window.rotorService) {
+        console.warn('[SettingsModal] Rotor service not available');
+        return;
+      }
+
+      const response = await fetch(`${window.rotorService.apiBase}/api/calibration/add-point`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...window.rotorService.getSessionHeaders()
+        },
+        body: JSON.stringify({
+          axis,
+          rawValue,
+          actualValue
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
+      // Clear inputs
+      rawInput.value = '';
+      actualInput.value = '';
+
+      // Reload points display
+      await this.loadCalibrationPoints();
+
+      // Show success message
+      if (window.alertModal) {
+        await window.alertModal.showAlert(
+          `Kalibrierpunkt hinzugefügt:\nRaw: ${rawValue.toFixed(1)}° → Tatsächlich: ${actualValue.toFixed(1)}°`
+        );
+      }
+
+    } catch (error) {
+      console.error('[SettingsModal] Error adding calibration point:', error);
+      await this.showError(`Fehler beim Hinzufügen: ${error.message}`);
+    }
+  }
+
+  async useCurrentPosition() {
+    try {
+      if (!window.rotorService || !window.rotorService.isConnected()) {
+        await this.showError('Bitte verbinden Sie zuerst den Rotor.');
+        return;
+      }
+
+      // Get current status
+      const status = await window.rotorService.getStatus();
+      
+      if (!status || !status.azimuthRaw || !status.elevationRaw) {
+        await this.showError('Konnte aktuelle Position nicht abrufen.');
+        return;
+      }
+
+      // Get selected axis
+      const axisSelect = document.getElementById('manualCalibrationAxis');
+      const rawInput = document.getElementById('manualCalibrationRaw');
+      const actualInput = document.getElementById('manualCalibrationActual');
+
+      if (!axisSelect || !rawInput || !actualInput) {
+        return;
+      }
+
+      const axis = axisSelect.value;
+
+      // Fill in raw value from current position
+      if (axis === 'azimuth') {
+        rawInput.value = status.azimuthRaw.toFixed(1);
+        // Pre-fill actual value with raw value as starting point
+        actualInput.value = status.azimuthRaw.toFixed(1);
+        actualInput.focus();
+        actualInput.select();
+      } else {
+        rawInput.value = status.elevationRaw.toFixed(1);
+        // Pre-fill actual value with raw value as starting point
+        actualInput.value = status.elevationRaw.toFixed(1);
+        actualInput.focus();
+        actualInput.select();
+      }
+
+      // Show info message
+      if (window.alertModal) {
+        await window.alertModal.showAlert(
+          `Raw-Wert wurde übernommen: ${rawInput.value}°\n\n` +
+          `Bitte passen Sie den "Tatsächliche Position"-Wert an, wenn die Position nicht korrekt ist.`
+        );
+      }
+
+    } catch (error) {
+      console.error('[SettingsModal] Error using current position:', error);
+      await this.showError(`Fehler: ${error.message}`);
     }
   }
 }
