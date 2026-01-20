@@ -226,9 +226,14 @@ class CalibrationWizard {
     try {
       // Move to 0° position (using calibrated method)
       if (window.rotorService) {
+        // Get current position for the other axis
+        const currentStatus = await this.getCurrentStatus();
+        const currentAz = currentStatus?.azimuth || 0;
+        const currentEl = currentStatus?.elevation || 0;
+        
         await window.rotorService.setAzEl({
-          az: this.axis === 'azimuth' ? 0 : null,
-          el: this.axis === 'elevation' ? 0 : null
+          az: this.axis === 'azimuth' ? 0 : currentAz,
+          el: this.axis === 'elevation' ? 0 : currentEl
         });
       }
 
@@ -293,9 +298,14 @@ class CalibrationWizard {
     try {
       // Move rotor to target position (using calibrated method to apply existing calibration)
       if (window.rotorService) {
+        // Get current position for the other axis
+        const currentStatus = await this.getCurrentStatus();
+        const currentAz = currentStatus?.azimuth || 0;
+        const currentEl = currentStatus?.elevation || 0;
+        
         await window.rotorService.setAzEl({
-          az: this.axis === 'azimuth' ? targetPosition : null,
-          el: this.axis === 'elevation' ? targetPosition : null
+          az: this.axis === 'azimuth' ? targetPosition : currentAz,
+          el: this.axis === 'elevation' ? targetPosition : currentEl
         });
       }
 
