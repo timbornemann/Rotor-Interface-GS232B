@@ -1071,8 +1071,8 @@ def handle_add_calibration_point(handler: BaseHTTPRequestHandler, state: "Server
         state.rotor_logic.update_config(state.settings.get_all())
     
     # Broadcast via WebSocket
-    if state.ws_server:
-        state.ws_server.broadcast_settings_update(state.settings.get_all())
+    if state.websocket_manager:
+        state.websocket_manager.broadcast_settings_updated(state.settings.get_all())
     
     send_json(handler, {
         "status": "ok",
@@ -1138,8 +1138,8 @@ def handle_remove_calibration_point(handler: BaseHTTPRequestHandler, state: "Ser
         state.rotor_logic.update_config(state.settings.get_all())
     
     # Broadcast via WebSocket
-    if state.ws_server:
-        state.ws_server.broadcast_settings_update(state.settings.get_all())
+    if state.websocket_manager:
+        state.websocket_manager.broadcast_settings_updated(state.settings.get_all())
     
     send_json(handler, {
         "status": "ok",
@@ -1183,8 +1183,8 @@ def handle_clear_calibration_points(handler: BaseHTTPRequestHandler, state: "Ser
         state.rotor_logic.update_config(state.settings.get_all())
     
     # Broadcast via WebSocket
-    if state.ws_server:
-        state.ws_server.broadcast_settings_update(state.settings.get_all())
+    if state.websocket_manager:
+        state.websocket_manager.broadcast_settings_updated(state.settings.get_all())
     
     send_json(handler, {"status": "ok", "axis": axis})
     log(f"[API] Cleared all calibration points for {axis}")

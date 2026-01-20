@@ -224,9 +224,9 @@ class CalibrationWizard {
     this.skipBtn.disabled = true;
 
     try {
-      // Move to 0° position
+      // Move to 0° position (using calibrated method)
       if (window.rotorService) {
-        await window.rotorService.setAzElRaw({
+        await window.rotorService.setAzEl({
           az: this.axis === 'azimuth' ? 0 : null,
           el: this.axis === 'elevation' ? 0 : null
         });
@@ -291,9 +291,9 @@ class CalibrationWizard {
     this.skipBtn.disabled = false;
 
     try {
-      // Move rotor to target position (using raw position to get accurate COM port reading)
+      // Move rotor to target position (using calibrated method to apply existing calibration)
       if (window.rotorService) {
-        await window.rotorService.setAzElRaw({
+        await window.rotorService.setAzEl({
           az: this.axis === 'azimuth' ? targetPosition : null,
           el: this.axis === 'elevation' ? targetPosition : null
         });
@@ -302,15 +302,18 @@ class CalibrationWizard {
       // Wait for movement to complete
       await this.waitForPosition(targetPosition);
 
-      // Get current raw position from COM port
+      // Get current position from status (both raw and calibrated)
       const status = await this.getCurrentStatus();
       const rawValue = this.axis === 'azimuth' ? status.azimuthRaw : status.elevationRaw;
+      const calibratedValue = this.axis === 'azimuth' ? status.azimuth : status.elevation;
 
-      // Display values
+      // Display values (show both raw and calibrated)
       this.rawValueDisplay.textContent = `${rawValue.toFixed(1)}°`;
+      this.actualValueDisplay.textContent = `${calibratedValue ? calibratedValue.toFixed(1) : targetPosition}°`;
       this.statusText.textContent = 'Position erreicht';
       this.instructionText.innerHTML = `
         Ziel-Position: <strong>${targetPosition}°</strong><br>
+        Kalibriert: <strong>${calibratedValue ? calibratedValue.toFixed(1) : targetPosition}°</strong><br>
         Prüfen Sie am Rotor: Stimmt die Position?
       `;
 
@@ -342,7 +345,8 @@ class CalibrationWizard {
       const checkInterval = setInterval(async () => {
         try {
           const status = await this.getCurrentStatus();
-          const currentPos = this.axis === 'azimuth' ? status.azimuthRaw : status.elevationRaw;
+          // Use calibrated position instead of raw to check if target is reached
+          const currentPos = this.axis === 'azimuth' ? status.azimuth : status.elevation;
 
           // Check if position reached
           if (Math.abs(currentPos - targetPosition) <= tolerance) {

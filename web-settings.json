@@ -62,24 +62,7 @@
   "azimuthScaleFactorMax": 2,
   "elevationScaleFactorMin": 0.1,
   "elevationScaleFactorMax": 2,
-  "azimuthCalibrationPoints": [
-    {
-      "raw": 2.0,
-      "actual": 0.0
-    },
-    {
-      "raw": 45.0,
-      "actual": 85.0
-    },
-    {
-      "raw": 90.0,
-      "actual": 175.0
-    },
-    {
-      "raw": 180.0,
-      "actual": 355.0
-    }
-  ],
+  "azimuthCalibrationPoints": [],
   "elevationCalibrationPoints": [],
   "serverHttpPort": 8081,
   "serverWebSocketPort": 8082,
