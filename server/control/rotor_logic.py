@@ -214,9 +214,26 @@ class RotorLogic:
         # If we are in 450 mode, a request for "10 degrees" could mean 10 or 370.
         # We should choose the one closest to our current position to avoid unnecessary rotation.
         if az is not None and self.config["azimuthMode"] > 360:
-            status = self._get_calibrated_status()
-            if status and status.get("azimuth") is not None:
-                current_az = status["azimuth"]
+            calibration_mode = self.config.get("calibrationMode", "bidirectional")
+            
+            # In display-only mode: use RAW position for smart azimuth logic
+            # In bidirectional mode: use CALIBRATED position
+            if calibration_mode == "display-only":
+                # Use raw position because we'll send raw commands
+                raw_status = self.connection.get_status()
+                if raw_status and raw_status.get("azimuthRaw") is not None:
+                    current_az = raw_status["azimuthRaw"]
+                else:
+                    current_az = None
+            else:
+                # Use calibrated position
+                status = self._get_calibrated_status()
+                if status and status.get("azimuth") is not None:
+                    current_az = status["azimuth"]
+                else:
+                    current_az = None
+            
+            if current_az is not None:
                 # Candidates: The requested azimuth (normalized 0-360) and the overlapped version
                 # e.g., if az=10, mode=450: candidates are 10 and 370 (10+360)
                 candidates = [az]
@@ -230,7 +247,7 @@ class RotorLogic:
                 # Select candidate with shortest linear distance to current position
                 # We use simple abs difference because we can't "wrap" physically across the stop.
                 best_az = min(candidates, key=lambda x: abs(x - current_az))
-                logger.info(f"Smart Azimuth: Input={az}, Current={current_az}, Candidates={candidates} -> Selected={best_az}")
+                logger.info(f"Smart Azimuth: Input={az}, Current={current_az}, Mode={calibration_mode}, Candidates={candidates} -> Selected={best_az}")
                 az = best_az
 
         self.target_az = float(az) if az is not None else None
