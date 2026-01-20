@@ -63,6 +63,9 @@ class CalibrationWizard {
     this.createModal();
     this.showModal();
 
+    // First, move to reference position (0°) to ensure we start from a known position
+    await this.moveToReferencePosition();
+
     // Start with first position
     await this.processNextPosition();
   }
@@ -200,6 +203,59 @@ class CalibrationWizard {
           this.modal = null;
         }
       }, 300);
+    }
+  }
+
+  /**
+   * Move to reference position (0°) before starting calibration
+   */
+  async moveToReferencePosition() {
+    this.statusText.textContent = 'Referenzfahrt...';
+    this.instructionText.innerHTML = `
+      Der Motor fährt jetzt zur Startposition (0°).<br>
+      Dies stellt sicher, dass die Kalibrierung von einer bekannten Position startet.
+    `;
+    this.rawValueDisplay.textContent = '--';
+    this.actualValueDisplay.textContent = '0°';
+
+    // Disable all buttons during reference move
+    this.confirmBtn.disabled = true;
+    this.adjustBtn.disabled = true;
+    this.skipBtn.disabled = true;
+
+    try {
+      // Move to 0° position
+      if (window.rotorService) {
+        await window.rotorService.setAzElRaw({
+          az: this.axis === 'azimuth' ? 0 : null,
+          el: this.axis === 'elevation' ? 0 : null
+        });
+      }
+
+      // Wait for position to be reached
+      await this.waitForPosition(0, 45000); // Longer timeout for initial move
+
+      this.statusText.textContent = 'Referenzposition erreicht';
+      this.instructionText.textContent = 'Kalibrierung startet...';
+      
+      // Wait a moment before starting
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+    } catch (error) {
+      console.error('[CalibrationWizard] Error during reference move:', error);
+      
+      // Ask user if they want to continue anyway
+      const continueAnyway = confirm(
+        'Fehler bei der Referenzfahrt zu 0°.\n\n' +
+        'Möchten Sie trotzdem fortfahren?\n' +
+        'Warnung: Die Kalibrierung könnte ungenau sein, wenn der Motor nicht bei 0° steht.'
+      );
+      
+      if (!continueAnyway) {
+        this.isRunning = false;
+        this.hideModal();
+        throw error;
+      }
     }
   }
 
