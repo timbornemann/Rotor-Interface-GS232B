@@ -64,31 +64,32 @@
   "elevationScaleFactorMax": 2,
   "azimuthCalibrationPoints": [
     {
-      "raw": 2.0,
-      "actual": 0.0
+      "raw": 2,
+      "actual": 0
     },
     {
-      "raw": 45.0,
-      "actual": 86.0
+      "raw": 45,
+      "actual": 86
     },
     {
-      "raw": 92.0,
-      "actual": 180.0
+      "raw": 92,
+      "actual": 180
     },
     {
-      "raw": 137.0,
-      "actual": 269.0
+      "raw": 137,
+      "actual": 269
     },
     {
-      "raw": 183.0,
-      "actual": 361.0
+      "raw": 183,
+      "actual": 361
     },
     {
-      "raw": 225.0,
-      "actual": 450.0
+      "raw": 225,
+      "actual": 450
     }
   ],
   "elevationCalibrationPoints": [],
+  "calibrationMode": "display-only",
   "serverHttpPort": 8081,
   "serverWebSocketPort": 8082,
   "serverPollingIntervalMs": 500,

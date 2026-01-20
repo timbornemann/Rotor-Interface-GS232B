@@ -342,38 +342,55 @@ class RotorLogic:
         Uses inverse multi-point calibration if available, otherwise falls back to
         linear calibration (offset + scale factor).
         
+        Respects calibrationMode setting:
+        - "display-only": Sends calibrated values directly (no inverse calibration)
+        - "bidirectional": Applies inverse calibration to commands (default)
+        
         Args:
             az: Target azimuth in calibrated degrees (from frontend).
             el: Target elevation in calibrated degrees (from frontend).
         """
         # Convert Target Degrees (Calibrated) -> Raw Command Values
         
+        # Check calibration mode
+        calibration_mode = self.config.get("calibrationMode", "bidirectional")
+        
         vals = []
         if az is not None:
-            # Try multi-point calibration first
-            az_cal_points = self.config.get("azimuthCalibrationPoints", [])
-            if az_cal_points and len(az_cal_points) >= 2:
-                raw_az = inverse_interpolate_calibration(az, az_cal_points)
-                if raw_az is None:
-                    # Fallback to linear
-                    raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
+            if calibration_mode == "display-only":
+                # Display-only mode: Send calibrated value directly without inverse calibration
+                raw_az = az
             else:
-                # Linear calibration: Inverse formula: raw = (calibrated * scale) - offset
-                raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
+                # Bidirectional mode: Apply inverse calibration
+                # Try multi-point calibration first
+                az_cal_points = self.config.get("azimuthCalibrationPoints", [])
+                if az_cal_points and len(az_cal_points) >= 2:
+                    raw_az = inverse_interpolate_calibration(az, az_cal_points)
+                    if raw_az is None:
+                        # Fallback to linear
+                        raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
+                else:
+                    # Linear calibration: Inverse formula: raw = (calibrated * scale) - offset
+                    raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
             
             vals.append(f"{int(round(raw_az)):03d}")
         
         if el is not None:
-            # Try multi-point calibration first
-            el_cal_points = self.config.get("elevationCalibrationPoints", [])
-            if el_cal_points and len(el_cal_points) >= 2:
-                raw_el = inverse_interpolate_calibration(el, el_cal_points)
-                if raw_el is None:
-                    # Fallback to linear
-                    raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
+            if calibration_mode == "display-only":
+                # Display-only mode: Send calibrated value directly
+                raw_el = el
             else:
-                # Linear calibration: Inverse formula
-                raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
+                # Bidirectional mode: Apply inverse calibration
+                # Try multi-point calibration first
+                el_cal_points = self.config.get("elevationCalibrationPoints", [])
+                if el_cal_points and len(el_cal_points) >= 2:
+                    raw_el = inverse_interpolate_calibration(el, el_cal_points)
+                    if raw_el is None:
+                        # Fallback to linear
+                        raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
+                else:
+                    # Linear calibration: Inverse formula
+                    raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
             
             if len(vals) == 0:
                 # If only EL provided, we need current AZ for the W command

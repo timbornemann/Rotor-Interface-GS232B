@@ -65,6 +65,7 @@ class SettingsModal {
       elevationOffset: { id: 'settingsElOffsetInput', type: 'number' },
       azimuthScaleFactor: { id: 'settingsAzScaleFactorInput', type: 'number' },
       elevationScaleFactor: { id: 'settingsElScaleFactorInput', type: 'number' },
+      calibrationMode: { id: 'calibrationMode', type: 'select' },
       
       // Limits
       azimuthMinLimit: { id: 'settingsAzMinLimit', type: 'number' },
@@ -162,6 +163,14 @@ class SettingsModal {
     const startElCalibBtn = document.getElementById('startElevationCalibrationBtn');
     if (startElCalibBtn) {
       startElCalibBtn.addEventListener('click', () => this.startCalibration('elevation'));
+    }
+
+    // Calibration mode selector
+    const calibrationModeSelect = document.getElementById('calibrationMode');
+    if (calibrationModeSelect) {
+      calibrationModeSelect.addEventListener('change', (e) => {
+        window.configStore.set('calibrationMode', e.target.value);
+      });
     }
 
     // Clear calibration points buttons

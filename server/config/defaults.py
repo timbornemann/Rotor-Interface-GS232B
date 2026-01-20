@@ -91,6 +91,7 @@ DEFAULT_CONFIG = {
     # Multi-Point Calibration (Advanced)
     "azimuthCalibrationPoints": [],
     "elevationCalibrationPoints": [],
+    "calibrationMode": "bidirectional",  # "display-only" or "bidirectional"
     
     # Server Settings
     "serverHttpPort": 8081,

@@ -638,6 +638,22 @@
             </div>
 
             <div class="settings-card">
+              <h4 class="card-title">Kalibrierungs-Modus</h4>
+              <p class="help-text">Wählen Sie, wie die Kalibrierung angewendet wird.</p>
+              <div class="form-group">
+                <label for="calibrationMode">Modus</label>
+                <select id="calibrationMode" class="input">
+                  <option value="bidirectional">Beidseitig (Anzeige + Befehle)</option>
+                  <option value="display-only">Einseitig (nur Anzeige)</option>
+                </select>
+                <p class="setting-description">
+                  <strong>Beidseitig:</strong> Kalibrierung wird für Anzeige und Motorbefehle verwendet (Standard).<br>
+                  <strong>Einseitig:</strong> Kalibrierung nur für Anzeige, Motorbefehle werden direkt gesendet. Nutzen Sie diesen Modus wenn Ihr Motor korrekt auf Positionsbefehle reagiert, aber falsche Sensordaten liefert.
+                </p>
+              </div>
+            </div>
+
+            <div class="settings-card">
               <h4 class="card-title">Multi-Point-Kalibrierung</h4>
               <p class="help-text">
                 Präzise Kalibrierung mit mehreren Messpunkten. Nutzen Sie den automatischen Wizard für schnelle Kalibrierung
