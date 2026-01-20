@@ -1281,11 +1281,11 @@ class SettingsModal {
         return;
       }
 
-      // Get current status
-      const status = await window.rotorService.getStatus();
+      // Get current status from rotorService (it polls automatically)
+      const status = window.rotorService.currentStatus;
       
       if (!status || status.azimuthRaw === undefined || status.elevationRaw === undefined) {
-        await this.showError('Konnte aktuelle Position nicht abrufen.');
+        await this.showError('Konnte aktuelle Position nicht abrufen. Bitte stellen Sie sicher, dass der Rotor verbunden ist.');
         return;
       }
 

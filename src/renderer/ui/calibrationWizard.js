@@ -218,10 +218,10 @@ class CalibrationWizard {
     try {
       // Move rotor to target position (using raw position to get accurate COM port reading)
       if (window.rotorService) {
-        await window.rotorService.setTargetRaw(
-          this.axis === 'azimuth' ? targetPosition : null,
-          this.axis === 'elevation' ? targetPosition : null
-        );
+        await window.rotorService.setAzElRaw({
+          az: this.axis === 'azimuth' ? targetPosition : null,
+          el: this.axis === 'elevation' ? targetPosition : null
+        });
       }
 
       // Wait for movement to complete
@@ -293,7 +293,15 @@ class CalibrationWizard {
     if (!window.rotorService) {
       throw new Error('Rotor service not available');
     }
-    return await window.rotorService.getStatus();
+    
+    // rotorService polls status automatically and stores it in currentStatus
+    const status = window.rotorService.currentStatus;
+    
+    if (!status) {
+      throw new Error('Status not available - please ensure rotor is connected');
+    }
+    
+    return status;
   }
 
   /**
