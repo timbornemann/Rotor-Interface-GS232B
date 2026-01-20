@@ -107,17 +107,23 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             azimuth_raw = status.get("azimuthRaw") if status else None
             elevation_raw = status.get("elevationRaw") if status else None
             
-            # Calculate calibrated values
+            # Get calibrated values from rotor_logic (uses multi-point calibration)
             calibrated = {"azimuth": None, "elevation": None}
-            if azimuth_raw is not None:
-                scale = config.get("azimuthScaleFactor", 1.0) or 1.0
-                offset = config.get("azimuthOffset", 0.0) or 0.0
-                calibrated["azimuth"] = (azimuth_raw + offset) / scale
-            
-            if elevation_raw is not None:
-                scale = config.get("elevationScaleFactor", 1.0) or 1.0
-                offset = config.get("elevationOffset", 0.0) or 0.0
-                calibrated["elevation"] = (elevation_raw + offset) / scale
+            if state.rotor_logic:
+                calibrated_status = state.rotor_logic._get_calibrated_status()
+                if calibrated_status:
+                    calibrated = calibrated_status
+            else:
+                # Fallback to linear calibration if rotor_logic not available
+                if azimuth_raw is not None:
+                    scale = config.get("azimuthScaleFactor", 1.0) or 1.0
+                    offset = config.get("azimuthOffset", 0.0) or 0.0
+                    calibrated["azimuth"] = (azimuth_raw + offset) / scale
+                
+                if elevation_raw is not None:
+                    scale = config.get("elevationScaleFactor", 1.0) or 1.0
+                    offset = config.get("elevationOffset", 0.0) or 0.0
+                    calibrated["elevation"] = (elevation_raw + offset) / scale
 
             send_json(handler, {
                 "connected": True,
@@ -458,17 +464,23 @@ def handle_get_position(handler: BaseHTTPRequestHandler, state: "ServerState") -
             azimuth_raw = status.get("azimuthRaw") if status else None
             elevation_raw = status.get("elevationRaw") if status else None
             
-            # Calculate calibrated values
+            # Get calibrated values from rotor_logic (uses multi-point calibration)
             calibrated = {"azimuth": None, "elevation": None}
-            if azimuth_raw is not None:
-                scale = config.get("azimuthScaleFactor", 1.0) or 1.0
-                offset = config.get("azimuthOffset", 0.0) or 0.0
-                calibrated["azimuth"] = (azimuth_raw + offset) / scale
-            
-            if elevation_raw is not None:
-                scale = config.get("elevationScaleFactor", 1.0) or 1.0
-                offset = config.get("elevationOffset", 0.0) or 0.0
-                calibrated["elevation"] = (elevation_raw + offset) / scale
+            if state.rotor_logic:
+                calibrated_status = state.rotor_logic._get_calibrated_status()
+                if calibrated_status:
+                    calibrated = calibrated_status
+            else:
+                # Fallback to linear calibration if rotor_logic not available
+                if azimuth_raw is not None:
+                    scale = config.get("azimuthScaleFactor", 1.0) or 1.0
+                    offset = config.get("azimuthOffset", 0.0) or 0.0
+                    calibrated["azimuth"] = (azimuth_raw + offset) / scale
+                
+                if elevation_raw is not None:
+                    scale = config.get("elevationScaleFactor", 1.0) or 1.0
+                    offset = config.get("elevationOffset", 0.0) or 0.0
+                    calibrated["elevation"] = (elevation_raw + offset) / scale
             
             # Build calibration info
             calibration = {
