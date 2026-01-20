@@ -188,6 +188,7 @@ class WebSocketManager:
                 "baudRate": baud_rate
             }
         }
+        log(f"[WebSocket] Sende connection_state_changed: connected={connected}, port={port}, clients={self.get_client_count()}", level="DEBUG")
         self._schedule_broadcast(json.dumps(message))
     
     def broadcast_client_list(self, clients: list) -> None:
@@ -317,11 +318,17 @@ class WebSocketManager:
         Args:
             message: The message to broadcast.
         """
-        if self._loop and self._running:
-            asyncio.run_coroutine_threadsafe(
-                self._broadcast(message),
-                self._loop
+        if not self._loop or not self._running:
+            log(
+                f"[WebSocket] Broadcast übersprungen: Server nicht bereit "
+                f"(_loop={self._loop is not None}, _running={self._running})",
+                level="WARNING"
             )
+            return
+        asyncio.run_coroutine_threadsafe(
+            self._broadcast(message),
+            self._loop
+        )
     
     def _schedule_send(self, websocket: WebSocketServerProtocol, message: str) -> None:
         """Schedule a send to a specific client.

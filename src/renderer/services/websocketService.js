@@ -52,7 +52,11 @@ class WebSocketService {
    */
   getWebSocketUrl() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
+    // hostname can be empty with file:// or in some Electron contexts; fallback to localhost
+    let host = window.location.hostname;
+    if (!host || host === '') {
+      host = 'localhost';
+    }
     // WebSocket runs on port 8082 by default, but can be configured
     const port = this.port || 8082;
     return `${protocol}//${host}:${port}`;
