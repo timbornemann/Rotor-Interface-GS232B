@@ -175,15 +175,26 @@ class SettingsModal {
       clearElPointsBtn.addEventListener('click', () => this.clearCalibrationPoints('elevation'));
     }
 
-    // Manual calibration point buttons
-    const addManualPointBtn = document.getElementById('addManualCalibrationPointBtn');
-    if (addManualPointBtn) {
-      addManualPointBtn.addEventListener('click', () => this.addManualCalibrationPoint());
+    // Manual calibration point buttons - Azimuth
+    const addAzPointBtn = document.getElementById('addAzimuthPointBtn');
+    if (addAzPointBtn) {
+      addAzPointBtn.addEventListener('click', () => this.addManualCalibrationPoint('azimuth'));
     }
 
-    const useCurrentPosBtn = document.getElementById('useCurrentPositionBtn');
-    if (useCurrentPosBtn) {
-      useCurrentPosBtn.addEventListener('click', () => this.useCurrentPosition());
+    const useAzCurrentBtn = document.getElementById('useAzimuthCurrentBtn');
+    if (useAzCurrentBtn) {
+      useAzCurrentBtn.addEventListener('click', () => this.useCurrentPosition('azimuth'));
+    }
+
+    // Manual calibration point buttons - Elevation
+    const addElPointBtn = document.getElementById('addElevationPointBtn');
+    if (addElPointBtn) {
+      addElPointBtn.addEventListener('click', () => this.addManualCalibrationPoint('elevation'));
+    }
+
+    const useElCurrentBtn = document.getElementById('useElevationCurrentBtn');
+    if (useElCurrentBtn) {
+      useElCurrentBtn.addEventListener('click', () => this.useCurrentPosition('elevation'));
     }
 
     // Keyboard handling
@@ -1012,7 +1023,7 @@ class SettingsModal {
     }
 
     // Check if rotor is connected
-    if (!window.rotorService || !window.rotorService.isConnected()) {
+    if (!window.rotorService || !window.rotorService.isConnected) {
       await this.showError('Bitte verbinden Sie zuerst den Rotor.');
       return;
     }
@@ -1186,17 +1197,15 @@ class SettingsModal {
     }
   }
 
-  async addManualCalibrationPoint() {
-    const axisSelect = document.getElementById('manualCalibrationAxis');
-    const rawInput = document.getElementById('manualCalibrationRaw');
-    const actualInput = document.getElementById('manualCalibrationActual');
+  async addManualCalibrationPoint(axis) {
+    const rawInput = document.getElementById(`${axis}ManualRaw`);
+    const actualInput = document.getElementById(`${axis}ManualActual`);
 
-    if (!axisSelect || !rawInput || !actualInput) {
+    if (!rawInput || !actualInput) {
       console.error('[SettingsModal] Manual calibration form elements not found');
       return;
     }
 
-    const axis = axisSelect.value;
     const rawValue = parseFloat(rawInput.value);
     const actualValue = parseFloat(actualInput.value);
 
@@ -1265,9 +1274,9 @@ class SettingsModal {
     }
   }
 
-  async useCurrentPosition() {
+  async useCurrentPosition(axis) {
     try {
-      if (!window.rotorService || !window.rotorService.isConnected()) {
+      if (!window.rotorService || !window.rotorService.isConnected) {
         await this.showError('Bitte verbinden Sie zuerst den Rotor.');
         return;
       }
@@ -1275,21 +1284,18 @@ class SettingsModal {
       // Get current status
       const status = await window.rotorService.getStatus();
       
-      if (!status || !status.azimuthRaw || !status.elevationRaw) {
+      if (!status || status.azimuthRaw === undefined || status.elevationRaw === undefined) {
         await this.showError('Konnte aktuelle Position nicht abrufen.');
         return;
       }
 
-      // Get selected axis
-      const axisSelect = document.getElementById('manualCalibrationAxis');
-      const rawInput = document.getElementById('manualCalibrationRaw');
-      const actualInput = document.getElementById('manualCalibrationActual');
+      // Get input fields
+      const rawInput = document.getElementById(`${axis}ManualRaw`);
+      const actualInput = document.getElementById(`${axis}ManualActual`);
 
-      if (!axisSelect || !rawInput || !actualInput) {
+      if (!rawInput || !actualInput) {
         return;
       }
-
-      const axis = axisSelect.value;
 
       // Fill in raw value from current position
       if (axis === 'azimuth') {

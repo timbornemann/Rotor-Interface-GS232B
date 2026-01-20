@@ -3770,80 +3770,87 @@ button.refreshing .icon {
 }
 
 /* ========================================
-   MANUAL CALIBRATION
+   MANUAL CALIBRATION - COMPACT FORM
    ======================================== */
 
-.manual-calibration-section {
-  width: 100%;
+.manual-add-form {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: rgba(47, 212, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(47, 212, 255, 0.2);
 }
 
-.manual-axis-select {
+.form-row.compact {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.compact-input {
   width: 100%;
-  padding: 0.75rem;
+  padding: 0.6rem;
   background: var(--bg);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text);
   border-radius: 6px;
-  font-size: 1rem;
-  cursor: pointer;
+  font-size: 0.95rem;
   transition: all 0.2s;
 }
 
-.manual-axis-select:focus {
+.compact-input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(47, 212, 255, 0.1);
 }
 
-.add-point-btn {
+.action-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.add-point-compact-btn,
+.use-current-compact-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.875rem 1.5rem;
-  border-radius: 8px;
+  border-radius: 6px;
   border: none;
-  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  background: linear-gradient(135deg, #4caf50, #45a049);
-  color: white;
-  flex: 1;
+  flex-shrink: 0;
 }
 
-.add-point-btn:hover {
+.add-point-compact-btn {
+  background: linear-gradient(135deg, #4caf50, #45a049);
+}
+
+.add-point-compact-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
 }
 
-.add-point-btn .icon {
+.add-point-compact-btn .icon {
   width: 20px;
   height: 20px;
   filter: brightness(0) invert(1);
 }
 
-.use-current-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.875rem 1.5rem;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+.use-current-compact-btn {
   background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.use-current-btn:hover {
+.use-current-compact-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.use-current-btn .icon {
+.use-current-compact-btn .icon {
   width: 20px;
   height: 20px;
   filter: brightness(0) saturate(100%) invert(85%) sepia(9%) saturate(427%) hue-rotate(185deg) brightness(99%) contrast(96%);
@@ -4124,8 +4131,9 @@ button.refreshing .icon {
 .wizard-start-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.875rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   border-radius: 8px;
   border: none;
   font-weight: 600;
@@ -4133,7 +4141,9 @@ button.refreshing .icon {
   transition: all 0.2s;
   background: linear-gradient(135deg, var(--accent), #1a9fc7);
   color: var(--bg);
-  flex: 1;
+  width: 100%;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
 }
 
 .wizard-start-btn:hover {
@@ -4142,8 +4152,8 @@ button.refreshing .icon {
 }
 
 .wizard-start-btn .icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   filter: brightness(0) invert(0);
 }
 
@@ -4246,7 +4256,7 @@ button.refreshing .icon {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem;
+  padding: 0.6rem;
   background: rgba(247, 107, 107, 0.1);
   border: 1px solid rgba(247, 107, 107, 0.3);
   color: var(--danger);
@@ -4254,6 +4264,8 @@ button.refreshing .icon {
   cursor: pointer;
   font-weight: 600;
   transition: all 0.2s;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
 }
 
 .clear-points-btn:hover {
@@ -4262,8 +4274,8 @@ button.refreshing .icon {
 }
 
 .clear-points-btn .icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   filter: brightness(0) saturate(100%) invert(66%) sepia(48%) saturate(2491%) hue-rotate(318deg) brightness(101%) contrast(94%);
 }
 
@@ -4271,6 +4283,14 @@ button.refreshing .icon {
 @media (max-width: 900px) {
   .calibration-points-display {
     grid-template-columns: 1fr;
+  }
+
+  .form-row.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .action-group {
+    justify-content: flex-start;
   }
 }
 
