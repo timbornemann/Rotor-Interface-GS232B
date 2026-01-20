@@ -317,13 +317,19 @@ class CalibrationWizard {
       const rawValue = this.axis === 'azimuth' ? status.azimuthRaw : status.elevationRaw;
       const calibratedValue = this.axis === 'azimuth' ? status.azimuth : status.elevation;
 
-      // Display values (show both raw and calibrated)
+      // Display values
       this.rawValueDisplay.textContent = `${rawValue.toFixed(1)}°`;
-      this.actualValueDisplay.textContent = `${calibratedValue ? calibratedValue.toFixed(1) : targetPosition}°`;
+      this.actualValueDisplay.textContent = `${targetPosition}°`; // Always show target position
       this.statusText.textContent = 'Position erreicht';
+      
+      // Show calibrated value only if it differs significantly from target
+      const calibrationDiff = Math.abs((calibratedValue || targetPosition) - targetPosition);
+      const calibrationInfo = calibrationDiff > 0.5 
+        ? `<br>Aktuell kalibriert: <strong>${calibratedValue.toFixed(1)}°</strong>`
+        : '';
+      
       this.instructionText.innerHTML = `
-        Ziel-Position: <strong>${targetPosition}°</strong><br>
-        Kalibriert: <strong>${calibratedValue ? calibratedValue.toFixed(1) : targetPosition}°</strong><br>
+        Ziel-Position: <strong>${targetPosition}°</strong>${calibrationInfo}<br>
         Prüfen Sie am Rotor: Stimmt die Position?
       `;
 
