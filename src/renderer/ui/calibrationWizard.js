@@ -351,28 +351,66 @@ class CalibrationWizard {
   }
 
   /**
-   * Wait for rotor to reach target position
+   * Wait for rotor to reach target position with movement and stillness detection
    */
   async waitForPosition(targetPosition, timeout = 30000) {
     const startTime = Date.now();
-    const tolerance = 2; // degrees
+    const positionTolerance = 2; // degrees for calibrated position
+    const movementThreshold = 0.3; // degrees for raw movement detection
+    const stillnessTimeout = 3000; // ms without movement = motor stopped
+    
+    let lastRawValue = null;
+    let lastMovementTime = Date.now();
+    let stableRawValue = null;
+    let stableStartTime = null;
 
     return new Promise((resolve, reject) => {
       const checkInterval = setInterval(async () => {
         try {
           const status = await this.getCurrentStatus();
-          // Use calibrated position instead of raw to check if target is reached
-          const currentPos = this.axis === 'azimuth' ? status.azimuth : status.elevation;
+          const currentPosCalibrated = this.axis === 'azimuth' ? status.azimuth : status.elevation;
+          const currentPosRaw = this.axis === 'azimuth' ? status.azimuthRaw : status.elevationRaw;
+          const now = Date.now();
 
-          // Check if position reached
-          if (Math.abs(currentPos - targetPosition) <= tolerance) {
+          // 1. Check if calibrated position is at target
+          if (Math.abs(currentPosCalibrated - targetPosition) <= positionTolerance) {
             clearInterval(checkInterval);
-            // Wait a bit more to ensure position is stable
+            console.log('[CalibrationWizard] Target reached (calibrated position match)');
             setTimeout(() => resolve(), 500);
+            return;
           }
 
-          // Check timeout
-          if (Date.now() - startTime > timeout) {
+          // 2. Track raw value changes (movement detection)
+          if (lastRawValue !== null) {
+            const rawMovement = Math.abs(currentPosRaw - lastRawValue);
+            
+            if (rawMovement > movementThreshold) {
+              // Motor is moving
+              lastMovementTime = now;
+              stableRawValue = null;
+              stableStartTime = null;
+            } else {
+              // Motor appears still - track stability
+              if (stableRawValue === null || Math.abs(currentPosRaw - stableRawValue) > movementThreshold) {
+                // New stable position detected
+                stableRawValue = currentPosRaw;
+                stableStartTime = now;
+              }
+            }
+          }
+          
+          lastRawValue = currentPosRaw;
+
+          // 3. Check for stillness (motor stopped moving)
+          if (stableStartTime && (now - stableStartTime) >= stillnessTimeout) {
+            clearInterval(checkInterval);
+            console.log('[CalibrationWizard] Motor stopped moving (stillness detected)');
+            setTimeout(() => resolve(), 500);
+            return;
+          }
+
+          // 4. Check timeout
+          if (now - startTime > timeout) {
             clearInterval(checkInterval);
             reject(new Error('Timeout waiting for position'));
           }
@@ -380,7 +418,7 @@ class CalibrationWizard {
           clearInterval(checkInterval);
           reject(error);
         }
-      }, 500);
+      }, 500); // Check every 500ms
     });
   }
 
