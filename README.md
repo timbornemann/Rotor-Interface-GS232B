@@ -12,7 +12,6 @@ Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors
 - [Schnellstart](#schnellstart)
   - [Python-Server (empfohlen)](#python-server-empfohlen)
   - [Windows-Schnellstart](#windows-schnellstart)
-  - [Simulation im Browser](#simulation-im-browser)
   - [Web-Serial-Zugriff (lokal)](#web-serial-zugriff-lokal)
 - [Bedienung](#bedienung)
   - [Ports & Verbindungen](#ports--verbindungen)
@@ -36,7 +35,7 @@ Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors
 - **Modularer Python-Server:** REST-API + WebSocket-Server mit COM-Port-Verwaltung, Multi-Client-Synchronisation und serverseitiger Rotorsteuerung.
 - **Echtzeit-Updates:** WebSocket-Broadcasting liefert Positions-, Verbindungs- und Settings-Updates an alle verbundenen Clients.
 - **Live-Visualisierung:** Kompass, Kartenansicht (Leaflet mit ArcGIS/OSM/Google Tiles) und Kegel-Visualisierung aktualisieren sich in Echtzeit.
-- **Simulation inklusive:** Realistische Rotor-Simulation ohne angeschlossene Hardware.
+- **Testen ohne Yaesu-Motor:** Mit dem im Projekt enthaltenen Arduino-Aufbau (`hardware_test/`) kann die gesamte Steuerung auch ohne echten Yaesu-Motor getestet werden.
 - **Komplette Steuerung:** Manuelle Bewegung (R/L/U/D), Goto-Ziel (Azimut/Elevation), 360°/450°-Modus, Soft-Limits und Geschwindigkeitsvorgaben.
 - **Routen-System:** Routen mit Positions-, Warte- und Loop-Schritten erstellen, speichern und serverseitig ausführen.
 - **Positionsmanager:** Häufig genutzte Positionen speichern und per Klick anfahren.
@@ -114,11 +113,6 @@ Der Server zeigt beim Start alle erreichbaren URLs (lokale IP-Adressen) an.
 
 `start_server.bat` doppelklicken – das Skript liest die Ports aus `web-settings.json`, startet den Server und führt bei einem Neustart-Request (Exit-Code 42) automatisch einen Restart durch.
 
-### Simulation im Browser
-
-1. `src/renderer/index.html` per Doppelklick öffnen (oder `file://...` laden).
-2. Simulation ist sofort aktiv; alle Bedienelemente funktionieren ohne Hardware.
-
 ### Web-Serial-Zugriff (lokal)
 
 Web Serial benötigt einen lokalen Webserver:
@@ -137,7 +131,6 @@ Danach `http://localhost:4173` im Browser öffnen und über **Port hinzufügen**
 
 ### Ports & Verbindungen
 
-- **Simulation:** Simulierten Port in der Portliste auswählen – funktioniert ohne Hardware.
 - **Server-Modus (empfohlen):** Ports werden über den Python-Server verwaltet. Ports tragen den Präfix `[Server]`, Befehle und Status laufen über die REST-API.
 - **Web Serial:** Über „Port hinzufügen" einen USB-/COM-Port im Browser freigeben und direkt verbinden (nur lokal).
 
