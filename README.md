@@ -219,7 +219,13 @@ Detailbeschreibung inkl. Beispiel-Requests und Python-Client-Klasse: siehe **[`A
 
 ## WebSocket-Schnittstelle
 
-Der Server betreibt einen WebSocket-Server (Standard-Port `8082`) für Echtzeit-Updates:
+Der Server betreibt einen WebSocket-Server (Standard-Port `8082`) für Echtzeit-Updates. Alle Nachrichten sind JSON-Objekte mit `type` und `data`:
+
+```json
+{ "type": "connection_state_changed", "data": { "connected": true, "port": "COM3", "baudRate": 9600 } }
+```
+
+**Event-Typen:**
 
 - **`connection_state_changed`** – Verbindungsstatus (connect/disconnect)
 - **`client_list_updated`** – Aktualisierte Client-Liste
@@ -228,7 +234,7 @@ Der Server betreibt einen WebSocket-Server (Standard-Port `8082`) für Echtzeit-
 - **`route_execution_started`** / **`route_execution_progress`** / **`route_execution_stopped`** / **`route_execution_completed`** – Routenausführungs-Events
 - **`client_suspended`** – Suspendierungs-Benachrichtigung
 
-Clients können sich mit `ws://localhost:8082` verbinden und ihre Session-ID registrieren.
+**Verbindung:** Clients verbinden sich mit `ws://localhost:8082` und registrieren ihre Session-ID (abgerufen über `GET /api/session`) per `{ "type": "register_session", "sessionId": "..." }`.
 
 ---
 
