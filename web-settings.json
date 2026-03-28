@@ -1,7 +1,7 @@
 {
   "baudRate": 9600,
   "pollingIntervalMs": 1000,
-  "portPath": null,
+  "portPath": "COM3",
   "mapLatitude": null,
   "mapLongitude": null,
   "satelliteMapEnabled": false,
@@ -43,7 +43,7 @@
   "rampMaxStepDegMax": 45,
   "rampToleranceDegMin": 0.1,
   "rampToleranceDegMax": 10,
-  "azimuthMode": 360,
+  "azimuthMode": 450,
   "azimuthMinLimit": 0,
   "azimuthMaxLimit": 360,
   "elevationMinLimit": 0,
