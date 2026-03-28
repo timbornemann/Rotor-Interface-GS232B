@@ -1,23 +1,23 @@
 @echo off
 REM Rotor Interface GS232B - Server Starter
-REM Startet den Python-Server für die Rotor-Interface-Anwendung
+REM Startet den Python-Server fuer die Rotor-Interface-Anwendung
 
 echo ========================================
 echo Rotor Interface GS232B - Server
 echo ========================================
 echo.
 
-REM Prüfe ob Python installiert ist
+REM Pruefe ob Python installiert ist
 python --version >nul 2>&1
 if errorlevel 1 (
     echo FEHLER: Python ist nicht installiert oder nicht im PATH!
-    echo Bitte installieren Sie Python 3.7 oder höher.
+    echo Bitte installieren Sie Python 3.7 oder hoeher.
     echo.
     pause
     exit /b 1
 )
 
-REM Prüfe ob das server Verzeichnis existiert
+REM Pruefe ob das server Verzeichnis existiert
 if not exist "server" (
     echo FEHLER: server/ Verzeichnis wurde nicht gefunden!
     echo Bitte starten Sie die Datei aus dem Projektverzeichnis.
@@ -26,11 +26,14 @@ if not exist "server" (
     exit /b 1
 )
 
-REM Auto-Restart-Loop: Startet Server neu, wenn Exit-Code 42 zurückgegeben wird
+REM Auto-Restart-Loop: Startet Server neu, wenn Exit-Code 42 zurueckgegeben wird
 :restart_loop
 REM Lese Ports aus web-settings.json (wenn vorhanden)
 set HTTP_PORT=8081
 set WS_PORT=8082
+
+REM Beende haengende alte Rotor-Server-Prozesse (python -m server.main)
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match 'server.main' } | ForEach-Object { Write-Host ('Beende alten Server-Prozess (PID {0})...' -f $_.ProcessId); Stop-Process -Id $_.ProcessId -Force }"
 
 if exist "web-settings.json" (
     echo Lade Ports aus web-settings.json...
