@@ -8,6 +8,15 @@
   "mapZoomLevel": 15,
   "mapZoomMin": 5,
   "mapZoomMax": 25,
+  "mapOverlayEnabled": true,
+  "mapOverlayLabelMode": "both",
+  "mapOverlayAutoContrast": true,
+  "mapOverlayRingRadiiMeters": [
+    1000,
+    5000,
+    10000,
+    20000
+  ],
   "coneAngle": 10,
   "coneLength": 1000,
   "azimuthDisplayOffset": 0,
