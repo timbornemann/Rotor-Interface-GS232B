@@ -296,16 +296,16 @@ class RouteExecutor:
         start_time = time.time()
         
         while not self._should_stop:
-            # Get current position from rotor connection
-            current_status = self.rotor_logic.connection.get_status()
+            # Get current position using corrected feedback values
+            current_status = self.rotor_logic.get_effective_raw_status()
             
             if not current_status:
                 # No status yet, keep waiting
                 time.sleep(self.position_check_interval)
                 continue
             
-            current_az = current_status.get("azimuthRaw")
-            current_el = current_status.get("elevationRaw")
+            current_az = current_status.get("azimuth")
+            current_el = current_status.get("elevation")
             
             # Check if within tolerance
             az_ok = target_az is None or (
