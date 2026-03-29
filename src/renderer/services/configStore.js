@@ -5,7 +5,7 @@
  */
 
 const STORAGE_KEY = 'rotor-control-config-v1';
-const overlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils) ? window.MapOverlayUtils : null;
+const configOverlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils) ? window.MapOverlayUtils : null;
 
 // Default configuration - used as fallback when server is unavailable
 const defaultConfig = {
@@ -196,8 +196,8 @@ class ConfigStore {
     );
 
     // Overlay settings
-    const sanitizeOverlay = overlayUtils && typeof overlayUtils.sanitizeOverlaySettings === 'function'
-      ? overlayUtils.sanitizeOverlaySettings
+    const sanitizeOverlay = configOverlayUtils && typeof configOverlayUtils.sanitizeOverlaySettings === 'function'
+      ? configOverlayUtils.sanitizeOverlaySettings
       : (raw) => {
           const source = Array.isArray(raw.mapOverlayRingRadiiMeters)
             ? raw.mapOverlayRingRadiiMeters

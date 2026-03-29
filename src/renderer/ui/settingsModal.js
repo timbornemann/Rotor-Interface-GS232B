@@ -305,8 +305,14 @@ class SettingsModal {
         return;
       }
       const lastRow = rows[rows.length - 1];
-      const nextValue = lastRow ? Number(lastRow.querySelector('input')?.value || 1000) : 1000;
-      ringList.appendChild(this.createOverlayRingRow(Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1000));
+      const prevRow = rows.length >= 2 ? rows[rows.length - 2] : null;
+      const lastValue = lastRow ? Number(lastRow.querySelector('input')?.value || 0) : 0;
+      const prevValue = prevRow ? Number(prevRow.querySelector('input')?.value || 0) : 0;
+      const fallbackStep = Number.isFinite(lastValue) && Number.isFinite(prevValue) && lastValue > prevValue
+        ? (lastValue - prevValue)
+        : 1000;
+      const nextValue = (Number.isFinite(lastValue) && lastValue > 0 ? lastValue : 1000) + Math.max(100, Math.round(fallbackStep));
+      ringList.appendChild(this.createOverlayRingRow(nextValue));
       this.updateOverlayRingRowState();
       this.clearOverlayRingValidationErrors();
     });
@@ -415,6 +421,7 @@ class SettingsModal {
     }
 
     const parsed = [];
+    const seen = new Set();
     rows.forEach((row, index) => {
       const input = row.querySelector('input');
       const rawValue = input ? input.value.trim() : '';
@@ -427,7 +434,13 @@ class SettingsModal {
         errors.push(`Ring ${index + 1}: Radius muss groesser als 0 m sein.`);
         return;
       }
-      parsed.push(value);
+      const normalized = Math.round(value);
+      if (seen.has(normalized)) {
+        errors.push(`Ring ${index + 1}: Radius ${normalized} m ist doppelt. Bitte eindeutige Werte verwenden.`);
+        return;
+      }
+      seen.add(normalized);
+      parsed.push(normalized);
     });
 
     if (errors.length) {
