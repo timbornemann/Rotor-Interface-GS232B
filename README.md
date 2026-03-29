@@ -1,308 +1,563 @@
 # Rotor-Interface GS232B
 
-Browserbasierte Oberfläche zur Steuerung eines Yaesu GS-232B kompatiblen Rotors. Der modulare Python-Server stellt eine REST-API und WebSocket-Schnittstelle bereit, verwaltet die serielle Verbindung zum Rotor und synchronisiert mehrere Clients in Echtzeit. Die Web-UI (HTML/CSS/JavaScript) wird direkt vom Server ausgeliefert und kommt ohne Build-Tooling aus.
+Webbasierte Rotor-Steuerung für GS-232B-kompatible Controller mit Python-Backend, REST-API und WebSocket-Synchronisierung für mehrere Clients.
+
+Die Anwendung besteht aus:
+
+- einem modularen Python-Server (`server/`) für Serial-Kommunikation, API, WebSocket, Sessions und Routenausführung
+- einem statischen Frontend (`src/renderer/`) in HTML/CSS/JavaScript
+
+Wichtiger Architekturpunkt:
+Das Frontend steuert den Rotor nicht direkt per Web Serial, sondern immer über die Server-API.
 
 ---
 
 ## Inhalt
 
-- [Hauptfunktionen](#hauptfunktionen)
-- [Projektarchitektur](#projektarchitektur)
-- [Voraussetzungen](#voraussetzungen)
-- [Schnellstart](#schnellstart)
-  - [Python-Server (empfohlen)](#python-server-empfohlen)
-  - [Windows-Schnellstart](#windows-schnellstart)
-  - [Web-Serial-Zugriff (lokal)](#web-serial-zugriff-lokal)
-- [Bedienung](#bedienung)
-  - [Ports & Verbindungen](#ports--verbindungen)
-  - [Steuerung & Modi](#steuerung--modi)
-  - [Routen & Positionen](#routen--positionen)
-  - [Kalibrierung](#kalibrierung)
-  - [Historie & CSV-Export](#historie--csv-export)
-  - [Multi-Client-Betrieb](#multi-client-betrieb)
-- [API-Überblick](#api-überblick)
-- [WebSocket-Schnittstelle](#websocket-schnittstelle)
-- [Konfiguration](#konfiguration)
-- [Ordnerstruktur](#ordnerstruktur)
-- [Tests](#tests)
-- [Weiterführende Doku](#weiterführende-doku)
-- [Lizenz](#lizenz)
+- [1. Funktionsumfang (Ist-Stand)](#1-funktionsumfang-ist-stand)
+- [2. Voraussetzungen](#2-voraussetzungen)
+- [3. Installation](#3-installation)
+- [4. Starten](#4-starten)
+- [5. Bedienung der Weboberfläche](#5-bedienung-der-weboberfläche)
+- [6. Konfiguration und Persistenz](#6-konfiguration-und-persistenz)
+- [7. REST-API komplett](#7-rest-api-komplett)
+- [8. Routenformat und Ausführung](#8-routenformat-und-ausführung)
+- [9. WebSocket-Schnittstelle](#9-websocket-schnittstelle)
+- [10. Session- und Multi-Client-Modell](#10-session--und-multi-client-modell)
+- [11. Entwicklung](#11-entwicklung)
+- [12. Tests und CI](#12-tests-und-ci)
+- [13. Integrationsbeispiele](#13-integrationsbeispiele)
+- [14. Troubleshooting](#14-troubleshooting)
+- [15. Sicherheitshinweise](#15-sicherheitshinweise)
+- [16. Aktuelle Einschränkungen](#16-aktuelle-einschränkungen)
+- [17. Weiterführende Dokumentation](#17-weiterführende-dokumentation)
+- [18. Lizenz](#18-lizenz)
 
 ---
 
-## Hauptfunktionen
+## 1. Funktionsumfang (Ist-Stand)
 
-- **Modularer Python-Server:** REST-API + WebSocket-Server mit COM-Port-Verwaltung, Multi-Client-Synchronisation und serverseitiger Rotorsteuerung.
-- **Echtzeit-Updates:** WebSocket-Broadcasting liefert Positions-, Verbindungs- und Settings-Updates an alle verbundenen Clients.
-- **Live-Visualisierung:** Kompass, Kartenansicht (Leaflet mit ArcGIS/OSM/Google Tiles) und Kegel-Visualisierung aktualisieren sich in Echtzeit.
-- **Testen ohne Yaesu-Motor:** Mit dem im Projekt enthaltenen Arduino-Aufbau (`hardware_test/`) kann die gesamte Steuerung auch ohne echten Yaesu-Motor getestet werden.
-- **Komplette Steuerung:** Manuelle Bewegung (R/L/U/D), Goto-Ziel (Azimut/Elevation), 360°/450°-Modus, Soft-Limits und Geschwindigkeitsvorgaben.
-- **Routen-System:** Routen mit Positions-, Warte- und Loop-Schritten erstellen, speichern und serverseitig ausführen.
-- **Positionsmanager:** Häufig genutzte Positionen speichern und per Klick anfahren.
-- **Kalibrierung:** Offset-/Skalierungsfaktoren sowie Mehrpunkt-Kalibrierungsassistent für präzise Positionsanzeige.
-- **Softstart/Softstop (Ramping):** PI-Regler für sanftes Anfahren und Abbremsen.
-- **Home/Park-Positionen:** Vordefinierte Positionen mit optionalem Auto-Park bei Trennung.
-- **Historie & Export:** Polling-Daten werden mitgeschrieben und als CSV exportierbar.
-- **Multi-Client-Verwaltung:** Session-Management mit Möglichkeit, einzelne Clients zu suspendieren.
-- **Persistente Settings:** Alle Einstellungen werden serverseitig in `web-settings.json` gespeichert und über alle Clients synchronisiert.
-- **Web Serial (lokal):** Alternativ kann der Browser direkt über Web Serial auf USB-/COM-Ports zugreifen (Chromium, HTTPS oder `localhost`).
-- **Arduino-Hardware:** Enthält Firmware und Schaltplan für einen Arduino-basierten GS-232B-Emulator (Ordner `hardware_test/`).
+### Kernfunktionen
 
----
+- Serverseitige COM-Port-Verbindung mit `pyserial`
+- REST-API für Steuerung, Konfiguration, Routen und Client-Management
+- WebSocket-Broadcast für Live-Synchronisierung über mehrere Browser-Clients
+- Live-Status mit:
+  - Adapter-RAW-Werten (`rph`)
+  - korrigierten RAW-Werten (`correctedRaw`, optional über Feedback-Faktoren)
+  - kalibrierten Werten (`calibrated`, Offset/Skalierung)
+- Steuerung:
+  - manuell (`left/right/up/down`)
+  - Zielposition kalibriert (`/api/rotor/set_target`)
+  - Zielposition raw (`/api/rotor/set_target_raw`)
+  - direkte Low-Level-Kommandos (`/api/rotor/command`)
+  - Home/Park-Presets (`/api/rotor/home`, `/api/rotor/park`)
+- Route-Editor im Frontend, serverseitige Routenausführung:
+  - `position`-, `wait`- und `loop`-Schritte
+  - manuelles Weiterlaufen bei manuellen Wait-Schritten
+  - Fortschrittsmeldungen via WebSocket
+- Einstellungsdialog mit Tabs:
+  - Verbindung
+  - Anzeige
+  - Karte
+  - Geschwindigkeit (inkl. ERC-DUO-Stufenfelder)
+  - Rampe
+  - Kalibrierung
+  - Clients
+  - Server
+- Session-Management:
+  - Session-IDs
+  - Suspend/Resume einzelner Clients
+  - optionales Erzwingen gültiger Session-Header (`serverRequireSession`)
 
-## Projektarchitektur
+### Im Repository zusätzlich enthalten
 
-```text
-server/                     # Modularer Python-Server
-  core/                     #   Server-Lifecycle, State-Singleton, Session-Manager
-  api/                      #   HTTP-Handler, Routen-Dispatch, Middleware, WebSocket-Manager
-  config/                   #   Settings-Manager, Default-Werte
-  connection/               #   Serielle Verbindung, Port-Scanner
-  control/                  #   Rotor-Logik (Kalibrierung, Limits, Ramping, Mathematik)
-  routes/                   #   Routen-Manager (CRUD) & Routen-Executor
-  utils/                    #   Logging
-
-src/renderer/               # Web-UI (wird vom Server statisch ausgeliefert)
-  index.html                #   Einstiegsseite
-  styles.css                #   Globales Styling
-  main.js                   #   Bootstrapping & App-Logik
-  manifest.webmanifest      #   PWA-Manifest
-  assets/                   #   Icons & Logo
-  services/                 #   ConfigStore, RotorService, WebSocketService, RouteExecutor
-  ui/                       #   UI-Komponenten (Elevation, MapView, Controls, HistoryLog,
-                            #     SettingsModal, CalibrationWizard, RouteManager, PositionManager,
-                            #     AlertModal)
-
-python_server.py            # Kompatibilitäts-Wrapper (delegiert an server/)
-start_server.bat            # Windows-Starter mit Auto-Restart
-```
-
-**Kernarchitektur:** Der Python-Server (`server/`) übernimmt die gesamte serielle Kommunikation und Rotorsteuerung. Die Web-UI kommuniziert ausschließlich über REST-API und WebSocket mit dem Server. Alle Einstellungen werden serverseitig in `web-settings.json` verwaltet und per WebSocket an die Clients synchronisiert.
+- Interaktive API-Testseite: `api-test-page.html`
+- Arduino-Testaufbau/Emulation: `hardware_test/`
+- Architekturdiagramme: `diagrams/`
+- Migrationsskript für alte Routenablage: `migrate_routes.py`
 
 ---
 
-## Voraussetzungen
+## 2. Voraussetzungen
 
-- **Python 3.9+** mit `pyserial` und `websockets` (`pip install -r requirements.txt`).
-- **Browser:** Aktueller Chrome, Edge oder Firefox für die Web-UI.
-- **Web Serial (optional):** Chromium-Browser + HTTPS oder `http://localhost` für direkten Browser-Zugriff auf serielle Ports (ohne Python-Server).
-- **Node/npm (optional):** Nur für den alternativen Dev-Server (`npm run serve`); zur Laufzeit nicht nötig.
+- Python 3.10+ (empfohlen: 3.11+)
+- Pip
+- Für echte Hardwaresteuerung: Zugriff auf serielle Schnittstelle
+- Optional:
+  - Node.js + npm (nur für JS-Tests und optionales statisches Frontend-Serving)
+
+Python-Abhängigkeiten (aus `requirements.txt`):
+
+- `pyserial>=3.5`
+- `pytest>=8.2`
+- `websockets>=12.0`
 
 ---
 
-## Schnellstart
-
-### Python-Server (empfohlen)
+## 3. Installation
 
 ```bash
-# Abhängigkeiten installieren
 pip install -r requirements.txt
+```
 
-# Server starten (Standard: HTTP-Port 8081, WebSocket-Port 8082)
-python -m server.main --port 8081
+Optional für JS-Tests:
 
-# Alternativ (Kompatibilitäts-Wrapper):
+```bash
+npm ci
+```
+
+---
+
+## 4. Starten
+
+### Empfohlener Start
+
+```bash
+python -m server.main --port 8081 --websocket-port 8082
+```
+
+Alternativen:
+
+```bash
+python -m server
 python python_server.py --port 8081
 ```
 
-Aufruf im Browser: `http://localhost:8081` oder im LAN `http://<SERVER-IP>:8081`.
+### Windows-Startskript
 
-Der Server zeigt beim Start alle erreichbaren URLs (lokale IP-Adressen) an.
-
-### Windows-Schnellstart
-
-`start_server.bat` doppelklicken – das Skript liest die Ports aus `web-settings.json`, startet den Server und führt bei einem Neustart-Request (Exit-Code 42) automatisch einen Restart durch.
-
-### Web-Serial-Zugriff (lokal)
-
-Web Serial benötigt einen lokalen Webserver:
-
-```bash
-cd src/renderer
-python -m http.server 4173
-# oder: npm run serve
+```bat
+start_server.bat
 ```
 
-Danach `http://localhost:4173` im Browser öffnen und über **Port hinzufügen** einen COM-/USB-Port auswählen. Web Serial funktioniert nur in Chromium-Browsern und nur über HTTPS oder `localhost`.
+Das Skript:
+
+- liest HTTP/WS-Ports aus `web-settings.json`
+- beendet alte `python -m server.main`-Prozesse
+- startet den Server neu
+- führt bei Exit-Code `42` automatisch einen Restart aus (wird von `/api/server/restart` genutzt)
+
+### Aufruf im Browser
+
+- `http://localhost:8081`
+- oder `http://<SERVER-IP>:8081` im LAN
+
+### Wichtiger Port-Hinweis
+
+In der aktuellen Implementierung haben Werte aus `web-settings.json` Vorrang. CLI-Parameter sind effektiv Fallback.
 
 ---
 
-## Bedienung
+## 5. Bedienung der Weboberfläche
 
-### Ports & Verbindungen
+### 5.1 Verbinden
 
-- **Server-Modus (empfohlen):** Ports werden über den Python-Server verwaltet. Ports tragen den Präfix `[Server]`, Befehle und Status laufen über die REST-API.
-- **Web Serial:** Über „Port hinzufügen" einen USB-/COM-Port im Browser freigeben und direkt verbinden (nur lokal).
+1. Portliste aktualisieren
+2. COM-Port auswählen
+3. `Verbinden`
 
-### Steuerung & Modi
+### 5.2 Steuerung
 
-- **Manuelle Bewegung:** R/L (Azimut rechts/links), U/D (Elevation hoch/runter), S (Stop alles).
-- **Goto:** Ziel-Azimut und/oder Elevation eingeben und anfahren (kalibriert oder RAW).
-- **Kartenklick:** Auf die Kartenansicht klicken, um den Rotor in die angeklickte Richtung zu drehen.
-- **Modi:** 360°/450° per Einstellungen umschaltbar (GS-232B `P36`/`P45`).
-- **Soft-Limits:** Minimale und maximale Azimut-/Elevationsgrenzen konfigurierbar.
-- **Geschwindigkeit:** Azimut- und Elevationsgeschwindigkeit in °/s einstellbar.
-- **Softstart/Softstop:** Optionaler PI-Regler (Ramping) für sanftes Anfahren und Abbremsen, konfigurierbar über Kp, Ki, Abtastzeit und Toleranz.
+- Manuelle Buttons: links/rechts/hoch/runter/stop
+- Goto-Eingaben senden aktuell Raw-Werte (Hardwareposition)
+- Kartenklick:
+  - berechnet Ziel-Azimut aus Klickposition
+  - sendet Raw-Azimut (nur Azimut)
 
-### Routen & Positionen
+### 5.3 Routen
 
-- **Routen:** Sequenzen aus Positionsschritten, Wartezeiten und Schleifen erstellen, bearbeiten und speichern. Routen werden serverseitig in `routes.json` gespeichert und können vom Server ausgeführt werden – mit Echtzeit-Fortschrittsanzeige über WebSocket.
-- **Positionsmanager:** Häufig genutzte Positionen (Azimut/Elevation) speichern, per Drag & Drop sortieren und per Klick anfahren.
-- **Home/Park:** Vordefinierte Home- und Park-Positionen mit optionalem Auto-Park bei Trennung.
+- Routen im linken Panel erstellen/bearbeiten
+- Schrittarten:
+  - Position
+  - Wait (zeitbasiert oder manuell)
+  - Loop (inkl. verschachtelter Schritte)
+- Ausführung ist serverseitig und wird per WebSocket an alle Clients gespiegelt
 
-### Kalibrierung
+### 5.4 Einstellungen
 
-- **Offset & Skalierung:** Azimut-/Elevations-Offset und Skalierungsfaktoren konfigurierbar.
-- **Mehrpunkt-Kalibrierung:** Interaktiver Assistent, der mehrere Referenzpunkte (RAW ↔ tatsächlicher Winkel) aufnimmt und daraus eine Kalibrierungstabelle erstellt.
-- **Kalibriermodus:** Wahlweise nur Anzeige-Korrektur (`display-only`) oder bidirektionale Korrektur auch beim Senden von Befehlen.
+Der Modal-Dialog schreibt in `web-settings.json` (über API). Server-Settings (Ports, Polling, Logging etc.) werden separat über `/api/server/settings` gespeichert.
 
-### Historie & CSV-Export
-
-- Jeder Polling-Status (AZ/EL) landet in der History-Tabelle.
-- Über **Export CSV** entsteht eine Datei im Format `timestamp_iso;azimuth_deg;elevation_deg;raw`.
-
-### Multi-Client-Betrieb
-
-- Mehrere Browser-Clients können gleichzeitig verbunden sein.
-- Verbindungsstatus, Einstellungen und Routenausführung werden per WebSocket an alle Clients synchronisiert.
-- Über die Client-Verwaltung in den Einstellungen können einzelne Sessions eingesehen und bei Bedarf suspendiert werden.
+Bei Portänderungen zeigt das UI korrekt an, dass ein Serverneustart notwendig ist.
 
 ---
 
-## API-Überblick
+## 6. Konfiguration und Persistenz
 
-Der Python-Server stellt eine REST-API bereit (ohne Authentifizierung; nur in vertrauenswürdigen Netzen einsetzen):
+### 6.1 `web-settings.json`
 
-### Rotor-Steuerung
+Zentrale Konfigurationsquelle (vom Server geladen/geschrieben). Beispiele:
 
-| Endpunkt | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/rotor/ports` | GET | Verfügbare COM-Ports auflisten |
-| `/api/rotor/connect` | POST | Verbindung zu COM-Port herstellen |
-| `/api/rotor/disconnect` | POST | Verbindung trennen |
-| `/api/rotor/status` | GET | Aktuellen Status (Position, Verbindung) abrufen |
-| `/api/rotor/position` | GET | Position mit Kegel-Visualisierungsparametern |
-| `/api/rotor/command` | POST | Direkter GS-232B Befehl (Low-Level) |
-| `/api/rotor/set_target` | POST | Zielposition setzen (kalibrierte Werte) |
-| `/api/rotor/set_target_raw` | POST | Zielposition setzen (RAW Hardware-Werte) |
-| `/api/rotor/manual` | POST | Manuelle Bewegung starten (left/right/up/down) |
-| `/api/rotor/stop` | POST | Alle Bewegungen stoppen |
+- Verbindung: `portPath`, `baudRate`, `pollingIntervalMs`
+- Kartenansicht: `mapLatitude`, `mapLongitude`, `mapSource`, `mapType`, Zoom
+- Darstellung: `coneAngle`, `coneLength`, `azimuthDisplayOffset`
+- Bewegung: `azimuthMode`, Speed-Werte, Ramp-Werte
+- Limits: `azimuthMinLimit`, `azimuthMaxLimit`, `elevationMinLimit`, `elevationMaxLimit`
+- Kalibrierung:
+  - `azimuthOffset`, `elevationOffset`
+  - `azimuthScaleFactor`, `elevationScaleFactor`
+  - `feedbackCorrectionEnabled`, `azimuthFeedbackFactor`, `elevationFeedbackFactor`
+- Presets: `parkPositionsEnabled`, `homeAzimuth`, `homeElevation`, `parkAzimuth`, `parkElevation`, `autoParkOnDisconnect`
+- Server: `serverHttpPort`, `serverWebSocketPort`, `serverPollingIntervalMs`, `serverSessionTimeoutS`, `serverMaxClients`, `serverLoggingLevel`, `serverRequireSession`
 
-### Konfiguration & Server
+### 6.2 `routes.json`
 
-| Endpunkt | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/settings` | GET/POST | Rotor-Konfiguration lesen/aktualisieren |
-| `/api/config/ini` | GET | `rotor-config.ini` lesen (read-only) |
-| `/api/server/settings` | GET/POST | Server-Einstellungen lesen/aktualisieren |
-| `/api/server/restart` | POST | Server neu starten |
+Persistente Routenablage (serverseitig). CRUD erfolgt über `/api/routes...`.
 
-### Client-Verwaltung
+### 6.3 `rotor-config.ini`
 
-| Endpunkt | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/session` | GET | Eigene Session-ID abrufen |
-| `/api/clients` | GET | Alle verbundenen Clients auflisten |
-| `/api/clients/{id}/suspend` | POST | Client suspendieren |
-| `/api/clients/{id}/resume` | POST | Client wieder aktivieren |
+Wird derzeit als Referenz-/Legacy-Datei genutzt und via `/api/config/ini` read-only ausgeliefert.
 
-Detailbeschreibung inkl. Beispiel-Requests und Python-Client-Klasse: siehe **[`API_Dokumentation.md`](API_Dokumentation.md)**.
+### 6.4 Migration alter Routen
+
+Falls alte Routen in `web-settings.json` unter `savedRoutes` liegen:
+
+```bash
+python migrate_routes.py
+```
+
+Das Skript migriert nach `routes.json`.
 
 ---
 
-## WebSocket-Schnittstelle
+## 7. REST-API komplett
 
-Der Server betreibt einen WebSocket-Server (Standard-Port `8082`) für Echtzeit-Updates. Alle Nachrichten sind JSON-Objekte mit `type` und `data`:
+Base URL: `http://<host>:<http-port>`
+
+### 7.1 Rotor
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/rotor/ports` | Verfügbare serielle Ports |
+| POST | `/api/rotor/connect` | Verbinden (`port`, `baudRate`) |
+| POST | `/api/rotor/disconnect` | Trennen |
+| GET | `/api/rotor/status` | Verbindungsstatus + Positionsdaten |
+| GET | `/api/rotor/position` | Positionsdaten + Cone-Parameter |
+| POST | `/api/rotor/manual` | Manuelle Bewegung (`direction`) |
+| POST | `/api/rotor/stop` | Alles stoppen |
+| POST | `/api/rotor/set_target` | Zielposition kalibriert (`az`, `el`) |
+| POST | `/api/rotor/set_target_raw` | Zielposition raw (`az`, `el`) |
+| POST | `/api/rotor/command` | Direktes GS-232B-Kommando |
+| POST | `/api/rotor/home` | Home-Preset anfahren |
+| POST | `/api/rotor/park` | Park-Preset anfahren |
+
+### 7.2 Einstellungen
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/settings` | Gesamte Konfiguration |
+| POST | `/api/settings` | Teil-Update Konfiguration |
+| GET | `/api/config/ini` | Inhalt `rotor-config.ini` |
+
+### 7.3 Server
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/server/settings` | Aktive Serverparameter |
+| POST | `/api/server/settings` | Update Serverparameter |
+| POST | `/api/server/restart` | Geordneter Neustart |
+
+### 7.4 Sessions/Clients
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/session` | Session holen/erzeugen |
+| GET | `/api/clients` | Alle Sessions |
+| POST | `/api/clients/{id}/suspend` | Session sperren |
+| POST | `/api/clients/{id}/resume` | Session freigeben |
+
+### 7.5 Routen
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/routes` | Alle Routen |
+| POST | `/api/routes` | Route anlegen |
+| PUT | `/api/routes/{id}` | Route aktualisieren |
+| DELETE | `/api/routes/{id}` | Route löschen |
+| POST | `/api/routes/{id}/start` | Route starten |
+| POST | `/api/routes/stop` | Aktive Route stoppen |
+| POST | `/api/routes/continue` | Manuellen Wait-Schritt fortsetzen |
+| GET | `/api/routes/execution` | Ausführungsstatus |
+
+### 7.6 Status-Payload (`/api/rotor/status`)
+
+Bei verbundener Hardware liefert `status`:
+
+- `rawLine`: Originalzeile vom Controller
+- `timestamp`: Epoch ms
+- `rph`: Adapter-RAW
+- `correctedRaw`: RAW nach optionaler Feedback-Korrektur
+- `calibrated`: Anzeige-/Steuerwerte nach Offset/Skalierung
+
+### 7.7 Fehlercodes
+
+- `200` OK
+- `400` Bad Request
+- `401` wenn `serverRequireSession=true` und Session fehlt/ungültig
+- `403` bei suspendierter Session
+- `404` not found
+- `500` internal error
+
+---
+
+## 8. Routenformat und Ausführung
+
+Eine Route ist ein Objekt mit `id`, `name`, optional `description`, `steps`, optional `order`.
+
+### Schrittarten
+
+1. `position`
+   - Felder: `azimuth`, `elevation`, optional `name`
+2. `wait`
+   - zeitbasiert: `duration` (ms), optional `message`
+   - manuell: `duration` fehlt oder `0`
+3. `loop`
+   - `iterations`:
+     - Zahl > 0 = feste Wiederholungen
+     - `0`, `null` oder `Infinity` = Endlosschleife (mit Sicherheitslimit)
+   - `steps`: verschachtelte Schritte
+
+### Ausführungslogik (Backend)
+
+- Position wird als Raw-Ziel gesendet (`set_target_raw`)
+- Ankunft gilt bei Toleranz von 2° (Az/El)
+- Timeout pro Positionsschritt: 60 s, danach Weiterlauf
+- Bei manuellen Waits wird auf `/api/routes/continue` gewartet
+- Stop über `/api/routes/stop`
+
+---
+
+## 9. WebSocket-Schnittstelle
+
+### Verbindungsadresse
+
+- Standard: `ws://<host>:8082`
+- Port ist konfigurierbar (`serverWebSocketPort`)
+
+### Session-Registrierung
+
+Nach WS-Connect sollte der Client seine Session registrieren:
 
 ```json
-{ "type": "connection_state_changed", "data": { "connected": true, "port": "COM3", "baudRate": 9600 } }
+{ "type": "register_session", "sessionId": "<id>" }
 ```
 
-**Event-Typen:**
+### Server-Events
 
-- **`connection_state_changed`** – Verbindungsstatus (connect/disconnect)
-- **`client_list_updated`** – Aktualisierte Client-Liste
-- **`settings_updated`** – Konfigurationsänderungen
-- **`route_list_updated`** – Routenliste aktualisiert
-- **`route_execution_started`** / **`route_execution_progress`** / **`route_execution_stopped`** / **`route_execution_completed`** – Routenausführungs-Events
-- **`client_suspended`** – Suspendierungs-Benachrichtigung
+- `connection_state_changed`
+- `client_list_updated`
+- `client_suspended`
+- `settings_updated`
+- `route_list_updated`
+- `route_execution_started`
+- `route_execution_progress`
+- `route_execution_stopped`
+- `route_execution_completed`
 
-**Verbindung:** Clients verbinden sich mit `ws://localhost:8082` und registrieren ihre Session-ID (abgerufen über `GET /api/session`) per `{ "type": "register_session", "sessionId": "..." }`.
+Zusätzlich:
 
----
-
-## Konfiguration
-
-- **`web-settings.json`:** Zentrale Konfigurationsdatei, die alle Einstellungen enthält (Verbindung, Karte, Kegel, Geschwindigkeit, Ramping, Limits, Kalibrierung, Server-Ports usw.). Wird vom Server verwaltet und per API und WebSocket synchronisiert.
-- **`rotor-config.ini`:** INI-Datei als Vorlage/Referenz für die Konfigurationsstruktur. Kann über `GET /api/config/ini` abgerufen werden.
-- **`routes.json`:** Gespeicherte Routen (Positionsabfolgen, Schleifen, Wartezeiten).
-- **Server-Ports:** HTTP-Port (Standard `8081`) und WebSocket-Port (Standard `8082`), konfigurierbar über CLI-Parameter (`--port`, `--websocket-port`) oder `web-settings.json`.
-- **Polling:** Server-seitiges Polling-Intervall in den Settings einstellbar (Standard 500 ms).
+- Client kann `ping` senden, Server antwortet mit `pong`.
 
 ---
 
-## Ordnerstruktur
+## 10. Session- und Multi-Client-Modell
+
+- Session-ID wird über `GET /api/session` erzeugt
+- API-Calls können `X-Session-ID` Header senden
+- Standardmäßig ist Session nicht zwingend (`serverRequireSession=false`)
+- Wenn aktiviert:
+  - fehlende/ungültige Session führt zu `401`
+- Suspendierte Sessions erhalten `403` und WS-Suspend-Event
+- Session-Cleanup:
+  - periodisch (Timeout konfigurierbar)
+  - bei WS-Disconnect wird Session entfernt
+
+---
+
+## 11. Entwicklung
+
+### 11.1 Projektstruktur
 
 ```text
-server/                  # Modularer Python-Server (Hauptkomponente)
-  core/                  #   server.py, state.py, session_manager.py
-  api/                   #   handler.py, routes.py, middleware.py, websocket.py
-  config/                #   settings.py, defaults.py
-  connection/            #   serial_connection.py, port_scanner.py
-  control/               #   rotor_logic.py, math_utils.py
-  routes/                #   route_manager.py, route_executor.py
-  utils/                 #   logging.py
+server/
+  api/              HTTP-Handler, Routing, Middleware, WebSocket
+  config/           Defaults + Settings-Manager
+  connection/       Port-Scanner + Serial-Verbindung
+  control/          Rotor-Logik, Kalibrierung, Limits
+  core/             Server-Lifecycle, Singleton-State, Sessions
+  routes/           Route-CRUD + Route-Executor
+  utils/            Logging
 
-src/renderer/            # Web-UI (HTML/CSS/JavaScript)
-  services/              #   configStore.js, rotorService.js, websocketService.js, routeExecutor.js
-  ui/                    #   controls.js, elevation.js, mapView.js, historyLog.js,
-                         #     settingsModal.js, calibrationWizard.js, routeManager.js,
-                         #     positionManager.js, alertModal.js
-  assets/                #   Icons & Logo
-
-tests/                   # Python- & JavaScript-Tests
-diagrams/                # Architektur- und Ablaufdiagramme (PNG)
-hardware_test/           # Arduino-Firmware & Schaltplan (GS-232B-Emulator)
-
-python_server.py         # Kompatibilitäts-Wrapper → server/
-start_server.bat         # Windows-Starter mit Auto-Restart
-web-settings.json        # Persistente Konfiguration (serverseitig)
-rotor-config.ini         # INI-Konfigurationsvorlage
-routes.json              # Gespeicherte Routen
-api-test-page.html       # Interaktive API-Testseite
-migrate_routes.py        # Migrationsskript: Routen aus web-settings.json → routes.json
-requirements.txt         # Python-Abhängigkeiten (pyserial, websockets, pytest)
-package.json             # Optionale Dev-Abhängigkeiten (http-server)
-API_Dokumentation.md     # Vollständige REST-API-Dokumentation
-GS232B_Befehle.md        # GS-232B Befehlsreferenz
-Plan.md                  # Projekt-Notizen/Planung
+src/renderer/
+  services/         API/WS/Config-Service-Layer
+  ui/               UI-Komponenten
+  index.html        UI-Layout
+  main.js           Frontend-Orchestrierung
 ```
+
+### 11.2 Backend-Entry-Points
+
+- `server/main.py` (CLI)
+- `server/__main__.py` (`python -m server`)
+- `python_server.py` (Kompatibilitäts-Wrapper)
+
+### 11.3 Frontend-Architektur
+
+- kein Build-Schritt nötig, statische Assets
+- Kommunikation ausschließlich über:
+  - REST (Fetch)
+  - WebSocket
+
+### 11.4 Für lokale UI-Entwicklung
+
+`npm run serve` startet nur statische Dateien auf Port `4173`.
+
+Wichtig:
+Das Frontend nutzt `window.location.origin` als API-Base. Ohne Reverse-Proxy zeigt es dann auf `:4173` statt auf den Python-Server.
+Für vollständige Funktion die UI über den Python-Server (`:8081`) laden.
 
 ---
 
-## Tests
+## 12. Tests und CI
+
+### Python
 
 ```bash
-# Python-Tests (pytest)
-pip install -r requirements.txt
-pytest tests/
+pytest -q
+```
 
-# JavaScript-Tests (Node.js)
+### JavaScript
+
+```bash
 npm test
 ```
 
+### Aktueller Stand (lokal geprüft am 2026-03-29)
+
+- Python: `95 passed`
+- Node: `1 passed`
+
+Hinweis:
+Aktuell gibt es Deprecation-Warnungen aus `websockets` (Legacy-Importpfad), Tests laufen aber grün.
+
+### CI
+
+GitHub Actions Workflow: `.github/workflows/tests.yml`
+
+- Python-Job (3.11)
+- Node-Job (20)
+
 ---
 
-## Weiterführende Doku
+## 13. Integrationsbeispiele
 
-- **API-Details & Python-Client:** [`API_Dokumentation.md`](API_Dokumentation.md)
-- **GS-232B Befehle:** [`GS232B_Befehle.md`](GS232B_Befehle.md)
-- **Arduino-Hardware:** [`hardware_test/README.md`](hardware_test/README.md) – Schaltplan, BOM und Firmware für den Arduino-basierten GS-232B-Emulator
-- **Architektur-Diagramme:** [`diagrams/`](diagrams/) – Systemarchitektur, Datenfluss, Threading, WebSocket-Broadcasting u. v. m.
-- **API-Testseite:** [`api-test-page.html`](api-test-page.html) – Interaktive Testseite für alle API-Endpunkte
+### 13.1 Python (requests)
+
+```python
+import requests
+
+BASE = "http://localhost:8081"
+
+# Session holen
+s = requests.get(f"{BASE}/api/session").json()
+sid = s["sessionId"]
+headers = {"X-Session-ID": sid}
+
+# Ports
+ports = requests.get(f"{BASE}/api/rotor/ports", headers=headers).json()["ports"]
+print(ports)
+
+# Verbinden
+requests.post(
+    f"{BASE}/api/rotor/connect",
+    headers=headers,
+    json={"port": "COM3", "baudRate": 9600},
+)
+
+# Status
+status = requests.get(f"{BASE}/api/rotor/status", headers=headers).json()
+print(status)
+
+# Stop
+requests.post(f"{BASE}/api/rotor/stop", headers=headers)
+```
+
+### 13.2 JavaScript (WebSocket)
+
+```js
+const ws = new WebSocket("ws://localhost:8082");
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: "register_session",
+    sessionId: "<session-id>"
+  }));
+};
+
+ws.onmessage = (evt) => {
+  const msg = JSON.parse(evt.data);
+  console.log(msg.type, msg.data);
+};
+```
 
 ---
 
-## Lizenz
+## 14. Troubleshooting
 
-GPL-3.0-or-later – siehe [`LICENSE`](LICENSE).
+### Port wird angezeigt, Verbindung schlägt fehl
+
+- COM-Port durch anderes Programm belegt?
+- Richtige Baudrate?
+- Benutzerrechte auf serielle Schnittstelle?
+
+### UI zeigt „Server nicht erreichbar“
+
+- Läuft `python -m server.main`?
+- Browser wirklich auf `http://localhost:8081` geöffnet?
+
+### Keine WebSocket-Updates
+
+- Prüfen, ob `websockets` installiert ist (`pip install -r requirements.txt`)
+- Port-Konflikt auf WS-Port (`8082` oder konfigurierter Port)
+
+### Portwechsel greift nicht
+
+- Nach Änderung von `serverHttpPort`/`serverWebSocketPort` Neustart ausführen (`/api/server/restart` oder `start_server.bat`)
+
+### Session-Probleme
+
+- Bei `serverRequireSession=true` immer `GET /api/session` aufrufen und `X-Session-ID` senden
+- Bei Suspendierung Seite neu laden (neue Session)
+
+---
+
+## 15. Sicherheitshinweise
+
+- Keine Authentifizierung eingebaut
+- CORS offen (`*`)
+- Für produktive Nutzung nur in vertrauenswürdigen Netzen betreiben
+- Für externe Bereitstellung Reverse-Proxy + TLS + Netzsegmentierung/Firewall verwenden
+
+---
+
+## 16. Aktuelle Einschränkungen
+
+- Kein aktiver Browser-Web-Serial-Modus im aktuellen Frontend
+- `PositionManager` und `HistoryLog` existieren als Module, sind im aktuellen Haupt-UI-Flow aber nicht eingebunden
+- Cross-Origin-Preflight ist aktuell auf `GET, POST, OPTIONS` begrenzt (relevant für browserbasierte Fremd-Clients bei `PUT/DELETE`)
+
+---
+
+## 17. Weiterführende Dokumentation
+
+- [API_Dokumentation.md](API_Dokumentation.md)
+- [GS232B_Befehle.md](GS232B_Befehle.md)
+- [hardware_test/README.md](hardware_test/README.md)
+- [diagrams/](diagrams/)
+- [api-test-page.html](api-test-page.html)
+
+---
+
+## 18. Lizenz
+
+GPL-3.0-or-later, siehe [LICENSE](LICENSE).
+
