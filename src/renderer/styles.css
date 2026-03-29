@@ -1508,6 +1508,13 @@ button.refreshing .icon {
   color: var(--muted);
 }
 
+.overlay-ring-header .icon-btn,
+.overlay-ring-remove {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
 .overlay-ring-list {
   display: grid;
   gap: 0.5rem;
@@ -1646,6 +1653,17 @@ button.refreshing .icon {
 
 .input-unit.compact input {
   width: 50px;
+}
+
+.overlay-ring-row .input-unit.compact {
+  width: min(280px, 100%);
+  max-width: 100%;
+  flex: 1;
+}
+
+.overlay-ring-row .input-unit.compact input {
+  width: 100%;
+  min-width: 0;
 }
 
 /* Input with Action Button */
