@@ -58,7 +58,7 @@ mapView.setOnClick(async (azimuth, elevation) => {
   
   // Wähle den Kandidaten, der im gültigen Bereich liegt und am nächsten zur aktuellen Position ist
   const maxAz = config.azimuthMode === 450 ? 450 : 360;
-  const currentRaw = rotor.currentStatus?.azimuthRaw || 0;
+  const currentRaw = rotor.currentStatus?.azimuthCorrectedRaw || rotor.currentStatus?.azimuthRaw || 0;
   
   // Filtere ungültige Kandidaten
   const validCandidates = candidates.filter(raw => raw >= 0 && raw <= maxAz);
@@ -1020,7 +1020,9 @@ async function handleApplyLimits() {
 async function handleSetAzReference(value) {
   config = await configStore.save({ azimuthOffset: 0 }); // Reset first
   const currentStat = rotor.currentStatus;
-  const rawAz = currentStat && typeof currentStat.azimuthRaw === 'number' ? currentStat.azimuthRaw : 0;
+  const rawAz = currentStat && typeof currentStat.azimuthCorrectedRaw === 'number'
+    ? currentStat.azimuthCorrectedRaw
+    : (currentStat && typeof currentStat.azimuthRaw === 'number' ? currentStat.azimuthRaw : 0);
   // Calculate offset so that (raw + offset) / scale = value
   // offset = (value * scale) - raw
   const scale = config.azimuthScaleFactor || 1.0;
@@ -1139,19 +1141,27 @@ function handleStatus(status) {
     updateConeSettings();
   }
   
-  if (typeof status.azimuthRaw === 'number') {
+  if (typeof status.azimuthCorrectedRaw === 'number') {
+    azValue.textContent = `${status.azimuthCorrectedRaw.toFixed(0)}deg`;
+  } else if (typeof status.azimuthRaw === 'number') {
     azValue.textContent = `${status.azimuthRaw.toFixed(0)}deg`;
   }
-  if (typeof status.elevationRaw === 'number') {
+  if (typeof status.elevationCorrectedRaw === 'number') {
+    elValue.textContent = `${status.elevationCorrectedRaw.toFixed(0)}deg`;
+  } else if (typeof status.elevationRaw === 'number') {
     elValue.textContent = `${status.elevationRaw.toFixed(0)}deg`;
   }
   elevation.update(status.elevation);
   mapView.update(status.azimuth, status.elevation);
   
   const time = new Date(status.timestamp).toLocaleTimeString();
-  // "Letzter Status:" zeigt immer die exakten Raw-Werte der Hardware (ohne Offset/Scale)
-  const az = typeof status.azimuthRaw === 'number' ? status.azimuthRaw.toFixed(0) : '--';
-  const el = typeof status.elevationRaw === 'number' ? status.elevationRaw.toFixed(0) : '--';
+  // "Letzter Status:" zeigt korrigierte Ist-Werte (Fallback: Adapter-Rohwerte)
+  const az = typeof status.azimuthCorrectedRaw === 'number'
+    ? status.azimuthCorrectedRaw.toFixed(0)
+    : (typeof status.azimuthRaw === 'number' ? status.azimuthRaw.toFixed(0) : '--');
+  const el = typeof status.elevationCorrectedRaw === 'number'
+    ? status.elevationCorrectedRaw.toFixed(0)
+    : (typeof status.elevationRaw === 'number' ? status.elevationRaw.toFixed(0) : '--');
   lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
   logAction('Status aktualisiert', { status, display: lastStatusValue.textContent });
   
