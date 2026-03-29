@@ -5,6 +5,7 @@
  */
 
 const STORAGE_KEY = 'rotor-control-config-v1';
+const overlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils) ? window.MapOverlayUtils : null;
 
 // Default configuration - used as fallback when server is unavailable
 const defaultConfig = {
@@ -36,6 +37,10 @@ const defaultConfig = {
   mapZoomLevel: 15,
   mapZoomMin: 5,
   mapZoomMax: 25,
+  mapOverlayEnabled: true,
+  mapOverlayLabelMode: 'both', // 'both', 'directions', 'hours'
+  mapOverlayAutoContrast: true,
+  mapOverlayRingRadiiMeters: [1000, 5000, 10000, 20000],
   
   // Speed
   azimuthSpeedDegPerSec: 4,
@@ -189,6 +194,38 @@ class ConfigStore {
       sanitized.elevationFeedbackFactorMax,
       defaultConfig.elevationFeedbackFactor
     );
+
+    // Overlay settings
+    const sanitizeOverlay = overlayUtils && typeof overlayUtils.sanitizeOverlaySettings === 'function'
+      ? overlayUtils.sanitizeOverlaySettings
+      : (raw) => {
+          const source = Array.isArray(raw.mapOverlayRingRadiiMeters)
+            ? raw.mapOverlayRingRadiiMeters
+            : [1000, 5000, 10000, 20000];
+          const unique = new Set();
+          const normalizedRadii = [];
+          for (const item of source) {
+            const parsed = Math.round(Number(item));
+            if (!Number.isFinite(parsed) || parsed <= 0 || unique.has(parsed)) {
+              continue;
+            }
+            unique.add(parsed);
+            normalizedRadii.push(parsed);
+          }
+          normalizedRadii.sort((a, b) => a - b);
+          const mode = String(raw.mapOverlayLabelMode || '').toLowerCase();
+          return {
+            mapOverlayEnabled: raw.mapOverlayEnabled !== undefined ? Boolean(raw.mapOverlayEnabled) : true,
+            mapOverlayLabelMode: ['both', 'directions', 'hours'].includes(mode) ? mode : 'both',
+            mapOverlayAutoContrast: raw.mapOverlayAutoContrast !== undefined ? Boolean(raw.mapOverlayAutoContrast) : true,
+            mapOverlayRingRadiiMeters: normalizedRadii.length ? normalizedRadii.slice(0, 8) : [1000, 5000, 10000, 20000]
+          };
+        };
+    const normalizedOverlay = sanitizeOverlay(config || {});
+    sanitized.mapOverlayEnabled = normalizedOverlay.mapOverlayEnabled;
+    sanitized.mapOverlayLabelMode = normalizedOverlay.mapOverlayLabelMode;
+    sanitized.mapOverlayAutoContrast = normalizedOverlay.mapOverlayAutoContrast;
+    sanitized.mapOverlayRingRadiiMeters = normalizedOverlay.mapOverlayRingRadiiMeters;
     
     return sanitized;
   }

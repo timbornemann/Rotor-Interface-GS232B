@@ -1177,6 +1177,14 @@ function updateConeSettings() {
   const coneLength = config.coneLength || 1000;
   const azimuthDisplayOffset = config.azimuthDisplayOffset || 0;
   mapView.setConeSettings(coneAngle, coneLength, azimuthDisplayOffset);
+  if (typeof mapView.setOverlaySettings === 'function') {
+    mapView.setOverlaySettings({
+      mapOverlayEnabled: config.mapOverlayEnabled,
+      mapOverlayLabelMode: config.mapOverlayLabelMode,
+      mapOverlayAutoContrast: config.mapOverlayAutoContrast,
+      mapOverlayRingRadiiMeters: config.mapOverlayRingRadiiMeters
+    });
+  }
 }
 
 async function handleLoadMap() {

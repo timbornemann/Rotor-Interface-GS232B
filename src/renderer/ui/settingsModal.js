@@ -20,6 +20,8 @@ class SettingsModal {
     this.locationSearchAbort = null;
     this.pendingLocation = null;
     this.locationMapReady = false;
+    this.overlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils) ? window.MapOverlayUtils : null;
+    this.overlayRingValidationErrors = [];
     
     // Settings field definitions for easy maintenance
     this.settingsFields = {
@@ -41,6 +43,9 @@ class SettingsModal {
       mapZoomLevel: { id: 'settingsMapZoomLevel', type: 'number' },
       mapZoomMin: { id: 'settingsMapZoomMin', type: 'number' },
       mapZoomMax: { id: 'settingsMapZoomMax', type: 'number' },
+      mapOverlayEnabled: { id: 'settingsMapOverlayEnabled', type: 'checkbox' },
+      mapOverlayLabelMode: { id: 'settingsMapOverlayLabelMode', type: 'select' },
+      mapOverlayAutoContrast: { id: 'settingsMapOverlayAutoContrast', type: 'checkbox' },
       
       // Speed
       azimuthSpeedDegPerSec: { id: 'settingsAzSpeedInput', type: 'number' },
@@ -143,6 +148,7 @@ class SettingsModal {
     this.setupCoordinateSync();
     this.setupPresetToggle();
     this.setupMapSourceTypeSync();
+    this.setupOverlayRingControls();
 
     // Port refresh button
     const refreshBtn = document.getElementById('settingsRefreshPortsBtn');
@@ -257,6 +263,199 @@ class SettingsModal {
     mapSourceSelect.addEventListener('change', updateMapTypeAvailability);
     // Initial update
     updateMapTypeAvailability();
+  }
+
+  getDefaultOverlayRings() {
+    if (this.overlayUtils && Array.isArray(this.overlayUtils.DEFAULT_OVERLAY_RING_RADII)) {
+      return this.overlayUtils.DEFAULT_OVERLAY_RING_RADII.slice();
+    }
+    return [1000, 5000, 10000, 20000];
+  }
+
+  sanitizeOverlayRingRadii(radii) {
+    if (this.overlayUtils && typeof this.overlayUtils.sanitizeOverlayRingRadii === 'function') {
+      return this.overlayUtils.sanitizeOverlayRingRadii(radii, this.getDefaultOverlayRings());
+    }
+
+    const unique = new Set();
+    const result = [];
+    const source = Array.isArray(radii) ? radii : this.getDefaultOverlayRings();
+    for (const raw of source) {
+      const value = Math.round(Number(raw));
+      if (!Number.isFinite(value) || value <= 0 || unique.has(value)) {
+        continue;
+      }
+      unique.add(value);
+      result.push(value);
+    }
+    result.sort((a, b) => a - b);
+    return result.length ? result.slice(0, 8) : this.getDefaultOverlayRings();
+  }
+
+  setupOverlayRingControls() {
+    const addButton = document.getElementById('settingsMapOverlayAddRing');
+    const ringList = document.getElementById('settingsMapOverlayRingList');
+    if (!addButton || !ringList) {
+      return;
+    }
+
+    addButton.addEventListener('click', () => {
+      const rows = ringList.querySelectorAll('.overlay-ring-row');
+      if (rows.length >= 8) {
+        return;
+      }
+      const lastRow = rows[rows.length - 1];
+      const nextValue = lastRow ? Number(lastRow.querySelector('input')?.value || 1000) : 1000;
+      ringList.appendChild(this.createOverlayRingRow(Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1000));
+      this.updateOverlayRingRowState();
+      this.clearOverlayRingValidationErrors();
+    });
+  }
+
+  createOverlayRingRow(value = 1000) {
+    const row = document.createElement('div');
+    row.className = 'overlay-ring-row';
+
+    const index = document.createElement('span');
+    index.className = 'overlay-ring-index';
+    index.textContent = '1.';
+
+    const inputUnit = document.createElement('div');
+    inputUnit.className = 'input-unit compact';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'overlay-ring-input';
+    input.min = '1';
+    input.step = '1';
+    input.value = String(Math.max(1, Math.round(Number(value) || 1000)));
+    input.addEventListener('input', () => {
+      this.clearOverlayRingValidationErrors();
+    });
+
+    const unit = document.createElement('span');
+    unit.className = 'unit';
+    unit.textContent = 'm';
+
+    inputUnit.appendChild(input);
+    inputUnit.appendChild(unit);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'icon-btn overlay-ring-remove';
+    removeBtn.textContent = '-';
+    removeBtn.title = 'Ring entfernen';
+    removeBtn.addEventListener('click', () => {
+      const ringList = document.getElementById('settingsMapOverlayRingList');
+      if (!ringList) {
+        return;
+      }
+      if (ringList.querySelectorAll('.overlay-ring-row').length <= 1) {
+        return;
+      }
+      row.remove();
+      this.updateOverlayRingRowState();
+      this.clearOverlayRingValidationErrors();
+    });
+
+    row.appendChild(index);
+    row.appendChild(inputUnit);
+    row.appendChild(removeBtn);
+    return row;
+  }
+
+  updateOverlayRingRowState() {
+    const ringList = document.getElementById('settingsMapOverlayRingList');
+    const addButton = document.getElementById('settingsMapOverlayAddRing');
+    if (!ringList) {
+      return;
+    }
+
+    const rows = Array.from(ringList.querySelectorAll('.overlay-ring-row'));
+    rows.forEach((row, index) => {
+      const indexLabel = row.querySelector('.overlay-ring-index');
+      if (indexLabel) {
+        indexLabel.textContent = `${index + 1}.`;
+      }
+      const removeBtn = row.querySelector('.overlay-ring-remove');
+      if (removeBtn) {
+        removeBtn.disabled = rows.length <= 1;
+      }
+    });
+
+    if (addButton) {
+      addButton.disabled = rows.length >= 8;
+    }
+  }
+
+  renderOverlayRingRows(radii) {
+    const ringList = document.getElementById('settingsMapOverlayRingList');
+    if (!ringList) {
+      return;
+    }
+
+    const normalized = this.sanitizeOverlayRingRadii(radii);
+    ringList.innerHTML = '';
+    normalized.forEach((value) => {
+      ringList.appendChild(this.createOverlayRingRow(value));
+    });
+    this.updateOverlayRingRowState();
+  }
+
+  readOverlayRingRadiiFromForm() {
+    const ringList = document.getElementById('settingsMapOverlayRingList');
+    const errors = [];
+    if (!ringList) {
+      return { radii: this.getDefaultOverlayRings(), errors };
+    }
+
+    const rows = Array.from(ringList.querySelectorAll('.overlay-ring-row'));
+    if (rows.length < 1 || rows.length > 8) {
+      errors.push('Ringliste muss zwischen 1 und 8 Eintraegen enthalten.');
+    }
+
+    const parsed = [];
+    rows.forEach((row, index) => {
+      const input = row.querySelector('input');
+      const rawValue = input ? input.value.trim() : '';
+      if (!rawValue) {
+        errors.push(`Ring ${index + 1}: Bitte einen Radius in Metern eingeben.`);
+        return;
+      }
+      const value = Number(rawValue);
+      if (!Number.isFinite(value) || value <= 0) {
+        errors.push(`Ring ${index + 1}: Radius muss groesser als 0 m sein.`);
+        return;
+      }
+      parsed.push(value);
+    });
+
+    if (errors.length) {
+      return { radii: parsed, errors };
+    }
+
+    return { radii: this.sanitizeOverlayRingRadii(parsed), errors: [] };
+  }
+
+  setOverlayRingValidationErrors(errors) {
+    this.overlayRingValidationErrors = Array.isArray(errors) ? errors : [];
+    const errorNode = document.getElementById('settingsMapOverlayRingError');
+    if (!errorNode) {
+      return;
+    }
+
+    if (!this.overlayRingValidationErrors.length) {
+      errorNode.textContent = '';
+      errorNode.classList.add('hidden');
+      return;
+    }
+
+    errorNode.textContent = this.overlayRingValidationErrors.join(' ');
+    errorNode.classList.remove('hidden');
+  }
+
+  clearOverlayRingValidationErrors() {
+    this.setOverlayRingValidationErrors([]);
   }
 
   switchSection(tabName) {
@@ -504,6 +703,9 @@ class SettingsModal {
       }
     }
 
+    this.renderOverlayRingRows(config.mapOverlayRingRadiiMeters);
+    this.clearOverlayRingValidationErrors();
+
     // Ensure preset fields enable/disable state is synced
     const presetToggle = document.getElementById('settingsParkPositionsEnabled');
     if (presetToggle) {
@@ -557,6 +759,10 @@ class SettingsModal {
 
       config[key] = value;
     }
+
+    const overlayRings = this.readOverlayRingRadiiFromForm();
+    config.mapOverlayRingRadiiMeters = overlayRings.radii;
+    this.setOverlayRingValidationErrors(overlayRings.errors);
 
     return config;
   }
@@ -819,8 +1025,18 @@ class SettingsModal {
 
     // Validate server settings
     if (config.serverHttpPort && config.serverWebSocketPort && config.serverHttpPort === config.serverWebSocketPort) {
-      errors.push('HTTP- und WebSocket-Port müssen unterschiedlich sein');
+      errors.push('HTTP- und WebSocket-Port muessen unterschiedlich sein');
     }
+
+    if (!['both', 'directions', 'hours'].includes(String(config.mapOverlayLabelMode))) {
+      errors.push('Overlay-Beschriftung muss "both", "directions" oder "hours" sein');
+    }
+
+    const overlayRingState = this.readOverlayRingRadiiFromForm();
+    if (overlayRingState.errors.length) {
+      errors.push(...overlayRingState.errors);
+    }
+    this.setOverlayRingValidationErrors(overlayRingState.errors);
 
     return errors;
   }
