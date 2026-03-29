@@ -47,6 +47,19 @@ class RotorHandler(SimpleHTTPRequestHandler):
         "/main.js",
         "/manifest.webmanifest",
     }
+
+    NO_SESSION_API_PATHS = {
+        "/api/session",
+        "/api/openapi.json",
+        "/api/docs",
+        "/api/docs/",
+        "/api/redoc",
+        "/api/redoc/",
+    }
+
+    NO_SESSION_API_PREFIXES = (
+        "/api/docs/assets/",
+    )
     
     # Regex patterns for client management routes
     SUSPEND_PATTERN = re.compile(r"^/api/clients/([^/]+)/suspend$")
@@ -108,8 +121,10 @@ class RotorHandler(SimpleHTTPRequestHandler):
         if not self._is_api_path(parsed.path):
             return True
         
-        # Don't check session for the session endpoint itself
-        if parsed.path == "/api/session":
+        # Don't check session for explicitly public API endpoints
+        if parsed.path in self.NO_SESSION_API_PATHS:
+            return True
+        if parsed.path.startswith(self.NO_SESSION_API_PREFIXES):
             return True
         
         # Process session (don't create if missing)
@@ -146,6 +161,23 @@ class RotorHandler(SimpleHTTPRequestHandler):
                 return
         
         # API Routes
+        if parsed.path == "/api/openapi.json":
+            routes.handle_get_openapi_json(self, self.state)
+            return
+
+        if parsed.path in {"/api/docs", "/api/docs/"}:
+            routes.handle_get_api_docs(self, self.state)
+            return
+
+        if parsed.path in {"/api/redoc", "/api/redoc/"}:
+            routes.handle_get_api_redoc(self, self.state)
+            return
+
+        if parsed.path.startswith("/api/docs/assets/"):
+            asset_name = parsed.path[len("/api/docs/assets/"):]
+            routes.handle_get_api_docs_asset(self, self.state, asset_name)
+            return
+
         if parsed.path.startswith("/api/settings"):
             routes.handle_get_settings(self, self.state)
             return

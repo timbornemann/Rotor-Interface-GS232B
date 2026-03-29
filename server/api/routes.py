@@ -7,15 +7,24 @@ import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Any, Dict
 
 from server.api.middleware import send_json, read_json_body
+from server.api.openapi import build_openapi_spec, build_swagger_ui_html, build_redoc_html
 from server.connection.port_scanner import list_available_ports
 from server.control.rotor_logic import RotorLogic
 from server.utils.logging import log, get_current_logging_level, set_logging_level
 
 if TYPE_CHECKING:
     from server.core.state import ServerState
+
+DOCS_ASSET_DIR = Path(__file__).resolve().parent / "static" / "docs"
+DOCS_ASSETS = {
+    "swagger-ui.css": ("text/css; charset=utf-8", DOCS_ASSET_DIR / "swagger-ui.css"),
+    "swagger-ui-bundle.js": ("application/javascript; charset=utf-8", DOCS_ASSET_DIR / "swagger-ui-bundle.js"),
+    "redoc.standalone.js": ("application/javascript; charset=utf-8", DOCS_ASSET_DIR / "redoc.standalone.js"),
+}
 
 
 # --- Settings Routes ---
@@ -97,6 +106,55 @@ def _build_status_payload(status: Optional[Dict[str, Any]], config: Dict[str, An
         },
         "calibrated": calibrated
     }
+
+
+def _send_html(handler: BaseHTTPRequestHandler, html: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+    """Send a HTML response with CORS headers."""
+    data = html.encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def handle_get_openapi_json(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/openapi.json - Return OpenAPI specification."""
+    spec = build_openapi_spec(handler, state)
+    send_json(handler, spec)
+
+
+def handle_get_api_docs(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/docs - Return Swagger UI page."""
+    _send_html(handler, build_swagger_ui_html("/api/openapi.json", "/api/docs/assets"))
+
+
+def handle_get_api_redoc(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
+    """Handle GET /api/redoc - Return ReDoc page."""
+    _send_html(handler, build_redoc_html("/api/openapi.json"))
+
+
+def handle_get_api_docs_asset(handler: BaseHTTPRequestHandler, state: "ServerState", asset_name: str) -> None:
+    """Handle GET /api/docs/assets/<asset_name> - Return local docs asset."""
+    asset_info = DOCS_ASSETS.get(asset_name)
+    if not asset_info:
+        send_json(handler, {"error": "Asset not found"}, HTTPStatus.NOT_FOUND)
+        return
+
+    content_type, asset_path = asset_info
+    if not asset_path.exists():
+        send_json(handler, {"error": "Asset unavailable"}, HTTPStatus.NOT_FOUND)
+        return
+
+    data = asset_path.read_bytes()
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", content_type)
+    handler.send_header("Content-Length", str(len(data)))
+    handler.send_header("Cache-Control", "public, max-age=86400")
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.end_headers()
+    handler.wfile.write(data)
 
 def handle_get_settings(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     """Handle GET /api/settings - Get all configuration.
