@@ -38,6 +38,13 @@ class TestDefaults:
         assert "azimuthMaxLimit" in DEFAULT_CONFIG
         assert "elevationMinLimit" in DEFAULT_CONFIG
         assert "elevationMaxLimit" in DEFAULT_CONFIG
+
+    def test_default_config_has_overlay_settings(self):
+        """Default config should include map overlay settings."""
+        assert DEFAULT_CONFIG["mapOverlayEnabled"] is True
+        assert DEFAULT_CONFIG["mapOverlayLabelMode"] == "both"
+        assert DEFAULT_CONFIG["mapOverlayAutoContrast"] is True
+        assert DEFAULT_CONFIG["mapOverlayRingRadiiMeters"] == [1000, 5000, 10000, 20000]
     
     def test_default_ini_template_is_string(self):
         """Default INI template should be a string."""
@@ -54,6 +61,13 @@ class TestDefaults:
         assert "feedbackCorrectionEnabled=false" in DEFAULT_INI_TEMPLATE
         assert "azimuthFeedbackFactor=1.0" in DEFAULT_INI_TEMPLATE
         assert "elevationFeedbackFactor=1.0" in DEFAULT_INI_TEMPLATE
+
+    def test_default_ini_template_has_overlay_settings(self):
+        """Default INI template should include map overlay settings."""
+        assert "mapOverlayEnabled=true" in DEFAULT_INI_TEMPLATE
+        assert "mapOverlayLabelMode=both" in DEFAULT_INI_TEMPLATE
+        assert "mapOverlayAutoContrast=true" in DEFAULT_INI_TEMPLATE
+        assert "mapOverlayRingRadiiMeters=1000,5000,10000,20000" in DEFAULT_INI_TEMPLATE
 
 
 class TestSettingsManager:
@@ -130,4 +144,24 @@ class TestSettingsManager:
         # Reload and verify
         settings.reload()
         assert settings.get("baudRate") == 38400
+
+    def test_update_sanitizes_overlay_rings(self, settings):
+        """Overlay ring list should be deduplicated, sorted and sanitized."""
+        settings.update({
+            "mapOverlayRingRadiiMeters": [5000, 1000, 5000, -1, "10000"],
+            "mapOverlayLabelMode": "hours",
+            "mapOverlayEnabled": "false",
+            "mapOverlayAutoContrast": "true",
+        })
+        config = settings.get_all()
+        assert config["mapOverlayRingRadiiMeters"] == [1000, 5000, 10000]
+        assert config["mapOverlayLabelMode"] == "hours"
+        assert config["mapOverlayEnabled"] is False
+        assert config["mapOverlayAutoContrast"] is True
+
+    def test_update_falls_back_for_invalid_overlay_rings(self, settings):
+        """Invalid ring lists should fall back to defaults."""
+        settings.update({"mapOverlayRingRadiiMeters": ["abc", 0, -5]})
+        config = settings.get_all()
+        assert config["mapOverlayRingRadiiMeters"] == [1000, 5000, 10000, 20000]
 
