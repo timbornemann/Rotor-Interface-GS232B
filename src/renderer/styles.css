@@ -1494,6 +1494,57 @@ button.refreshing .icon {
   pointer-events: none;
 }
 
+.overlay-ring-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.overlay-ring-header > label {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.overlay-ring-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.overlay-ring-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.overlay-ring-index {
+  font-size: 0.82rem;
+  color: var(--muted);
+  min-width: 1.5rem;
+}
+
+.overlay-ring-row .input-unit {
+  width: 100%;
+}
+
+.overlay-ring-row .input-unit input {
+  width: 100%;
+}
+
+.overlay-ring-remove {
+  min-width: 2.1rem;
+  padding-inline: 0.55rem;
+}
+
+.overlay-ring-error {
+  margin-top: 0.6rem;
+  color: #ff9a9a;
+  font-size: 0.82rem;
+}
+
 .card-header-with-toggle {
   display: flex;
   align-items: center;
