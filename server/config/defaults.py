@@ -17,6 +17,10 @@ DEFAULT_CONFIG = {
     "mapZoomLevel": 15,
     "mapZoomMin": 5,
     "mapZoomMax": 25,
+    "mapOverlayEnabled": True,
+    "mapOverlayLabelMode": "both",
+    "mapOverlayAutoContrast": True,
+    "mapOverlayRingRadiiMeters": [1000, 5000, 10000, 20000],
     
     # Cone visualization
     "coneAngle": 10,
@@ -133,6 +137,10 @@ satelliteMapEnabled=false
 mapZoomLevel=15
 mapZoomMin=5
 mapZoomMax=25
+mapOverlayEnabled=true
+mapOverlayLabelMode=both
+mapOverlayAutoContrast=true
+mapOverlayRingRadiiMeters=1000,5000,10000,20000
 
 [Cone]
 ; Cone visualization settings

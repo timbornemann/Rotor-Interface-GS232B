@@ -7,7 +7,7 @@ All settings are stored in web-settings.json for consistency across devices.
 import json
 import threading
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from server.utils.logging import log
 from server.config.defaults import DEFAULT_CONFIG
@@ -48,6 +48,7 @@ class SettingsManager:
                     # Filter out invalid/corrupted values and lowercase duplicates
                     cleaned_config = self._clean_config(json_config)
                     self.cache.update(cleaned_config)
+                    self.cache.update(self._sanitize_overlay_settings(self.cache))
                     log(f"[Settings] Loaded settings from {self.json_file}")
                 except Exception as e:
                     log(f"[Settings] Error loading JSON: {e}")
@@ -95,6 +96,68 @@ class SettingsManager:
         
         return cleaned
 
+    def _coerce_bool(self, value: Any, fallback: bool) -> bool:
+        """Coerce a value to boolean with support for string values."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off"}:
+                return False
+        return fallback
+
+    def _sanitize_overlay_radii(self, value: Any) -> List[int]:
+        """Sanitize map overlay ring radii list."""
+        default_radii = DEFAULT_CONFIG.get("mapOverlayRingRadiiMeters", [1000, 5000, 10000, 20000])
+        source = value
+        if isinstance(value, str):
+            source = [item.strip() for item in value.split(",") if item.strip()]
+        if not isinstance(source, (list, tuple, set)):
+            source = default_radii
+
+        seen = set()
+        result = []
+        for raw in source:
+            try:
+                numeric = int(round(float(raw)))
+            except (TypeError, ValueError):
+                continue
+            if numeric <= 0 or numeric in seen:
+                continue
+            seen.add(numeric)
+            result.append(numeric)
+
+        result.sort()
+        if len(result) < 1:
+            return list(default_radii)
+        return result[:8]
+
+    def _sanitize_overlay_settings(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize overlay settings with strict defaults."""
+        default_mode = str(DEFAULT_CONFIG.get("mapOverlayLabelMode", "both"))
+        mode = str(config.get("mapOverlayLabelMode", default_mode)).strip().lower()
+        if mode not in {"both", "directions", "hours"}:
+            mode = default_mode
+
+        return {
+            "mapOverlayEnabled": self._coerce_bool(
+                config.get("mapOverlayEnabled", DEFAULT_CONFIG.get("mapOverlayEnabled", True)),
+                bool(DEFAULT_CONFIG.get("mapOverlayEnabled", True)),
+            ),
+            "mapOverlayLabelMode": mode,
+            "mapOverlayAutoContrast": self._coerce_bool(
+                config.get("mapOverlayAutoContrast", DEFAULT_CONFIG.get("mapOverlayAutoContrast", True)),
+                bool(DEFAULT_CONFIG.get("mapOverlayAutoContrast", True)),
+            ),
+            "mapOverlayRingRadiiMeters": self._sanitize_overlay_radii(
+                config.get("mapOverlayRingRadiiMeters", DEFAULT_CONFIG.get("mapOverlayRingRadiiMeters", [1000, 5000, 10000, 20000]))
+            ),
+        }
+
     def _save_to_file(self) -> None:
         """Save current cache to JSON file."""
         try:
@@ -132,7 +195,9 @@ class SettingsManager:
             new_settings: Dictionary of settings to update.
         """
         with self.lock:
-            self.cache.update(new_settings)
+            cleaned_settings = self._clean_config(new_settings or {})
+            self.cache.update(cleaned_settings)
+            self.cache.update(self._sanitize_overlay_settings(self.cache))
             self._save_to_file()
 
     def reload(self) -> None:
