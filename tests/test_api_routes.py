@@ -138,9 +138,74 @@ class TestRotorStatusAPI:
         assert "rph" in data["status"]
         assert "azimuth" in data["status"]["rph"]
         assert "elevation" in data["status"]["rph"]
+        assert "correctedRaw" in data["status"]
+        assert "azimuth" in data["status"]["correctedRaw"]
+        assert "elevation" in data["status"]["correctedRaw"]
         assert "calibrated" in data["status"]
         assert "azimuth" in data["status"]["calibrated"]
         assert "elevation" in data["status"]["calibrated"]
+
+    def test_get_status_applies_feedback_correction(self, test_server):
+        """GET /api/rotor/status should expose correctedRaw and calibrated values based on correction factors."""
+        base_url, state = test_server
+
+        from unittest.mock import MagicMock
+        mock_status = {
+            "azimuthRaw": 90,
+            "elevationRaw": 45,
+            "raw": "AZ=090 EL=045",
+            "timestamp": 1234567890
+        }
+        state.settings.update({
+            "feedbackCorrectionEnabled": True,
+            "azimuthFeedbackFactor": 2.0,
+            "elevationFeedbackFactor": 2.0
+        })
+        state.rotor_connection.is_connected = MagicMock(return_value=True)
+        state.rotor_connection.get_status = MagicMock(return_value=mock_status)
+        state.rotor_connection.port = "COM3"
+        state.rotor_connection.baud_rate = 9600
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/rotor/status")) as response:
+            assert response.status == 200
+            data = json.load(response)
+
+        assert data["status"]["rph"]["azimuth"] == 90
+        assert data["status"]["rph"]["elevation"] == 45
+        assert data["status"]["correctedRaw"]["azimuth"] == 180
+        assert data["status"]["correctedRaw"]["elevation"] == 90
+        assert data["status"]["calibrated"]["azimuth"] == 180
+        assert data["status"]["calibrated"]["elevation"] == 90
+
+    def test_get_position_contains_corrected_raw(self, test_server):
+        """GET /api/rotor/position should include correctedRaw alongside rph values."""
+        base_url, state = test_server
+
+        from unittest.mock import MagicMock
+        mock_status = {
+            "azimuthRaw": 90,
+            "elevationRaw": 45,
+            "raw": "AZ=090 EL=045",
+            "timestamp": 1234567890
+        }
+        state.settings.update({
+            "feedbackCorrectionEnabled": True,
+            "azimuthFeedbackFactor": 2.0,
+            "elevationFeedbackFactor": 2.0
+        })
+        state.rotor_connection.is_connected = MagicMock(return_value=True)
+        state.rotor_connection.get_status = MagicMock(return_value=mock_status)
+        state.rotor_connection.port = "COM3"
+        state.rotor_connection.baud_rate = 9600
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/rotor/position")) as response:
+            assert response.status == 200
+            data = json.load(response)
+
+        assert data["position"]["rph"]["azimuth"] == 90
+        assert data["position"]["rph"]["elevation"] == 45
+        assert data["position"]["correctedRaw"]["azimuth"] == 180
+        assert data["position"]["correctedRaw"]["elevation"] == 90
 
 
 class TestRotorConnectAPI:
