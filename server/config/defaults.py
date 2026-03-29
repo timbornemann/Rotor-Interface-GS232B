@@ -83,10 +83,17 @@ DEFAULT_CONFIG = {
     "elevationOffset": 0,
     "azimuthScaleFactor": 1.0,
     "elevationScaleFactor": 1.0,
+    "feedbackCorrectionEnabled": False,
+    "azimuthFeedbackFactor": 1.0,
+    "elevationFeedbackFactor": 1.0,
     "azimuthScaleFactorMin": 0.1,
     "azimuthScaleFactorMax": 2.0,
     "elevationScaleFactorMin": 0.1,
     "elevationScaleFactorMax": 2.0,
+    "azimuthFeedbackFactorMin": 0.1,
+    "azimuthFeedbackFactorMax": 10.0,
+    "elevationFeedbackFactorMin": 0.1,
+    "elevationFeedbackFactorMax": 10.0,
     
     # Server Settings
     "serverHttpPort": 8081,
@@ -191,10 +198,17 @@ azimuthOffset=0
 elevationOffset=0
 azimuthScaleFactor=1.0
 elevationScaleFactor=1.0
+feedbackCorrectionEnabled=false
+azimuthFeedbackFactor=1.0
+elevationFeedbackFactor=1.0
 azimuthScaleFactorMin=0.1
 azimuthScaleFactorMax=2.0
 elevationScaleFactorMin=0.1
 elevationScaleFactorMax=2.0
+azimuthFeedbackFactorMin=0.1
+azimuthFeedbackFactorMax=10.0
+elevationFeedbackFactorMin=0.1
+elevationFeedbackFactorMax=10.0
 
 [Server]
 ; Server configuration settings

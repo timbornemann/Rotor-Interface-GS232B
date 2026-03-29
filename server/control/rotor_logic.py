@@ -83,6 +83,13 @@ class RotorLogic:
             "elevationOffset": 0.0,
             "azimuthScaleFactor": 1.0,
             "elevationScaleFactor": 1.0,
+            "feedbackCorrectionEnabled": False,
+            "azimuthFeedbackFactor": 1.0,
+            "elevationFeedbackFactor": 1.0,
+            "azimuthFeedbackFactorMin": 0.1,
+            "azimuthFeedbackFactorMax": 10.0,
+            "elevationFeedbackFactorMin": 0.1,
+            "elevationFeedbackFactorMax": 10.0,
             "parkPositionsEnabled": False,
             "homeAzimuth": 0.0,
             "homeElevation": 0.0,
@@ -135,6 +142,31 @@ class RotorLogic:
         self.config["elevationOffset"] = safe_float("elevationOffset", 0.0)
         self.config["azimuthScaleFactor"] = safe_float("azimuthScaleFactor", 1.0)
         self.config["elevationScaleFactor"] = safe_float("elevationScaleFactor", 1.0)
+        self.config["feedbackCorrectionEnabled"] = new_config.get("feedbackCorrectionEnabled", False) in [True, "true", "True", 1]
+        az_feedback_min = safe_float("azimuthFeedbackFactorMin", 0.1)
+        az_feedback_max = safe_float("azimuthFeedbackFactorMax", 10.0)
+        if az_feedback_max < az_feedback_min:
+            az_feedback_max = az_feedback_min
+        self.config["azimuthFeedbackFactorMin"] = az_feedback_min
+        self.config["azimuthFeedbackFactorMax"] = az_feedback_max
+
+        el_feedback_min = safe_float("elevationFeedbackFactorMin", 0.1)
+        el_feedback_max = safe_float("elevationFeedbackFactorMax", 10.0)
+        if el_feedback_max < el_feedback_min:
+            el_feedback_max = el_feedback_min
+        self.config["elevationFeedbackFactorMin"] = el_feedback_min
+        self.config["elevationFeedbackFactorMax"] = el_feedback_max
+
+        self.config["azimuthFeedbackFactor"] = clamp(
+            safe_float("azimuthFeedbackFactor", 1.0),
+            self.config["azimuthFeedbackFactorMin"],
+            self.config["azimuthFeedbackFactorMax"],
+        )
+        self.config["elevationFeedbackFactor"] = clamp(
+            safe_float("elevationFeedbackFactor", 1.0),
+            self.config["elevationFeedbackFactorMin"],
+            self.config["elevationFeedbackFactorMax"],
+        )
         self.config["parkPositionsEnabled"] = new_config.get("parkPositionsEnabled", False) in [True, "true", "True", 1]
         self.config["homeAzimuth"] = safe_float("homeAzimuth", 0.0)
         self.config["homeElevation"] = safe_float("homeElevation", 0.0)
@@ -277,24 +309,61 @@ class RotorLogic:
         else:
             self.connection.send_command("S")
 
+    def _apply_feedback_correction(self, raw_value: Optional[Any], factor_key: str) -> Optional[float]:
+        """Apply optional USB adapter feedback correction to a raw value."""
+        if raw_value is None:
+            return None
+        try:
+            effective = float(raw_value)
+        except (TypeError, ValueError):
+            return None
+
+        if not self.config.get("feedbackCorrectionEnabled", False):
+            return effective
+
+        try:
+            factor = float(self.config.get(factor_key, 1.0))
+        except (TypeError, ValueError):
+            factor = 1.0
+
+        if factor <= 0:
+            factor = 1.0
+        return effective * factor
+
+    def get_effective_raw_status(self) -> Optional[Dict[str, float]]:
+        """Get current raw status with optional feedback correction applied."""
+        status = self.connection.get_status()
+        if not status:
+            return None
+
+        az_raw = self._apply_feedback_correction(status.get("azimuthRaw"), "azimuthFeedbackFactor")
+        el_raw = self._apply_feedback_correction(status.get("elevationRaw"), "elevationFeedbackFactor")
+
+        if az_raw is None and el_raw is None:
+            return None
+        return {"azimuth": az_raw, "elevation": el_raw}
+
     def _get_calibrated_status(self) -> Optional[Dict[str, float]]:
         """Get current status with calibration applied.
         
         Returns:
             Dictionary with calibrated 'azimuth' and 'elevation' or None.
         """
-        status = self.connection.get_status()
-        if not status:
+        effective_status = self.get_effective_raw_status()
+        if not effective_status:
             return None
         
-        az_raw = status.get("azimuthRaw")
-        el_raw = status.get("elevationRaw")
+        az_raw = effective_status.get("azimuth")
+        el_raw = effective_status.get("elevation")
         
         if az_raw is None or el_raw is None:
             return None
-            
-        az_cal = (az_raw + self.config["azimuthOffset"]) / self.config.get("azimuthScaleFactor", 1.0)
-        el_cal = (el_raw + self.config["elevationOffset"]) / self.config.get("elevationScaleFactor", 1.0)
+
+        az_scale = self.config.get("azimuthScaleFactor", 1.0) or 1.0
+        el_scale = self.config.get("elevationScaleFactor", 1.0) or 1.0
+
+        az_cal = (az_raw + self.config["azimuthOffset"]) / az_scale
+        el_cal = (el_raw + self.config["elevationOffset"]) / el_scale
         
         return {"azimuth": az_cal, "elevation": el_cal}
     
@@ -318,8 +387,9 @@ class RotorLogic:
             raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
             if len(vals) == 0:
                 # If only EL provided, we need current AZ for the W command
-                status = self.connection.get_status()
-                curr_az_raw = status.get("azimuthRaw", 0) if status else 0
+                effective_status = self.get_effective_raw_status()
+                curr_az_raw = effective_status.get("azimuth", 0) if effective_status else 0
+                curr_az_raw = clamp(curr_az_raw, 0, self.config.get("azimuthMode", 360))
                 vals.append(f"{int(round(curr_az_raw)):03d}")
             
             vals.append(f"{int(round(raw_el)):03d}")
@@ -348,8 +418,9 @@ class RotorLogic:
             el_clamped = max(0, min(el, 90))
             if len(vals) == 0:
                 # If only EL provided, we need current AZ for the W command
-                status = self.connection.get_status()
-                curr_az_raw = status.get("azimuthRaw", 0) if status else 0
+                effective_status = self.get_effective_raw_status()
+                curr_az_raw = effective_status.get("azimuth", 0) if effective_status else 0
+                curr_az_raw = clamp(curr_az_raw, 0, self.config.get("azimuthMode", 360))
                 vals.append(f"{int(round(curr_az_raw)):03d}")
             
             vals.append(f"{int(round(el_clamped)):03d}")
