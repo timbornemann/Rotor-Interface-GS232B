@@ -7,7 +7,7 @@ import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Any, Dict
 
 from server.api.middleware import send_json, read_json_body
 from server.connection.port_scanner import list_available_ports
@@ -39,6 +39,64 @@ def _is_valid_direction(direction: object) -> bool:
     if not isinstance(direction, str):
         return False
     return direction in RotorLogic.DIRECTION_MAP
+
+
+def _is_enabled(value: object) -> bool:
+    """Interpret common truthy payload values for configuration flags."""
+    return value in [True, "true", "True", 1]
+
+
+def _positive_number(value: object, fallback: float) -> float:
+    """Parse a positive numeric value with fallback."""
+    parsed = _parse_number(value)
+    if parsed is None or parsed <= 0:
+        return fallback
+    return parsed
+
+
+def _build_status_payload(status: Optional[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
+    """Build status payload with adapter raw, corrected raw, and calibrated values."""
+    azimuth_raw = status.get("azimuthRaw") if status else None
+    elevation_raw = status.get("elevationRaw") if status else None
+
+    correction_enabled = _is_enabled(config.get("feedbackCorrectionEnabled", False))
+    az_feedback_factor = _positive_number(config.get("azimuthFeedbackFactor", 1.0), 1.0)
+    el_feedback_factor = _positive_number(config.get("elevationFeedbackFactor", 1.0), 1.0)
+
+    az_corrected = _parse_number(azimuth_raw)
+    el_corrected = _parse_number(elevation_raw)
+    if correction_enabled:
+        if az_corrected is not None:
+            az_corrected *= az_feedback_factor
+        if el_corrected is not None:
+            el_corrected *= el_feedback_factor
+
+    az_scale = _positive_number(config.get("azimuthScaleFactor", 1.0), 1.0)
+    el_scale = _positive_number(config.get("elevationScaleFactor", 1.0), 1.0)
+    az_offset = _parse_number(config.get("azimuthOffset", 0.0))
+    el_offset = _parse_number(config.get("elevationOffset", 0.0))
+    az_offset = az_offset if az_offset is not None else 0.0
+    el_offset = el_offset if el_offset is not None else 0.0
+
+    calibrated = {"azimuth": None, "elevation": None}
+    if az_corrected is not None:
+        calibrated["azimuth"] = (az_corrected + az_offset) / az_scale
+    if el_corrected is not None:
+        calibrated["elevation"] = (el_corrected + el_offset) / el_scale
+
+    return {
+        "rawLine": status.get("raw") if status else None,
+        "timestamp": status.get("timestamp") if status else None,
+        "rph": {
+            "azimuth": azimuth_raw,
+            "elevation": elevation_raw
+        },
+        "correctedRaw": {
+            "azimuth": az_corrected,
+            "elevation": el_corrected
+        },
+        "calibrated": calibrated
+    }
 
 def handle_get_settings(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     """Handle GET /api/settings - Get all configuration.
@@ -104,34 +162,13 @@ def handle_get_status(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             status = state.rotor_connection.get_status()
             
             config = state.settings.get_all()
-            azimuth_raw = status.get("azimuthRaw") if status else None
-            elevation_raw = status.get("elevationRaw") if status else None
-            
-            # Calculate calibrated values
-            calibrated = {"azimuth": None, "elevation": None}
-            if azimuth_raw is not None:
-                scale = config.get("azimuthScaleFactor", 1.0) or 1.0
-                offset = config.get("azimuthOffset", 0.0) or 0.0
-                calibrated["azimuth"] = (azimuth_raw + offset) / scale
-            
-            if elevation_raw is not None:
-                scale = config.get("elevationScaleFactor", 1.0) or 1.0
-                offset = config.get("elevationOffset", 0.0) or 0.0
-                calibrated["elevation"] = (elevation_raw + offset) / scale
+            status_payload = _build_status_payload(status, config)
 
             send_json(handler, {
                 "connected": True,
                 "port": state.rotor_connection.port,
                 "baudRate": state.rotor_connection.baud_rate,
-                "status": {
-                    "rawLine": status.get("raw") if status else None,
-                    "timestamp": status.get("timestamp") if status else None,
-                    "rph": {
-                        "azimuth": azimuth_raw,
-                        "elevation": elevation_raw
-                    },
-                    "calibrated": calibrated
-                },
+                "status": status_payload,
                 "clientCount": client_count
             })
         else:
@@ -455,20 +492,7 @@ def handle_get_position(handler: BaseHTTPRequestHandler, state: "ServerState") -
             status = state.rotor_connection.get_status()
             
             config = state.settings.get_all()
-            azimuth_raw = status.get("azimuthRaw") if status else None
-            elevation_raw = status.get("elevationRaw") if status else None
-            
-            # Calculate calibrated values
-            calibrated = {"azimuth": None, "elevation": None}
-            if azimuth_raw is not None:
-                scale = config.get("azimuthScaleFactor", 1.0) or 1.0
-                offset = config.get("azimuthOffset", 0.0) or 0.0
-                calibrated["azimuth"] = (azimuth_raw + offset) / scale
-            
-            if elevation_raw is not None:
-                scale = config.get("elevationScaleFactor", 1.0) or 1.0
-                offset = config.get("elevationOffset", 0.0) or 0.0
-                calibrated["elevation"] = (elevation_raw + offset) / scale
+            status_payload = _build_status_payload(status, config)
             
             # Build calibration info
             calibration = {
@@ -483,13 +507,7 @@ def handle_get_position(handler: BaseHTTPRequestHandler, state: "ServerState") -
                 "port": state.rotor_connection.port,
                 "baudRate": state.rotor_connection.baud_rate,
                 "position": {
-                    "rawLine": status.get("raw") if status else None,
-                    "timestamp": status.get("timestamp") if status else None,
-                    "rph": {
-                        "azimuth": azimuth_raw,
-                        "elevation": elevation_raw
-                    },
-                    "calibrated": calibrated,
+                    **status_payload,
                     "calibration": calibration
                 },
                 "cone": {
