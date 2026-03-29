@@ -77,6 +77,103 @@ class TestSettingsAPI:
         assert data["settings"]["customSetting"] == "testValue"
 
 
+class TestApiDocumentation:
+    """Tests for OpenAPI/Swagger documentation endpoints."""
+
+    def test_get_openapi_json(self, test_server):
+        """GET /api/openapi.json should return OpenAPI spec."""
+        base_url, state = test_server
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/openapi.json")) as response:
+            assert response.status == 200
+            assert response.headers.get_content_type() == "application/json"
+            data = json.load(response)
+
+        assert data["openapi"].startswith("3.")
+        assert data["info"]["title"] == "Rotor Interface GS232B API"
+        assert "/api/rotor/status" in data["paths"]
+        assert "get" in data["paths"]["/api/routes"]
+        assert "post" in data["paths"]["/api/routes"]
+
+    def test_get_api_docs_html(self, test_server):
+        """GET /api/docs should return Swagger UI HTML."""
+        base_url, state = test_server
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/docs")) as response:
+            assert response.status == 200
+            assert response.headers.get_content_type() == "text/html"
+            body = response.read().decode("utf-8")
+            assert "swagger-ui" in body.lower()
+            assert "/api/openapi.json" in body
+            assert "/api/docs/assets/swagger-ui.css" in body
+            assert "/api/docs/assets/swagger-ui-bundle.js" in body
+            assert "https://unpkg.com" not in body
+
+    def test_get_api_redoc_html(self, test_server):
+        """GET /api/redoc should return ReDoc HTML."""
+        base_url, state = test_server
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/redoc")) as response:
+            assert response.status == 200
+            assert response.headers.get_content_type() == "text/html"
+            body = response.read().decode("utf-8")
+            assert "redoc" in body.lower()
+            assert "/api/openapi.json" in body
+            assert "/api/docs/assets/redoc.standalone.js" in body
+            assert "cdn.jsdelivr.net" not in body
+
+    def test_get_api_docs_assets(self, test_server):
+        """GET /api/docs/assets/* should return local assets with proper content type."""
+        base_url, state = test_server
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/docs/assets/swagger-ui.css")) as response:
+            assert response.status == 200
+            assert response.headers.get_content_type() == "text/css"
+            assert len(response.read()) > 1000
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/docs/assets/swagger-ui-bundle.js")) as response:
+            assert response.status == 200
+            assert response.headers.get_content_type() == "application/javascript"
+            assert len(response.read()) > 1000
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/docs/assets/redoc.standalone.js")) as response:
+            assert response.status == 200
+            assert response.headers.get_content_type() == "application/javascript"
+            assert len(response.read()) > 1000
+
+    def test_docs_accessible_with_required_session(self, test_server):
+        """Docs endpoints should stay public even if sessions are required."""
+        base_url, state = test_server
+        state.settings.update({"serverRequireSession": True})
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/docs")) as response:
+            assert response.status == 200
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/openapi.json")) as response:
+            assert response.status == 200
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/redoc")) as response:
+            assert response.status == 200
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/docs/assets/swagger-ui.css")) as response:
+            assert response.status == 200
+
+    def test_openapi_security_reflects_runtime_session_mode(self, test_server):
+        """OpenAPI security should switch between optional and required session mode."""
+        base_url, state = test_server
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/openapi.json")) as response:
+            data = json.load(response)
+        status_get = data["paths"]["/api/rotor/status"]["get"]
+        assert status_get["security"] == [{"XSessionID": []}, {}]
+
+        state.settings.update({"serverRequireSession": True})
+        with urllib.request.urlopen(urljoin(base_url, "/api/openapi.json")) as response:
+            data = json.load(response)
+        status_get = data["paths"]["/api/rotor/status"]["get"]
+        assert status_get["security"] == [{"XSessionID": []}]
+
+
 class TestRotorPortsAPI:
     """Tests for the rotor ports API endpoint."""
     
