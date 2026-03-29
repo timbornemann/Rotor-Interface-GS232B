@@ -1,4 +1,4 @@
-const overlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils)
+const mapOverlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils)
   ? window.MapOverlayUtils
   : {
       OVERLAY_LABEL_MODE_BOTH: 'both',
@@ -109,9 +109,9 @@ class MapView {
     this.azimuthDisplayOffset = 0; // Azimut-Korrektur für Anzeige (Grad)
     this.onClickCallback = null; // Callback für Klick-Events
     this.mapOverlayEnabled = true;
-    this.mapOverlayLabelMode = overlayUtils.OVERLAY_LABEL_MODE_BOTH || 'both';
+    this.mapOverlayLabelMode = mapOverlayUtils.OVERLAY_LABEL_MODE_BOTH || 'both';
     this.mapOverlayAutoContrast = true;
-    this.mapOverlayRingRadiiMeters = (overlayUtils.DEFAULT_OVERLAY_RING_RADII || [1000, 5000, 10000, 20000]).slice();
+    this.mapOverlayRingRadiiMeters = (mapOverlayUtils.DEFAULT_OVERLAY_RING_RADII || [1000, 5000, 10000, 20000]).slice();
     this.overlayStyleDirty = true;
     this.overlayStyleCache = null;
     this.overlaySamplingFallback = false;
@@ -158,8 +158,8 @@ class MapView {
   }
 
   setOverlaySettings(settings = {}) {
-    const sanitizeOverlay = typeof overlayUtils.sanitizeOverlaySettings === 'function'
-      ? overlayUtils.sanitizeOverlaySettings
+    const sanitizeOverlay = typeof mapOverlayUtils.sanitizeOverlaySettings === 'function'
+      ? mapOverlayUtils.sanitizeOverlaySettings
       : (raw) => ({
           mapOverlayEnabled: raw.mapOverlayEnabled !== undefined ? Boolean(raw.mapOverlayEnabled) : true,
           mapOverlayLabelMode: ['both', 'directions', 'hours'].includes(String(raw.mapOverlayLabelMode))
@@ -201,7 +201,7 @@ class MapView {
   getOverlayRingPixelRadii() {
     const source = Array.isArray(this.mapOverlayRingRadiiMeters) && this.mapOverlayRingRadiiMeters.length
       ? this.mapOverlayRingRadiiMeters
-      : (overlayUtils.DEFAULT_OVERLAY_RING_RADII || [1000, 5000, 10000, 20000]);
+      : (mapOverlayUtils.DEFAULT_OVERLAY_RING_RADII || [1000, 5000, 10000, 20000]);
 
     return source
       .map((meters) => this.metersToPixels(meters))
@@ -210,8 +210,8 @@ class MapView {
   }
 
   getOverlayLabels() {
-    if (typeof overlayUtils.getOverlayLabels === 'function') {
-      return overlayUtils.getOverlayLabels(this.mapOverlayLabelMode);
+    if (typeof mapOverlayUtils.getOverlayLabels === 'function') {
+      return mapOverlayUtils.getOverlayLabels(this.mapOverlayLabelMode);
     }
 
     return [
@@ -231,8 +231,8 @@ class MapView {
   }
 
   getOverlayBaseStyle() {
-    const chooser = typeof overlayUtils.chooseOverlayStyleForLuminance === 'function'
-      ? overlayUtils.chooseOverlayStyleForLuminance
+    const chooser = typeof mapOverlayUtils.chooseOverlayStyleForLuminance === 'function'
+      ? mapOverlayUtils.chooseOverlayStyleForLuminance
       : () => ({
           lineColor: 'rgba(255, 255, 255, 0.72)',
           textColor: 'rgba(255, 255, 255, 0.94)',
@@ -330,8 +330,8 @@ class MapView {
     if (!Number.isFinite(luminance)) {
       return this.getOverlayFallbackStyle();
     }
-    const chooser = typeof overlayUtils.chooseOverlayStyleForLuminance === 'function'
-      ? overlayUtils.chooseOverlayStyleForLuminance
+    const chooser = typeof mapOverlayUtils.chooseOverlayStyleForLuminance === 'function'
+      ? mapOverlayUtils.chooseOverlayStyleForLuminance
       : () => this.getOverlayBaseStyle();
     return { ...chooser(luminance), useDualHalo: false };
   }
@@ -985,12 +985,51 @@ class MapView {
     drawLine(style.lineColor || 'rgba(255, 255, 255, 0.8)', 1);
   }
 
+  drawRoundedRectPath(x, y, width, height, radius) {
+    const { ctx } = this;
+    const r = Math.max(1, Math.min(radius, width / 2, height / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
   drawOverlayLabel(text, x, y, isDirection, style) {
     const { ctx } = this;
     const fontSize = 12;
-    ctx.font = isDirection
-      ? `bold ${fontSize + 3}px 'Segoe UI', Roboto, sans-serif`
-      : `bold ${fontSize}px 'Segoe UI', Roboto, sans-serif`;
+    const activeFontSize = isDirection ? (fontSize + 3) : fontSize;
+    ctx.font = `bold ${activeFontSize}px 'Segoe UI', Roboto, sans-serif`;
+
+    // Zeichne zuerst eine kontrastreiche Kapsel hinter den Labels, damit Linien
+    // beim Hineinzoomen nicht mit Textfarbe verschmelzen.
+    const metrics = ctx.measureText(text);
+    const paddingX = isDirection ? 8 : 7;
+    const backgroundWidth = Math.max(metrics.width + paddingX * 2, isDirection ? 30 : 24);
+    const backgroundHeight = activeFontSize + (isDirection ? 8 : 7);
+    const bgX = x - (backgroundWidth / 2);
+    const bgY = y - (backgroundHeight / 2);
+    const bgRadius = Math.max(6, Math.min(10, backgroundHeight / 2));
+
+    const backgroundFill = style.haloPrimary || 'rgba(0, 0, 0, 0.82)';
+    const backgroundStroke = style.haloSecondary || style.lineColor || 'rgba(255, 255, 255, 0.45)';
+
+    ctx.save();
+    ctx.globalAlpha = style.useDualHalo ? 0.9 : 0.82;
+    ctx.fillStyle = backgroundFill;
+    this.drawRoundedRectPath(bgX, bgY, backgroundWidth, backgroundHeight, bgRadius);
+    ctx.fill();
+    ctx.globalAlpha = style.useDualHalo ? 0.9 : 0.72;
+    ctx.strokeStyle = backgroundStroke;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
 
     if (style.useDualHalo) {
       ctx.strokeStyle = style.haloSecondary || 'rgba(255, 255, 255, 0.7)';
@@ -1185,98 +1224,100 @@ class MapView {
     ctx.lineTo(tipX, tipY);
     ctx.stroke();
     
-    // 7. Reichweiten-Markierungen
-    const rangeMarkers = [0.25, 0.5, 0.75, 1.0];
-    rangeMarkers.forEach((progress, index) => {
-      const markerLength = lengthInPixels * progress;
+    if (this.mapOverlayEnabled) {
+      // 7. Reichweiten-Markierungen
+      const rangeMarkers = [0.25, 0.5, 0.75, 1.0];
+      rangeMarkers.forEach((progress, index) => {
+        const markerLength = lengthInPixels * progress;
+        
+        // Zeichne kurze Markierungen auf der Mittelachse
+        const markerX = Math.cos(rad) * markerLength;
+        const markerY = Math.sin(rad) * markerLength;
+        
+        // Kleiner Kreis als Marker
+        ctx.fillStyle = index === rangeMarkers.length - 1 
+          ? 'rgba(255, 179, 71, 0.9)' 
+          : 'rgba(47, 212, 255, 0.72)';
+        ctx.beginPath();
+        ctx.arc(markerX, markerY, 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Ring um den Marker
+        ctx.strokeStyle = index === rangeMarkers.length - 1
+          ? 'rgba(255, 179, 71, 0.95)'
+          : 'rgba(47, 212, 255, 0.84)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(markerX, markerY, 4.8, 0, Math.PI * 2);
+        ctx.stroke();
+      });
       
-      // Zeichne kurze Markierungen auf der Mittelachse
-      const markerX = Math.cos(rad) * markerLength;
-      const markerY = Math.sin(rad) * markerLength;
-      
-      // Kleiner Kreis als Marker
-      ctx.fillStyle = index === rangeMarkers.length - 1 
-        ? 'rgba(255, 179, 71, 0.9)' 
-        : 'rgba(47, 212, 255, 0.72)';
+      // 8. Ziel-Punkt an der Spitze (Target)
+      // Äußerer Ring
+      ctx.strokeStyle = 'rgba(255, 179, 71, 0.72)';
+      ctx.lineWidth = 2.4;
       ctx.beginPath();
-      ctx.arc(markerX, markerY, 3, 0, Math.PI * 2);
+      ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Mittlerer Ring
+      ctx.strokeStyle = 'rgba(255, 179, 71, 0.9)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Zentraler Punkt
+      ctx.fillStyle = 'rgba(255, 179, 71, 1.0)';
+      ctx.beginPath();
+      ctx.arc(tipX, tipY, 3.5, 0, Math.PI * 2);
       ctx.fill();
       
-      // Ring um den Marker
-      ctx.strokeStyle = index === rangeMarkers.length - 1
-        ? 'rgba(255, 179, 71, 0.95)'
-        : 'rgba(47, 212, 255, 0.84)';
-      ctx.lineWidth = 1.4;
+      // Highlight-Punkt
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.beginPath();
-      ctx.arc(markerX, markerY, 4.8, 0, Math.PI * 2);
+      ctx.arc(tipX, tipY, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // 9. Fadenkreuz am Ziel
+      const crosshairSize = 12;
+      ctx.strokeStyle = 'rgba(255, 179, 71, 0.84)';
+      ctx.lineWidth = 1.2;
+      
+      // Horizontal
+      ctx.beginPath();
+      ctx.moveTo(tipX - crosshairSize, tipY);
+      ctx.lineTo(tipX - 6, tipY);
+      ctx.moveTo(tipX + 6, tipY);
+      ctx.lineTo(tipX + crosshairSize, tipY);
       ctx.stroke();
-    });
-    
-    // 8. Ziel-Punkt an der Spitze (Target)
-    // Äußerer Ring
-    ctx.strokeStyle = 'rgba(255, 179, 71, 0.72)';
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 8, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Mittlerer Ring
-    ctx.strokeStyle = 'rgba(255, 179, 71, 0.9)';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 5, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Zentraler Punkt
-    ctx.fillStyle = 'rgba(255, 179, 71, 1.0)';
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Highlight-Punkt
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.beginPath();
-    ctx.arc(tipX, tipY, 1.8, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 9. Fadenkreuz am Ziel
-    const crosshairSize = 12;
-    ctx.strokeStyle = 'rgba(255, 179, 71, 0.84)';
-    ctx.lineWidth = 1.2;
-    
-    // Horizontal
-    ctx.beginPath();
-    ctx.moveTo(tipX - crosshairSize, tipY);
-    ctx.lineTo(tipX - 6, tipY);
-    ctx.moveTo(tipX + 6, tipY);
-    ctx.lineTo(tipX + crosshairSize, tipY);
-    ctx.stroke();
-    
-    // Vertikal
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY - crosshairSize);
-    ctx.lineTo(tipX, tipY - 6);
-    ctx.moveTo(tipX, tipY + 6);
-    ctx.lineTo(tipX, tipY + crosshairSize);
-    ctx.stroke();
-    
-    // 10. Zentrum-Ursprung
-    ctx.fillStyle = 'rgba(47, 212, 255, 0.9)';
-    ctx.beginPath();
-    ctx.arc(0, 0, 4, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.strokeStyle = 'rgba(47, 212, 255, 1.0)';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.arc(0, 0, 6, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Zentraler Punkt
-    ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
-    ctx.beginPath();
-    ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
-    ctx.fill();
+      
+      // Vertikal
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY - crosshairSize);
+      ctx.lineTo(tipX, tipY - 6);
+      ctx.moveTo(tipX, tipY + 6);
+      ctx.lineTo(tipX, tipY + crosshairSize);
+      ctx.stroke();
+      
+      // 10. Zentrum-Ursprung
+      ctx.fillStyle = 'rgba(47, 212, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.strokeStyle = 'rgba(47, 212, 255, 1.0)';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Zentraler Punkt
+      ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     ctx.restore();
   }
