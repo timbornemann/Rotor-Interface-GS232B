@@ -142,6 +142,14 @@ Das Skript:
 - `http://localhost:8081`
 - oder `http://<SERVER-IP>:8081` im LAN
 
+### API-Dokumentation im Browser
+
+- Swagger UI: `http://localhost:8081/api/docs`
+- OpenAPI JSON: `http://localhost:8081/api/openapi.json`
+- ReDoc: `http://localhost:8081/api/redoc`
+
+Die UI-Dateien für Swagger/ReDoc werden lokal vom Server ausgeliefert (`/api/docs/assets/...`) und benötigen keine CDN-Verbindung.
+
 ### Wichtiger Port-Hinweis
 
 In der aktuellen Implementierung haben Werte aus `web-settings.json` Vorrang. CLI-Parameter sind effektiv Fallback.
@@ -278,7 +286,23 @@ Base URL: `http://<host>:<http-port>`
 | POST | `/api/routes/continue` | Manuellen Wait-Schritt fortsetzen |
 | GET | `/api/routes/execution` | Ausführungsstatus |
 
-### 7.6 Status-Payload (`/api/rotor/status`)
+### 7.6 API-Dokumentation (OpenAPI/Swagger/ReDoc)
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/openapi.json` | OpenAPI 3.1 Spezifikation |
+| GET | `/api/docs` | Swagger UI (interaktiv, inkl. "Try it out") |
+| GET | `/api/redoc` | ReDoc-Ansicht |
+
+Hinweise:
+
+- Die Doku-Endpunkte sind bewusst öffentlich erreichbar, auch wenn `serverRequireSession=true`.
+- Swagger/ReDoc laufen ohne externe CDN-Abhängigkeit; alle benötigten Assets kommen lokal vom Server.
+- Sicherheitsanforderungen der übrigen Endpunkte sind in der Spec enthalten:
+  - mit `serverRequireSession=false`: Session optional
+  - mit `serverRequireSession=true`: `X-Session-ID` erforderlich
+
+### 7.7 Status-Payload (`/api/rotor/status`)
 
 Bei verbundener Hardware liefert `status`:
 
@@ -288,7 +312,7 @@ Bei verbundener Hardware liefert `status`:
 - `correctedRaw`: RAW nach optionaler Feedback-Korrektur
 - `calibrated`: Anzeige-/Steuerwerte nach Offset/Skalierung
 
-### 7.7 Fehlercodes
+### 7.8 Fehlercodes
 
 - `200` OK
 - `400` Bad Request
@@ -560,4 +584,3 @@ ws.onmessage = (evt) => {
 ## 18. Lizenz
 
 GPL-3.0-or-later, siehe [LICENSE](LICENSE).
-
