@@ -623,37 +623,34 @@
             </div>
 
             <div class="settings-card">
-              <h4 class="card-title">Skalierungsfaktoren</h4>
-              <p class="help-text">Korrigiert mechanische Übersetzungsverhältnisse. Wert &lt; 1 wenn Motor zu weit dreht.</p>
+              <h4 class="card-title">Faktoren (Soll + Rückmeldung)</h4>
+              <p class="help-text"><strong>Kalibrierfaktoren (Soll + Rückmeldung)</strong><br />Ändern die Umrechnung zwischen kalibrierten Werten und Raw-Werten. Damit beeinflussen sie sowohl Anzeige als auch gesendete Soll-Kommandos.</p>
               <div class="form-row">
                 <div class="form-group">
-                  <label for="settingsAzScaleFactorInput">Azimut-Faktor</label>
+                  <label for="settingsAzScaleFactorInput">Azimut-Kalibrierfaktor (Soll + Ist)</label>
                   <input id="settingsAzScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
                 </div>
                 <div class="form-group">
-                  <label for="settingsElScaleFactorInput">Elevation-Faktor</label>
+                  <label for="settingsElScaleFactorInput">Elevation-Kalibrierfaktor (Soll + Ist)</label>
                   <input id="settingsElScaleFactorInput" type="number" min="0.1" max="2.0" step="0.01" value="1.0" />
                 </div>
               </div>
-            </div>
 
-            <div class="settings-card">
-              <h4 class="card-title">Adapter-Rückmeldekorrektur</h4>
-              <p class="help-text">Korrigiert fehlerhafte USB-Adapter-Rückmeldungen ohne die Soll-Kommandos zu verändern.</p>
+              <p class="help-text"><strong>Adapter-Rückmeldefaktoren (nur Rückmeldung)</strong><br />Korrigieren fehlerhafte USB-Adapterwerte (z. B. halbierte Rückmeldung), ohne ausgehende Soll-Kommandos zu verändern.</p>
               <div class="form-row">
                 <label class="toggle-label">
                   <input id="settingsFeedbackCorrectionEnabled" type="checkbox" class="toggle-input" />
                   <span class="toggle-switch"></span>
-                  <span class="toggle-text">Rückmeldekorrektur aktiv</span>
+                  <span class="toggle-text">Rückmeldekorrektur aktiv (nur Ist-Pfad)</span>
                 </label>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label for="settingsAzFeedbackFactorInput">Azimut-Faktor</label>
+                  <label for="settingsAzFeedbackFactorInput">Azimut-Rückmeldefaktor (nur Ist)</label>
                   <input id="settingsAzFeedbackFactorInput" type="number" min="0.1" max="10.0" step="0.01" value="1.0" />
                 </div>
                 <div class="form-group">
-                  <label for="settingsElFeedbackFactorInput">Elevation-Faktor</label>
+                  <label for="settingsElFeedbackFactorInput">Elevation-Rückmeldefaktor (nur Ist)</label>
                   <input id="settingsElFeedbackFactorInput" type="number" min="0.1" max="10.0" step="0.01" value="1.0" />
                 </div>
               </div>
