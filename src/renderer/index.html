@@ -404,7 +404,44 @@
                 <p class="help-text">Wähle den Typ der Kartenansicht.</p>
               </div>
             </div>
-            
+
+            <div class="settings-card">
+              <h4 class="card-title">Radar-Overlay</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <input id="settingsMapOverlayEnabled" type="checkbox" class="toggle-input" />
+                    <span class="toggle-switch"></span>
+                    <span class="toggle-text">Overlay anzeigen</span>
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <input id="settingsMapOverlayAutoContrast" type="checkbox" class="toggle-input" />
+                    <span class="toggle-switch"></span>
+                    <span class="toggle-text">Auto-Kontrast</span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="settingsMapOverlayLabelMode">Beschriftung</label>
+                <select id="settingsMapOverlayLabelMode">
+                  <option value="both">Himmelsrichtungen + Uhrzeiten</option>
+                  <option value="directions">Nur Himmelsrichtungen</option>
+                  <option value="hours">Nur Uhrzeiten</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <div class="overlay-ring-header">
+                  <label>Ringradien (Meter)</label>
+                  <button id="settingsMapOverlayAddRing" class="icon-btn" type="button" title="Ring hinzufuegen">+</button>
+                </div>
+                <div id="settingsMapOverlayRingList" class="overlay-ring-list"></div>
+                <div id="settingsMapOverlayRingError" class="overlay-ring-error hidden" aria-live="polite"></div>
+                <p class="help-text">1-8 Ringe. Beispiel: 1000, 5000, 10000, 20000 m.</p>
+              </div>
+            </div>
+
             <div class="settings-card">
               <h4 class="card-title">Standort</h4>
               <div class="form-group">
@@ -904,6 +941,7 @@
   </div>
 
   <!-- Services zuerst -->
+  <script src="./services/mapOverlayUtils.js"></script>
   <script src="./services/configStore.js"></script>
   <script src="./services/websocketService.js"></script>
   <script src="./services/rotorService.js"></script>
