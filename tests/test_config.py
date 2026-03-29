@@ -28,6 +28,9 @@ class TestDefaults:
         assert "elevationOffset" in DEFAULT_CONFIG
         assert "azimuthScaleFactor" in DEFAULT_CONFIG
         assert "elevationScaleFactor" in DEFAULT_CONFIG
+        assert "feedbackCorrectionEnabled" in DEFAULT_CONFIG
+        assert "azimuthFeedbackFactor" in DEFAULT_CONFIG
+        assert "elevationFeedbackFactor" in DEFAULT_CONFIG
     
     def test_default_config_has_limits(self):
         """Default config should have limit settings."""
@@ -45,6 +48,12 @@ class TestDefaults:
         assert "[Connection]" in DEFAULT_INI_TEMPLATE
         assert "[Calibration]" in DEFAULT_INI_TEMPLATE
         assert "[Limits]" in DEFAULT_INI_TEMPLATE
+
+    def test_default_ini_template_has_feedback_correction_settings(self):
+        """Default INI template should include feedback correction settings."""
+        assert "feedbackCorrectionEnabled=false" in DEFAULT_INI_TEMPLATE
+        assert "azimuthFeedbackFactor=1.0" in DEFAULT_INI_TEMPLATE
+        assert "elevationFeedbackFactor=1.0" in DEFAULT_INI_TEMPLATE
 
 
 class TestSettingsManager:
