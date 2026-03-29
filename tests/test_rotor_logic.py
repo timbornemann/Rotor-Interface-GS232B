@@ -147,6 +147,35 @@ class TestRotorLogic:
         assert logic.config["azimuthScaleFactor"] == 1.1
         assert logic.config["elevationScaleFactor"] == 0.9
 
+    def test_update_config_feedback_correction(self, logic):
+        """update_config should update feedback correction settings."""
+        logic.update_config({
+            "feedbackCorrectionEnabled": True,
+            "azimuthFeedbackFactor": 2.0,
+            "elevationFeedbackFactor": 1.5
+        })
+
+        assert logic.config["feedbackCorrectionEnabled"] is True
+        assert logic.config["azimuthFeedbackFactor"] == 2.0
+        assert logic.config["elevationFeedbackFactor"] == 1.5
+
+    def test_send_direct_target_el_only_uses_corrected_current_azimuth(self, logic, mock_connection):
+        """Elevation-only W command should use corrected azimuth as current raw value."""
+        logic.update_config({
+            "feedbackCorrectionEnabled": True,
+            "azimuthFeedbackFactor": 2.0,
+            "azimuthMode": 450
+        })
+        mock_connection.get_status.return_value = {
+            "azimuthRaw": 90,
+            "elevationRaw": 30
+        }
+
+        logic._send_direct_target(None, 30)
+
+        # With factor 2.0: current azimuth should be interpreted as 180.
+        mock_connection.send_command.assert_called_with("W180 030")
+
 
 class TestRotorLogicCalibration:
     """Tests for calibration calculations."""
@@ -192,4 +221,24 @@ class TestRotorLogicCalibration:
         # (raw + offset) / scale = (180 + 0) / 2 = 90
         assert status["azimuth"] == 90
         assert status["elevation"] == 22.5
+
+    def test_calibrated_status_feedback_correction_disabled(self, logic):
+        """Feedback correction disabled should keep adapter raw values unchanged."""
+        logic.config["feedbackCorrectionEnabled"] = False
+        logic.config["azimuthFeedbackFactor"] = 2.0
+        logic.config["elevationFeedbackFactor"] = 3.0
+
+        status = logic.get_effective_raw_status()
+        assert status["azimuth"] == 180
+        assert status["elevation"] == 45
+
+    def test_calibrated_status_feedback_correction_enabled(self, logic):
+        """Feedback correction enabled should multiply adapter raw values by factors."""
+        logic.config["feedbackCorrectionEnabled"] = True
+        logic.config["azimuthFeedbackFactor"] = 2.0
+        logic.config["elevationFeedbackFactor"] = 2.0
+
+        status = logic.get_effective_raw_status()
+        assert status["azimuth"] == 360
+        assert status["elevation"] == 90
 
