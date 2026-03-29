@@ -86,10 +86,17 @@ const defaultConfig = {
   elevationOffset: 0,
   azimuthScaleFactor: 1.0,
   elevationScaleFactor: 1.0,
+  feedbackCorrectionEnabled: false,
+  azimuthFeedbackFactor: 1.0,
+  elevationFeedbackFactor: 1.0,
   azimuthScaleFactorMin: 0.1,
   azimuthScaleFactorMax: 2.0,
   elevationScaleFactorMin: 0.1,
   elevationScaleFactorMax: 2.0,
+  azimuthFeedbackFactorMin: 0.1,
+  azimuthFeedbackFactorMax: 10.0,
+  elevationFeedbackFactorMin: 0.1,
+  elevationFeedbackFactorMax: 10.0,
   
   // NOTE: Routes are now stored separately in routes.json on the server
   // and managed via the Route API endpoints. They are no longer part of
@@ -142,6 +149,46 @@ class ConfigStore {
     if (sanitized.elevationMinLimit > sanitized.elevationMaxLimit) {
       sanitized.elevationMaxLimit = sanitized.elevationMinLimit;
     }
+
+    // Ensure feedback correction factors are valid and bounded
+    sanitized.feedbackCorrectionEnabled = Boolean(config.feedbackCorrectionEnabled);
+
+    sanitized.azimuthFeedbackFactorMin = this.sanitizeNumber(
+      config.azimuthFeedbackFactorMin,
+      0.01,
+      100,
+      defaultConfig.azimuthFeedbackFactorMin
+    );
+    sanitized.azimuthFeedbackFactorMax = this.sanitizeNumber(
+      config.azimuthFeedbackFactorMax,
+      sanitized.azimuthFeedbackFactorMin,
+      100,
+      defaultConfig.azimuthFeedbackFactorMax
+    );
+    sanitized.elevationFeedbackFactorMin = this.sanitizeNumber(
+      config.elevationFeedbackFactorMin,
+      0.01,
+      100,
+      defaultConfig.elevationFeedbackFactorMin
+    );
+    sanitized.elevationFeedbackFactorMax = this.sanitizeNumber(
+      config.elevationFeedbackFactorMax,
+      sanitized.elevationFeedbackFactorMin,
+      100,
+      defaultConfig.elevationFeedbackFactorMax
+    );
+    sanitized.azimuthFeedbackFactor = this.sanitizeNumber(
+      config.azimuthFeedbackFactor,
+      sanitized.azimuthFeedbackFactorMin,
+      sanitized.azimuthFeedbackFactorMax,
+      defaultConfig.azimuthFeedbackFactor
+    );
+    sanitized.elevationFeedbackFactor = this.sanitizeNumber(
+      config.elevationFeedbackFactor,
+      sanitized.elevationFeedbackFactorMin,
+      sanitized.elevationFeedbackFactorMax,
+      defaultConfig.elevationFeedbackFactor
+    );
     
     return sanitized;
   }

@@ -65,6 +65,9 @@ class SettingsModal {
       elevationOffset: { id: 'settingsElOffsetInput', type: 'number' },
       azimuthScaleFactor: { id: 'settingsAzScaleFactorInput', type: 'number' },
       elevationScaleFactor: { id: 'settingsElScaleFactorInput', type: 'number' },
+      feedbackCorrectionEnabled: { id: 'settingsFeedbackCorrectionEnabled', type: 'checkbox' },
+      azimuthFeedbackFactor: { id: 'settingsAzFeedbackFactorInput', type: 'number' },
+      elevationFeedbackFactor: { id: 'settingsElFeedbackFactorInput', type: 'number' },
       
       // Limits
       azimuthMinLimit: { id: 'settingsAzMinLimit', type: 'number' },
@@ -792,6 +795,28 @@ class SettingsModal {
       errors.push('Elevation Low-Speed darf nicht größer als High-Speed sein');
     }
     
+    // Validate feedback correction settings
+    if (config.azimuthFeedbackFactor <= 0) {
+      errors.push('Azimut-Rueckmeldefaktor muss groesser als 0 sein');
+    }
+    if (config.elevationFeedbackFactor <= 0) {
+      errors.push('Elevation-Rueckmeldefaktor muss groesser als 0 sein');
+    }
+
+    if (config.azimuthFeedbackFactorMin > config.azimuthFeedbackFactorMax) {
+      errors.push('Azimut-Rueckmeldefaktor-Minimum darf nicht groesser als Maximum sein');
+    }
+    if (config.elevationFeedbackFactorMin > config.elevationFeedbackFactorMax) {
+      errors.push('Elevation-Rueckmeldefaktor-Minimum darf nicht groesser als Maximum sein');
+    }
+
+    if (config.azimuthFeedbackFactor < config.azimuthFeedbackFactorMin || config.azimuthFeedbackFactor > config.azimuthFeedbackFactorMax) {
+      errors.push('Azimut-Rueckmeldefaktor liegt ausserhalb des erlaubten Bereichs');
+    }
+    if (config.elevationFeedbackFactor < config.elevationFeedbackFactorMin || config.elevationFeedbackFactor > config.elevationFeedbackFactorMax) {
+      errors.push('Elevation-Rueckmeldefaktor liegt ausserhalb des erlaubten Bereichs');
+    }
+
     // Validate server settings
     if (config.serverHttpPort && config.serverWebSocketPort && config.serverHttpPort === config.serverWebSocketPort) {
       errors.push('HTTP- und WebSocket-Port müssen unterschiedlich sein');
