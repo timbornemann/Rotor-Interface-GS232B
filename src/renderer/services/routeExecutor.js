@@ -190,8 +190,10 @@ class RouteExecutor {
         lastStatus = status;
 
         // Check if position is within tolerance
-        const azDiff = Math.abs(status.azimuthRaw - targetAz);
-        const elDiff = Math.abs(status.elevationRaw - targetEl);
+        const currentAz = Number.isFinite(status.azimuthCorrectedRaw) ? status.azimuthCorrectedRaw : status.azimuthRaw;
+        const currentEl = Number.isFinite(status.elevationCorrectedRaw) ? status.elevationCorrectedRaw : status.elevationRaw;
+        const azDiff = Math.abs(currentAz - targetAz);
+        const elDiff = Math.abs(currentEl - targetEl);
 
         if (azDiff <= this.positionTolerance && elDiff <= this.positionTolerance) {
           console.log('[RouteExecutor] Position reached within tolerance');

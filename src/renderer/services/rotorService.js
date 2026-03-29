@@ -605,12 +605,17 @@ class RotorService {
               
               if (data.status) {
                   const s = data.status;
+                  const correctedRaw = s.correctedRaw || {};
+                  const azimuthCorrectedRaw = Number.isFinite(correctedRaw.azimuth) ? correctedRaw.azimuth : s.rph.azimuth;
+                  const elevationCorrectedRaw = Number.isFinite(correctedRaw.elevation) ? correctedRaw.elevation : s.rph.elevation;
                   
                   const newStatus = {
                       azimuth: s.calibrated.azimuth, 
                       elevation: s.calibrated.elevation,
                       azimuthRaw: s.rph.azimuth,
                       elevationRaw: s.rph.elevation,
+                      azimuthCorrectedRaw,
+                      elevationCorrectedRaw,
                       rawLine: s.rawLine,
                       timestamp: s.timestamp
                   };
