@@ -1,3 +1,87 @@
+const overlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils)
+  ? window.MapOverlayUtils
+  : {
+      OVERLAY_LABEL_MODE_BOTH: 'both',
+      DEFAULT_OVERLAY_RING_RADII: [1000, 5000, 10000, 20000],
+      sanitizeOverlaySettings(config = {}) {
+        const mode = String(config.mapOverlayLabelMode || '').toLowerCase();
+        const list = Array.isArray(config.mapOverlayRingRadiiMeters) ? config.mapOverlayRingRadiiMeters : [1000, 5000, 10000, 20000];
+        const unique = new Set();
+        const radii = [];
+        for (const raw of list) {
+          const parsed = Math.round(Number(raw));
+          if (!Number.isFinite(parsed) || parsed <= 0 || unique.has(parsed)) {
+            continue;
+          }
+          unique.add(parsed);
+          radii.push(parsed);
+        }
+        radii.sort((a, b) => a - b);
+        return {
+          mapOverlayEnabled: config.mapOverlayEnabled !== undefined ? Boolean(config.mapOverlayEnabled) : true,
+          mapOverlayLabelMode: ['both', 'directions', 'hours'].includes(mode) ? mode : 'both',
+          mapOverlayAutoContrast: config.mapOverlayAutoContrast !== undefined ? Boolean(config.mapOverlayAutoContrast) : true,
+          mapOverlayRingRadiiMeters: radii.length ? radii.slice(0, 8) : [1000, 5000, 10000, 20000]
+        };
+      },
+      getOverlayLabels(mode = 'both') {
+        if (mode === 'directions') {
+          return [
+            { angle: 0, text: 'N', isDirection: true },
+            { angle: 90, text: 'O', isDirection: true },
+            { angle: 180, text: 'S', isDirection: true },
+            { angle: 270, text: 'W', isDirection: true }
+          ];
+        }
+        if (mode === 'hours') {
+          return [
+            { angle: 0, text: '12' },
+            { angle: 30, text: '1' },
+            { angle: 60, text: '2' },
+            { angle: 90, text: '3' },
+            { angle: 120, text: '4' },
+            { angle: 150, text: '5' },
+            { angle: 180, text: '6' },
+            { angle: 210, text: '7' },
+            { angle: 240, text: '8' },
+            { angle: 270, text: '9' },
+            { angle: 300, text: '10' },
+            { angle: 330, text: '11' }
+          ];
+        }
+        return [
+          { angle: 0, text: 'N', isDirection: true },
+          { angle: 30, text: '1' },
+          { angle: 60, text: '2' },
+          { angle: 90, text: 'O', isDirection: true },
+          { angle: 120, text: '4' },
+          { angle: 150, text: '5' },
+          { angle: 180, text: 'S', isDirection: true },
+          { angle: 210, text: '7' },
+          { angle: 240, text: '8' },
+          { angle: 270, text: 'W', isDirection: true },
+          { angle: 300, text: '10' },
+          { angle: 330, text: '11' }
+        ];
+      },
+      chooseOverlayStyleForLuminance(luminance) {
+        if (Number.isFinite(luminance) && luminance > 0.58) {
+          return {
+            lineColor: 'rgba(15, 19, 25, 0.68)',
+            textColor: 'rgba(8, 10, 14, 0.96)',
+            haloPrimary: 'rgba(255, 255, 255, 0.9)',
+            haloSecondary: 'rgba(0, 0, 0, 0.45)'
+          };
+        }
+        return {
+          lineColor: 'rgba(255, 255, 255, 0.72)',
+          textColor: 'rgba(255, 255, 255, 0.94)',
+          haloPrimary: 'rgba(0, 0, 0, 0.82)',
+          haloSecondary: 'rgba(255, 255, 255, 0.4)'
+        };
+      }
+    };
+
 class MapView {
   constructor(canvas) {
     const context = canvas.getContext('2d');
@@ -24,6 +108,14 @@ class MapView {
     this.coneLength = 1000; // Kegel-Länge in Metern
     this.azimuthDisplayOffset = 0; // Azimut-Korrektur für Anzeige (Grad)
     this.onClickCallback = null; // Callback für Klick-Events
+    this.mapOverlayEnabled = true;
+    this.mapOverlayLabelMode = overlayUtils.OVERLAY_LABEL_MODE_BOTH || 'both';
+    this.mapOverlayAutoContrast = true;
+    this.mapOverlayRingRadiiMeters = (overlayUtils.DEFAULT_OVERLAY_RING_RADII || [1000, 5000, 10000, 20000]).slice();
+    this.overlayStyleDirty = true;
+    this.overlayStyleCache = null;
+    this.overlaySamplingFallback = false;
+    this.devicePixelRatio = window.devicePixelRatio || 1;
     
     // Initialisiere Canvas-Größe
     this.resizeCanvas();
@@ -60,6 +152,266 @@ class MapView {
   }
 
   // Berechne Meter pro Pixel basierend auf Zoom-Level und Breitengrad
+  markOverlayStyleDirty() {
+    this.overlayStyleDirty = true;
+    this.overlayStyleCache = null;
+  }
+
+  setOverlaySettings(settings = {}) {
+    const sanitizeOverlay = typeof overlayUtils.sanitizeOverlaySettings === 'function'
+      ? overlayUtils.sanitizeOverlaySettings
+      : (raw) => ({
+          mapOverlayEnabled: raw.mapOverlayEnabled !== undefined ? Boolean(raw.mapOverlayEnabled) : true,
+          mapOverlayLabelMode: ['both', 'directions', 'hours'].includes(String(raw.mapOverlayLabelMode))
+            ? String(raw.mapOverlayLabelMode)
+            : 'both',
+          mapOverlayAutoContrast: raw.mapOverlayAutoContrast !== undefined ? Boolean(raw.mapOverlayAutoContrast) : true,
+          mapOverlayRingRadiiMeters: [1000, 5000, 10000, 20000]
+        });
+
+    const normalized = sanitizeOverlay({
+      mapOverlayEnabled: settings.mapOverlayEnabled,
+      mapOverlayLabelMode: settings.mapOverlayLabelMode,
+      mapOverlayAutoContrast: settings.mapOverlayAutoContrast,
+      mapOverlayRingRadiiMeters: settings.mapOverlayRingRadiiMeters
+    });
+
+    const currentRadii = Array.isArray(this.mapOverlayRingRadiiMeters) ? this.mapOverlayRingRadiiMeters : [];
+    const nextRadii = Array.isArray(normalized.mapOverlayRingRadiiMeters) ? normalized.mapOverlayRingRadiiMeters : [];
+    const ringListChanged = currentRadii.length !== nextRadii.length
+      || currentRadii.some((value, index) => value !== nextRadii[index]);
+
+    const changed = this.mapOverlayEnabled !== normalized.mapOverlayEnabled
+      || this.mapOverlayLabelMode !== normalized.mapOverlayLabelMode
+      || this.mapOverlayAutoContrast !== normalized.mapOverlayAutoContrast
+      || ringListChanged;
+
+    if (!changed) {
+      return;
+    }
+
+    this.mapOverlayEnabled = normalized.mapOverlayEnabled;
+    this.mapOverlayLabelMode = normalized.mapOverlayLabelMode;
+    this.mapOverlayAutoContrast = normalized.mapOverlayAutoContrast;
+    this.mapOverlayRingRadiiMeters = nextRadii.slice();
+    this.markOverlayStyleDirty();
+    this.update(this.lastAzimuth, this.lastElevation);
+  }
+
+  getOverlayRingPixelRadii() {
+    const source = Array.isArray(this.mapOverlayRingRadiiMeters) && this.mapOverlayRingRadiiMeters.length
+      ? this.mapOverlayRingRadiiMeters
+      : (overlayUtils.DEFAULT_OVERLAY_RING_RADII || [1000, 5000, 10000, 20000]);
+
+    return source
+      .map((meters) => this.metersToPixels(meters))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .sort((a, b) => a - b);
+  }
+
+  getOverlayLabels() {
+    if (typeof overlayUtils.getOverlayLabels === 'function') {
+      return overlayUtils.getOverlayLabels(this.mapOverlayLabelMode);
+    }
+
+    return [
+      { angle: 0, text: 'N', isDirection: true },
+      { angle: 30, text: '1' },
+      { angle: 60, text: '2' },
+      { angle: 90, text: 'O', isDirection: true },
+      { angle: 120, text: '4' },
+      { angle: 150, text: '5' },
+      { angle: 180, text: 'S', isDirection: true },
+      { angle: 210, text: '7' },
+      { angle: 240, text: '8' },
+      { angle: 270, text: 'W', isDirection: true },
+      { angle: 300, text: '10' },
+      { angle: 330, text: '11' }
+    ];
+  }
+
+  getOverlayBaseStyle() {
+    const chooser = typeof overlayUtils.chooseOverlayStyleForLuminance === 'function'
+      ? overlayUtils.chooseOverlayStyleForLuminance
+      : () => ({
+          lineColor: 'rgba(255, 255, 255, 0.72)',
+          textColor: 'rgba(255, 255, 255, 0.94)',
+          haloPrimary: 'rgba(0, 0, 0, 0.82)',
+          haloSecondary: 'rgba(255, 255, 255, 0.4)'
+        });
+    return { ...chooser(Number.NaN), useDualHalo: false };
+  }
+
+  getOverlayFallbackStyle() {
+    return {
+      lineColor: 'rgba(255, 255, 255, 0.95)',
+      textColor: 'rgba(255, 255, 255, 0.98)',
+      haloPrimary: 'rgba(0, 0, 0, 0.9)',
+      haloSecondary: 'rgba(255, 255, 255, 0.7)',
+      useDualHalo: true
+    };
+  }
+
+  cloneOverlayStyle(style) {
+    return {
+      lineColor: style.lineColor,
+      textColor: style.textColor,
+      haloPrimary: style.haloPrimary,
+      haloSecondary: style.haloSecondary,
+      useDualHalo: Boolean(style.useDualHalo)
+    };
+  }
+
+  captureOverlayImageData() {
+    const widthPx = Math.max(1, Math.round(this.width * this.devicePixelRatio));
+    const heightPx = Math.max(1, Math.round(this.height * this.devicePixelRatio));
+    try {
+      const imageData = this.ctx.getImageData(0, 0, widthPx, heightPx);
+      this.overlaySamplingFallback = false;
+      return imageData;
+    } catch (error) {
+      if (!this.overlaySamplingFallback) {
+        console.warn('[MapView] Auto-contrast fallback aktiv (Pixel-Sampling nicht verfuegbar):', error.message);
+      }
+      this.overlaySamplingFallback = true;
+      return null;
+    }
+  }
+
+  sampleLuminanceAtPoints(imageData, points, sampleRadiusDisplay = 2) {
+    if (!imageData || !Array.isArray(points) || !points.length) {
+      return null;
+    }
+
+    const data = imageData.data;
+    const widthPx = imageData.width;
+    const heightPx = imageData.height;
+    const radiusPx = Math.max(1, Math.round(sampleRadiusDisplay * this.devicePixelRatio));
+    let luminanceSum = 0;
+    let sampleCount = 0;
+
+    for (const point of points) {
+      const baseX = Math.round(point.x * this.devicePixelRatio);
+      const baseY = Math.round(point.y * this.devicePixelRatio);
+
+      for (let dy = -radiusPx; dy <= radiusPx; dy++) {
+        const py = baseY + dy;
+        if (py < 0 || py >= heightPx) {
+          continue;
+        }
+        for (let dx = -radiusPx; dx <= radiusPx; dx++) {
+          const px = baseX + dx;
+          if (px < 0 || px >= widthPx) {
+            continue;
+          }
+          const idx = (py * widthPx + px) * 4;
+          const alpha = data[idx + 3] / 255;
+          if (alpha <= 0) {
+            continue;
+          }
+          const red = data[idx] / 255;
+          const green = data[idx + 1] / 255;
+          const blue = data[idx + 2] / 255;
+          const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) * alpha;
+          luminanceSum += luminance;
+          sampleCount += 1;
+        }
+      }
+    }
+
+    if (!sampleCount) {
+      return null;
+    }
+
+    return luminanceSum / sampleCount;
+  }
+
+  getStyleForLuminance(luminance) {
+    if (!Number.isFinite(luminance)) {
+      return this.getOverlayFallbackStyle();
+    }
+    const chooser = typeof overlayUtils.chooseOverlayStyleForLuminance === 'function'
+      ? overlayUtils.chooseOverlayStyleForLuminance
+      : () => this.getOverlayBaseStyle();
+    return { ...chooser(luminance), useDualHalo: false };
+  }
+
+  buildOverlayStylePack(ringPixelRadii, labels, radialAngles, labelRadius, radialExtent) {
+    const baseStyle = this.getOverlayBaseStyle();
+    const fallbackStyle = this.getOverlayFallbackStyle();
+
+    if (!this.mapOverlayAutoContrast) {
+      return {
+        ringStyles: ringPixelRadii.map(() => this.cloneOverlayStyle(baseStyle)),
+        radialStyles: radialAngles.map(() => this.cloneOverlayStyle(baseStyle)),
+        labelStyles: labels.map(() => this.cloneOverlayStyle(baseStyle))
+      };
+    }
+
+    const imageData = this.captureOverlayImageData();
+    if (!imageData) {
+      return {
+        ringStyles: ringPixelRadii.map(() => this.cloneOverlayStyle(fallbackStyle)),
+        radialStyles: radialAngles.map(() => this.cloneOverlayStyle(fallbackStyle)),
+        labelStyles: labels.map(() => this.cloneOverlayStyle(fallbackStyle))
+      };
+    }
+
+    const ringStyles = ringPixelRadii.map((radiusPx) => {
+      const circleLength = 2 * Math.PI * radiusPx;
+      const sampleCount = Math.max(10, Math.min(36, Math.round(circleLength / 90)));
+      const points = [];
+      for (let i = 0; i < sampleCount; i++) {
+        const angle = (Math.PI * 2 * i) / sampleCount;
+        points.push({
+          x: this.centerX + Math.cos(angle) * radiusPx,
+          y: this.centerY + Math.sin(angle) * radiusPx
+        });
+      }
+      return this.getStyleForLuminance(this.sampleLuminanceAtPoints(imageData, points, 2));
+    });
+
+    const radialStyles = radialAngles.map((angleDeg) => {
+      const angleRad = (angleDeg * Math.PI) / 180;
+      const points = [
+        {
+          x: this.centerX + Math.cos(angleRad) * radialExtent * 0.45,
+          y: this.centerY + Math.sin(angleRad) * radialExtent * 0.45
+        },
+        {
+          x: this.centerX + Math.cos(angleRad) * radialExtent * 0.8,
+          y: this.centerY + Math.sin(angleRad) * radialExtent * 0.8
+        }
+      ];
+      return this.getStyleForLuminance(this.sampleLuminanceAtPoints(imageData, points, 2));
+    });
+
+    const labelStyles = labels.map(({ angle }) => {
+      const rad = ((angle - 90) * Math.PI) / 180;
+      const x = this.centerX + Math.cos(rad) * labelRadius;
+      const y = this.centerY + Math.sin(rad) * labelRadius;
+      return this.getStyleForLuminance(this.sampleLuminanceAtPoints(imageData, [{ x, y }], 6));
+    });
+
+    return { ringStyles, radialStyles, labelStyles };
+  }
+
+  getOverlayStylePack(ringPixelRadii, labels, radialAngles, labelRadius, radialExtent) {
+    if (!this.overlayStyleDirty && this.overlayStyleCache) {
+      return this.overlayStyleCache;
+    }
+
+    this.overlayStyleCache = this.buildOverlayStylePack(
+      ringPixelRadii,
+      labels,
+      radialAngles,
+      labelRadius,
+      radialExtent
+    );
+    this.overlayStyleDirty = false;
+    return this.overlayStyleCache;
+  }
+
   getMetersPerPixel() {
     if (this.latitude === null) {
       // Fallback: Verwende Standard-Wert wenn keine Koordinaten gesetzt
@@ -97,6 +449,7 @@ class MapView {
     
     // Setze Canvas-Größe (devicePixelRatio für Retina-Displays)
     const dpr = window.devicePixelRatio || 1;
+    this.devicePixelRatio = dpr;
     const displayWidth = width;
     const displayHeight = height;
     
@@ -118,6 +471,7 @@ class MapView {
     this.centerX = this.width / 2;
     this.centerY = this.height / 2;
     this.radius = Math.min(this.width, this.height) / 2 - 30;
+    this.markOverlayStyleDirty();
     
     // Lade Karte neu, falls aktiviert
     if (this.satelliteMapEnabled && this.latitude !== null && this.longitude !== null) {
@@ -267,6 +621,7 @@ class MapView {
     if (newZoom !== this.zoomLevel) {
       this.zoomLevel = newZoom;
       this.tileCache.clear();
+      this.markOverlayStyleDirty();
       if (this.satelliteMapEnabled && this.latitude !== null && this.longitude !== null) {
         this.loadMap();
       } else {
@@ -287,10 +642,15 @@ class MapView {
     this.latitude = latitude;
     this.longitude = longitude;
     this.tileCache.clear();
+    this.markOverlayStyleDirty();
+    if (!this.satelliteMapEnabled) {
+      this.update(this.lastAzimuth || 0, this.lastElevation || 0);
+    }
   }
 
   setSatelliteMapEnabled(enabled) {
     this.satelliteMapEnabled = enabled;
+    this.markOverlayStyleDirty();
     if (enabled && this.latitude !== null && this.longitude !== null) {
       this.loadMap();
     } else {
@@ -303,6 +663,7 @@ class MapView {
     this.satelliteMapEnabled = enabled;
     this.mapSource = source;
     this.mapType = type;
+    this.markOverlayStyleDirty();
     if (enabled && this.latitude !== null && this.longitude !== null) {
       this.tileCache.clear();
       this.loadMap();
@@ -488,6 +849,7 @@ class MapView {
       img.onload = () => {
         this.mapImageData.image = img;
         this.mapImage = img; // Für Kompatibilität
+        this.markOverlayStyleDirty();
         this.update(this.lastAzimuth || 0, this.lastElevation || 0);
         this.mapLoading = false;
       };
@@ -495,6 +857,7 @@ class MapView {
       console.error('Fehler beim Laden der Karte:', error);
       this.mapLoading = false;
       this.mapImage = null;
+      this.markOverlayStyleDirty();
       this.update(this.lastAzimuth || 0, this.lastElevation || 0);
       throw error;
     }
@@ -513,115 +876,152 @@ class MapView {
     const { ctx } = this;
     // clearRect verwendet die internen Canvas-Dimensionen (mit devicePixelRatio)
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    
+
     // Zeichne Satellitenkarte als Hintergrund, falls aktiviert
     if (this.satelliteMapEnabled && this.mapImageData && this.mapImageData.image && this.mapImageData.image.complete) {
       ctx.save();
-      // Zeichne Karte so, dass sie den gesamten Canvas ausfüllt
+      // Zeichne Karte so, dass sie den gesamten Canvas ausfuellt
       // Die Koordinaten bleiben in der Mitte
       const { image, sourceWidth, sourceHeight, targetWidth, targetHeight, sourceCenterX, sourceCenterY, targetCenterX, targetCenterY } = this.mapImageData;
-      
-      // Berechne Skalierung, um den Canvas vollständig auszufüllen
+
+      // Berechne Skalierung, um den Canvas vollstaendig auszufuellen
       const scaleX = targetWidth / sourceWidth;
       const scaleY = targetHeight / sourceHeight;
-      const scale = Math.max(scaleX, scaleY); // Verwende größere Skalierung, um vollständig zu füllen
-      
-      // Berechne die neue Größe nach Skalierung
+      const scale = Math.max(scaleX, scaleY); // Verwende groessere Skalierung, um vollstaendig zu fuellen
+
+      // Berechne die neue Groesse nach Skalierung
       const scaledWidth = sourceWidth * scale;
       const scaledHeight = sourceHeight * scale;
-      
-      // Berechne Position, damit die Zentren übereinstimmen
-      // Die Zentren müssen exakt übereinstimmen, damit die Koordinaten in der Mitte sind
+
+      // Berechne Position, damit die Zentren uebereinstimmen
+      // Die Zentren muessen exakt uebereinstimmen, damit die Koordinaten in der Mitte sind
       const drawX = targetCenterX - (sourceCenterX * scale);
       const drawY = targetCenterY - (sourceCenterY * scale);
-      
-      // Zeichne die skalierte Karte, die den gesamten Canvas ausfüllt
+
+      // Zeichne die skalierte Karte, die den gesamten Canvas ausfuellt
       ctx.drawImage(
         image,
         0, 0, sourceWidth, sourceHeight,
         drawX, drawY, scaledWidth, scaledHeight
       );
-      
+
       ctx.restore();
     }
-    
+
+    if (!this.mapOverlayEnabled) {
+      return;
+    }
+
+    let ringPixelRadii = this.getOverlayRingPixelRadii();
+    if (!ringPixelRadii.length) {
+      ringPixelRadii = [this.radius * 0.25, this.radius * 0.5, this.radius * 0.75, this.radius];
+    }
+
+    const radialAngles = [];
+    for (let angle = 0; angle < 360; angle += 30) {
+      radialAngles.push(angle);
+    }
+
+    const labels = this.getOverlayLabels();
+    const labelRadius = this.radius + 15;
+    const radialExtent = Math.max(this.radius, ringPixelRadii[ringPixelRadii.length - 1] || this.radius);
+    const stylePack = this.getOverlayStylePack(ringPixelRadii, labels, radialAngles, labelRadius, radialExtent);
+    const fallbackStyle = this.getOverlayFallbackStyle();
+
     ctx.save();
     ctx.translate(this.centerX, this.centerY);
 
-    // Zeichne Radar-Gitter (mit angepasster Transparenz wenn Karte aktiv)
-    const gridOpacity = this.satelliteMapEnabled ? 0.4 : 0.15;
-    ctx.strokeStyle = `rgba(255,255,255,${gridOpacity})`;
-    ctx.lineWidth = 1;
-    
-    // Konzentrische Kreise
-    for (let r = this.radius; r > 0; r -= this.radius / 4) {
-      ctx.beginPath();
-      ctx.arc(0, 0, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    ringPixelRadii.forEach((radiusPx, index) => {
+      const style = stylePack.ringStyles[index] || fallbackStyle;
+      this.drawOverlayCircle(radiusPx, style);
+    });
 
-    // Radiallinien (alle 30 Grad)
-    for (let angle = 0; angle < 360; angle += 30) {
+    radialAngles.forEach((angle, index) => {
       const rad = (angle * Math.PI) / 180;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(rad) * this.radius, Math.sin(rad) * this.radius);
-      ctx.stroke();
-    }
+      const style = stylePack.radialStyles[index] || fallbackStyle;
+      this.drawOverlayLine(0, 0, Math.cos(rad) * radialExtent, Math.sin(rad) * radialExtent, style);
+    });
 
-    // Zeichne Uhrzeiten und Himmelsrichtungen
-    this.drawLabels();
-
+    this.drawLabels(labels, labelRadius, stylePack.labelStyles || []);
     ctx.restore();
   }
 
-  drawLabels() {
+  drawOverlayCircle(radius, style) {
     const { ctx } = this;
-    const labelRadius = this.radius + 15;
+    const drawArc = (strokeStyle, lineWidth) => {
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    };
+
+    if (style.useDualHalo) {
+      drawArc(style.haloSecondary || 'rgba(255, 255, 255, 0.65)', 4.2);
+      drawArc(style.haloPrimary || 'rgba(0, 0, 0, 0.88)', 2.8);
+    } else {
+      drawArc(style.haloPrimary || 'rgba(0, 0, 0, 0.72)', 2.3);
+    }
+    drawArc(style.lineColor || 'rgba(255, 255, 255, 0.8)', 1.1);
+  }
+
+  drawOverlayLine(fromX, fromY, toX, toY, style) {
+    const { ctx } = this;
+    const drawLine = (strokeStyle, lineWidth) => {
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(toX, toY);
+      ctx.stroke();
+    };
+
+    if (style.useDualHalo) {
+      drawLine(style.haloSecondary || 'rgba(255, 255, 255, 0.6)', 3.2);
+      drawLine(style.haloPrimary || 'rgba(0, 0, 0, 0.9)', 2);
+    } else {
+      drawLine(style.haloPrimary || 'rgba(0, 0, 0, 0.75)', 1.8);
+    }
+    drawLine(style.lineColor || 'rgba(255, 255, 255, 0.8)', 1);
+  }
+
+  drawOverlayLabel(text, x, y, isDirection, style) {
+    const { ctx } = this;
     const fontSize = 12;
-    
+    ctx.font = isDirection
+      ? `bold ${fontSize + 3}px 'Segoe UI', Roboto, sans-serif`
+      : `bold ${fontSize}px 'Segoe UI', Roboto, sans-serif`;
+
+    if (style.useDualHalo) {
+      ctx.strokeStyle = style.haloSecondary || 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 4.2;
+      ctx.strokeText(text, x, y);
+      ctx.strokeStyle = style.haloPrimary || 'rgba(0, 0, 0, 0.9)';
+      ctx.lineWidth = 2.6;
+      ctx.strokeText(text, x, y);
+    } else {
+      ctx.strokeStyle = style.haloPrimary || 'rgba(0, 0, 0, 0.78)';
+      ctx.lineWidth = 2.4;
+      ctx.strokeText(text, x, y);
+    }
+
+    ctx.fillStyle = style.textColor || 'rgba(255, 255, 255, 0.95)';
+    ctx.fillText(text, x, y);
+  }
+
+  drawLabels(labels, labelRadius, labelStyles = []) {
+    const { ctx } = this;
     ctx.save();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.lineWidth = 2;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    const fallbackStyle = this.getOverlayFallbackStyle();
 
-    // Alle Labels: Himmelsrichtungen und Uhrzeiten 1-12
-    // 0° = Nord (oben), 90° = Ost (rechts), 180° = Süd (unten), 270° = West (links)
-    // Uhrzeiten: 12 = Nord, 3 = Ost, 6 = Süd, 9 = West
-    const labels = [
-      { angle: 0, text: 'N', isDirection: true },      // Nord / 12 Uhr
-      { angle: 30, text: '1' },
-      { angle: 60, text: '2' },
-      { angle: 90, text: 'O', isDirection: true },     // Ost / 3 Uhr
-      { angle: 120, text: '4' },
-      { angle: 150, text: '5' },
-      { angle: 180, text: 'S', isDirection: true },    // Süd / 6 Uhr
-      { angle: 210, text: '7' },
-      { angle: 240, text: '8' },
-      { angle: 270, text: 'W', isDirection: true },    // West / 9 Uhr
-      { angle: 300, text: '10' },
-      { angle: 330, text: '11' }
-    ];
-
-    // Zeichne alle Labels
-    labels.forEach(({ angle, text, isDirection }) => {
-      // -90 weil Canvas 0° = rechts, wir wollen 0° = oben (Nord)
+    labels.forEach(({ angle, text, isDirection }, index) => {
       const rad = ((angle - 90) * Math.PI) / 180;
       const x = Math.cos(rad) * labelRadius;
       const y = Math.sin(rad) * labelRadius;
-      
-      // Größere Schrift für Himmelsrichtungen
-      if (isDirection) {
-        ctx.font = `bold ${fontSize + 3}px 'Segoe UI', Roboto, sans-serif`;
-      } else {
-        ctx.font = `bold ${fontSize}px 'Segoe UI', Roboto, sans-serif`;
-      }
-      
-      // Text mit Outline für bessere Lesbarkeit
-      ctx.strokeText(text, x, y);
-      ctx.fillText(text, x, y);
+      const style = labelStyles[index] || fallbackStyle;
+      this.drawOverlayLabel(text, x, y, isDirection, style);
     });
 
     ctx.restore();
