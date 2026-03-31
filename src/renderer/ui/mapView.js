@@ -84,11 +84,16 @@ const mapOverlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils
 
 class MapView {
   constructor(canvas) {
+    if (canvas && canvas.__mapViewInstance && typeof canvas.__mapViewInstance.destroy === 'function') {
+      canvas.__mapViewInstance.destroy();
+    }
+
     const context = canvas.getContext('2d');
     if (!context) {
       throw new Error('Canvas context nicht verfuegbar');
     }
     this.canvas = canvas;
+    this.canvas.__mapViewInstance = this;
     this.ctx = context;
     this.container = canvas.parentElement;
     this.latitude = null;
@@ -116,6 +121,11 @@ class MapView {
     this.overlayStyleCache = null;
     this.overlaySamplingFallback = false;
     this.devicePixelRatio = window.devicePixelRatio || 1;
+    this.resizeObserver = null;
+    this.boundResizeHandler = () => {
+      this.resizeCanvas();
+    };
+    this.boundCanvasClickHandler = (e) => this.handleCanvasClick(e);
     
     // Initialisiere Canvas-Größe
     this.resizeCanvas();
@@ -484,15 +494,11 @@ class MapView {
   setupResizeHandler() {
     // ResizeObserver für Container-Größenänderungen
     if (window.ResizeObserver && this.container) {
-      this.resizeObserver = new ResizeObserver(() => {
-        this.resizeCanvas();
-      });
+      this.resizeObserver = new ResizeObserver(this.boundResizeHandler);
       this.resizeObserver.observe(this.container);
     } else {
       // Fallback: Window-Resize-Event
-      window.addEventListener('resize', () => {
-        this.resizeCanvas();
-      });
+      window.addEventListener('resize', this.boundResizeHandler);
     }
   }
 
@@ -507,7 +513,12 @@ class MapView {
 
   setupClickHandler() {
     // Click-Handler für Rotor-Steuerung
-    this.canvas.addEventListener('click', (e) => {
+    this.canvas.addEventListener('click', this.boundCanvasClickHandler);
+    this.canvas.style.cursor = 'crosshair';
+  }
+
+
+  handleCanvasClick(e) {
       if (!this.onClickCallback) {
         return;
       }
@@ -610,10 +621,23 @@ class MapView {
       
       // Rufe Callback auf
       this.onClickCallback(azimuth, elevation);
-    });
+  }
     
     // Cursor-Styling für bessere UX
-    this.canvas.style.cursor = 'crosshair';
+  destroy() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+
+    window.removeEventListener('resize', this.boundResizeHandler);
+
+    if (this.canvas) {
+      this.canvas.removeEventListener('click', this.boundCanvasClickHandler);
+      if (this.canvas.__mapViewInstance === this) {
+        delete this.canvas.__mapViewInstance;
+      }
+    }
   }
 
   setZoom(level) {
