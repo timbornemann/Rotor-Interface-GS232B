@@ -300,7 +300,10 @@ class RouteExecutor:
             current_status = self.rotor_logic.get_effective_raw_status()
             
             if not current_status:
-                # No status yet, keep waiting
+                # No status available – check whether rotor was disconnected
+                if not self.rotor_logic.connection.is_connected():
+                    log("[RouteExecutor] Rotor disconnected during position wait – aborting step", level="WARNING")
+                    return
                 time.sleep(self.position_check_interval)
                 continue
             
@@ -375,14 +378,17 @@ class RouteExecutor:
         """
         start_time = time.time()
         duration_s = duration_ms / 1000.0
-        update_interval = 0.1  # Update every 100ms
-        
+        update_interval = 0.1   # Check every 100 ms
+        broadcast_interval = 0.5  # Broadcast at most every 500 ms
+        last_broadcast_time = -broadcast_interval  # Trigger immediately on first iteration
+
         while not self._should_stop:
             elapsed_s = time.time() - start_time
             remaining_s = max(0, duration_s - elapsed_s)
-            
-            # Broadcast progress (less frequently to avoid spam)
-            if int(elapsed_s * 10) % 5 == 0:  # Every 500ms
+
+            # Broadcast progress at a stable interval (avoids int-modulo timing bugs)
+            if elapsed_s - last_broadcast_time >= broadcast_interval:
+                last_broadcast_time = elapsed_s
                 self._broadcast_progress({
                     "type": "wait_progress",
                     "step": step,
@@ -390,10 +396,10 @@ class RouteExecutor:
                     "remaining": int(remaining_s * 1000),
                     "total": duration_ms
                 })
-            
+
             if elapsed_s >= duration_s:
                 break
-            
+
             time.sleep(update_interval)
     
     def _execute_loop_step(self, step: Dict[str, Any]) -> None:

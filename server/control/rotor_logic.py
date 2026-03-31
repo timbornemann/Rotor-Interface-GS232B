@@ -58,7 +58,8 @@ class RotorLogic:
         self.running = False
         self.thread: Optional[threading.Thread] = None
         self.state_lock = threading.RLock()
-        
+        self.config_lock = threading.RLock()  # Protects self.config from concurrent read/write
+
         # State
         self.target_az: Optional[float] = None
         self.target_el: Optional[float] = None
@@ -149,52 +150,53 @@ class RotorLogic:
             except (ValueError, TypeError):
                 return default
 
-        self.config["azimuthMin"] = safe_float("azimuthMinLimit", 0)
-        self.config["azimuthMax"] = safe_float("azimuthMaxLimit", 360)
-        self.config["elevationMin"] = safe_float("elevationMinLimit", 0)
-        self.config["elevationMax"] = safe_float("elevationMaxLimit", 90)
-        self.config["azimuthMode"] = 450 if safe_int("azimuthMode", 360) == 450 else 360
-        self.config["azimuthSpeedDegPerSec"] = safe_float("azimuthSpeedDegPerSec", 4.0)
-        self.config["elevationSpeedDegPerSec"] = safe_float("elevationSpeedDegPerSec", 2.0)
-        self.config["rampEnabled"] = new_config.get("rampEnabled", False) in [True, "true", "True", 1]
-        self.config["rampSampleTimeMs"] = safe_float("rampSampleTimeMs", 400)
-        
-        # Calibration
-        self.config["azimuthOffset"] = safe_float("azimuthOffset", 0.0)
-        self.config["elevationOffset"] = safe_float("elevationOffset", 0.0)
-        self.config["azimuthScaleFactor"] = safe_float("azimuthScaleFactor", 1.0)
-        self.config["elevationScaleFactor"] = safe_float("elevationScaleFactor", 1.0)
-        self.config["feedbackCorrectionEnabled"] = new_config.get("feedbackCorrectionEnabled", False) in [True, "true", "True", 1]
-        az_feedback_min = safe_float("azimuthFeedbackFactorMin", 0.1)
-        az_feedback_max = safe_float("azimuthFeedbackFactorMax", 10.0)
-        if az_feedback_max < az_feedback_min:
-            az_feedback_max = az_feedback_min
-        self.config["azimuthFeedbackFactorMin"] = az_feedback_min
-        self.config["azimuthFeedbackFactorMax"] = az_feedback_max
+        with self.config_lock:
+            self.config["azimuthMin"] = safe_float("azimuthMinLimit", 0)
+            self.config["azimuthMax"] = safe_float("azimuthMaxLimit", 360)
+            self.config["elevationMin"] = safe_float("elevationMinLimit", 0)
+            self.config["elevationMax"] = safe_float("elevationMaxLimit", 90)
+            self.config["azimuthMode"] = 450 if safe_int("azimuthMode", 360) == 450 else 360
+            self.config["azimuthSpeedDegPerSec"] = safe_float("azimuthSpeedDegPerSec", 4.0)
+            self.config["elevationSpeedDegPerSec"] = safe_float("elevationSpeedDegPerSec", 2.0)
+            self.config["rampEnabled"] = new_config.get("rampEnabled", False) in [True, "true", "True", 1]
+            self.config["rampSampleTimeMs"] = safe_float("rampSampleTimeMs", 400)
 
-        el_feedback_min = safe_float("elevationFeedbackFactorMin", 0.1)
-        el_feedback_max = safe_float("elevationFeedbackFactorMax", 10.0)
-        if el_feedback_max < el_feedback_min:
-            el_feedback_max = el_feedback_min
-        self.config["elevationFeedbackFactorMin"] = el_feedback_min
-        self.config["elevationFeedbackFactorMax"] = el_feedback_max
+            # Calibration
+            self.config["azimuthOffset"] = safe_float("azimuthOffset", 0.0)
+            self.config["elevationOffset"] = safe_float("elevationOffset", 0.0)
+            self.config["azimuthScaleFactor"] = safe_float("azimuthScaleFactor", 1.0)
+            self.config["elevationScaleFactor"] = safe_float("elevationScaleFactor", 1.0)
+            self.config["feedbackCorrectionEnabled"] = new_config.get("feedbackCorrectionEnabled", False) in [True, "true", "True", 1]
+            az_feedback_min = safe_float("azimuthFeedbackFactorMin", 0.1)
+            az_feedback_max = safe_float("azimuthFeedbackFactorMax", 10.0)
+            if az_feedback_max < az_feedback_min:
+                az_feedback_max = az_feedback_min
+            self.config["azimuthFeedbackFactorMin"] = az_feedback_min
+            self.config["azimuthFeedbackFactorMax"] = az_feedback_max
 
-        self.config["azimuthFeedbackFactor"] = clamp(
-            safe_float("azimuthFeedbackFactor", 1.0),
-            self.config["azimuthFeedbackFactorMin"],
-            self.config["azimuthFeedbackFactorMax"],
-        )
-        self.config["elevationFeedbackFactor"] = clamp(
-            safe_float("elevationFeedbackFactor", 1.0),
-            self.config["elevationFeedbackFactorMin"],
-            self.config["elevationFeedbackFactorMax"],
-        )
-        self.config["parkPositionsEnabled"] = new_config.get("parkPositionsEnabled", False) in [True, "true", "True", 1]
-        self.config["homeAzimuth"] = safe_float("homeAzimuth", 0.0)
-        self.config["homeElevation"] = safe_float("homeElevation", 0.0)
-        self.config["parkAzimuth"] = safe_float("parkAzimuth", 0.0)
-        self.config["parkElevation"] = safe_float("parkElevation", 0.0)
-        
+            el_feedback_min = safe_float("elevationFeedbackFactorMin", 0.1)
+            el_feedback_max = safe_float("elevationFeedbackFactorMax", 10.0)
+            if el_feedback_max < el_feedback_min:
+                el_feedback_max = el_feedback_min
+            self.config["elevationFeedbackFactorMin"] = el_feedback_min
+            self.config["elevationFeedbackFactorMax"] = el_feedback_max
+
+            self.config["azimuthFeedbackFactor"] = clamp(
+                safe_float("azimuthFeedbackFactor", 1.0),
+                self.config["azimuthFeedbackFactorMin"],
+                self.config["azimuthFeedbackFactorMax"],
+            )
+            self.config["elevationFeedbackFactor"] = clamp(
+                safe_float("elevationFeedbackFactor", 1.0),
+                self.config["elevationFeedbackFactorMin"],
+                self.config["elevationFeedbackFactorMax"],
+            )
+            self.config["parkPositionsEnabled"] = new_config.get("parkPositionsEnabled", False) in [True, "true", "True", 1]
+            self.config["homeAzimuth"] = safe_float("homeAzimuth", 0.0)
+            self.config["homeElevation"] = safe_float("homeElevation", 0.0)
+            self.config["parkAzimuth"] = safe_float("parkAzimuth", 0.0)
+            self.config["parkElevation"] = safe_float("parkElevation", 0.0)
+
         logger.info("Config updated: %s", self.config)
 
     def _move_to_preset(self, preset: str) -> bool:
@@ -353,11 +355,15 @@ class RotorLogic:
         except (TypeError, ValueError):
             return None
 
-        if not self.config.get("feedbackCorrectionEnabled", False):
+        with self.config_lock:
+            feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
+            factor_raw = self.config.get(factor_key, 1.0)
+
+        if not feedback_enabled:
             return effective
 
         try:
-            factor = float(self.config.get(factor_key, 1.0))
+            factor = float(factor_raw)
         except (TypeError, ValueError):
             factor = 1.0
 
@@ -394,12 +400,18 @@ class RotorLogic:
         if az_raw is None or el_raw is None:
             return None
 
+        with self.config_lock:
+            az_scale_raw = self.config.get("azimuthScaleFactor", 1.0)
+            el_scale_raw = self.config.get("elevationScaleFactor", 1.0)
+            az_offset = self.config.get("azimuthOffset", 0.0)
+            el_offset = self.config.get("elevationOffset", 0.0)
+
         try:
-            az_scale = float(self.config.get("azimuthScaleFactor", 1.0))
+            az_scale = float(az_scale_raw)
         except (TypeError, ValueError):
             az_scale = 1.0
         try:
-            el_scale = float(self.config.get("elevationScaleFactor", 1.0))
+            el_scale = float(el_scale_raw)
         except (TypeError, ValueError):
             el_scale = 1.0
 
@@ -408,8 +420,8 @@ class RotorLogic:
         if el_scale <= 0:
             el_scale = 1.0
 
-        az_cal = (az_raw + self.config["azimuthOffset"]) / az_scale
-        el_cal = (el_raw + self.config["elevationOffset"]) / el_scale
+        az_cal = (az_raw + az_offset) / az_scale
+        el_cal = (el_raw + el_offset) / el_scale
         
         return {"azimuth": az_cal, "elevation": el_cal}
     
@@ -424,21 +436,32 @@ class RotorLogic:
         # Formula: calibrated = (raw + offset) / scale
         # Inverse: raw = (calibrated * scale) - offset
         
+        with self.config_lock:
+            az_scale = self.config.get("azimuthScaleFactor", 1.0)
+            az_offset = self.config.get("azimuthOffset", 0.0)
+            el_scale = self.config.get("elevationScaleFactor", 1.0)
+            el_offset = self.config.get("elevationOffset", 0.0)
+            az_mode = self.config.get("azimuthMode", 360)
+
         vals = []
         if az is not None:
-            raw_az = (az * self.config.get("azimuthScaleFactor", 1.0)) - self.config["azimuthOffset"]
-            vals.append(f"{int(round(raw_az)):03d}")
-        
+            raw_az = (az * az_scale) - az_offset
+            # Clamp after rounding to prevent exceeding hardware limits
+            raw_az_int = max(0, min(int(round(raw_az)), az_mode))
+            vals.append(f"{raw_az_int:03d}")
+
         if el is not None:
-            raw_el = (el * self.config.get("elevationScaleFactor", 1.0)) - self.config["elevationOffset"]
+            raw_el = (el * el_scale) - el_offset
+            # Clamp after rounding to prevent exceeding hardware limits
+            raw_el_int = max(0, min(int(round(raw_el)), 90))
             if len(vals) == 0:
                 # If only EL provided, we need current AZ for the W command
                 effective_status = self.get_effective_raw_status()
                 curr_az_raw = effective_status.get("azimuth", 0) if effective_status else 0
-                curr_az_raw = clamp(curr_az_raw, 0, self.config.get("azimuthMode", 360))
+                curr_az_raw = clamp(curr_az_raw, 0, az_mode)
                 vals.append(f"{int(round(curr_az_raw)):03d}")
-            
-            vals.append(f"{int(round(raw_el)):03d}")
+
+            vals.append(f"{raw_el_int:03d}")
 
         if len(vals) == 1:
             self.connection.send_command(f"M{vals[0]}")
@@ -453,12 +476,15 @@ class RotorLogic:
             el: Target elevation in raw degrees (hardware position, 0-90).
         """
         # Send raw values directly to motor without any calibration conversion
+        with self.config_lock:
+            az_mode = self.config.get("azimuthMode", 360)
+
         vals = []
         if az is not None:
             # Clamp to valid range
-            az_clamped = max(0, min(az, self.config.get("azimuthMode", 360)))
+            az_clamped = max(0, min(az, az_mode))
             vals.append(f"{int(round(az_clamped)):03d}")
-        
+
         if el is not None:
             # Clamp to valid range
             el_clamped = max(0, min(el, 90))
@@ -466,7 +492,7 @@ class RotorLogic:
                 # If only EL provided, we need current AZ for the W command
                 effective_status = self.get_effective_raw_status()
                 curr_az_raw = effective_status.get("azimuth", 0) if effective_status else 0
-                curr_az_raw = clamp(curr_az_raw, 0, self.config.get("azimuthMode", 360))
+                curr_az_raw = clamp(curr_az_raw, 0, az_mode)
                 vals.append(f"{int(round(curr_az_raw)):03d}")
             
             vals.append(f"{int(round(el_clamped)):03d}")
@@ -484,35 +510,39 @@ class RotorLogic:
                     time.sleep(1)
                     continue
 
-                if not self.config["rampEnabled"]:
+                with self.config_lock:
+                    ramp_enabled = self.config["rampEnabled"]
+                    ramp_sample_ms = self.config["rampSampleTimeMs"]
+
+                if not ramp_enabled:
                     # If ramp disabled, direct commands were sent in methods
                     time.sleep(0.1)
                     continue
-                
+
                 # RAMP LOGIC
                 status = self._get_calibrated_status()
                 if not status:
                     time.sleep(0.1)
                     continue
-                
-                dt = self.config["rampSampleTimeMs"] / 1000.0
+
+                dt = ramp_sample_ms / 1000.0
                 current_az = status["azimuth"]
                 current_el = status["elevation"]
                 motion_state = self._get_motion_state_snapshot()
-                
+
                 # 1. Manual Move Ramp
                 if motion_state["manual_direction"]:
                     self._handle_manual_ramp(current_az, current_el, dt, motion_state)
-                
+
                 # 2. Target Move Ramp (Goto)
                 elif motion_state["target_az"] is not None or motion_state["target_el"] is not None:
                     self._handle_target_ramp(current_az, current_el, dt, motion_state)
-                
+
                 # 3. Soft Stop
                 elif motion_state["stopping"]:
                     self._handle_soft_stop(motion_state)
 
-                time.sleep(self.config["rampSampleTimeMs"] / 1000.0)
+                time.sleep(ramp_sample_ms / 1000.0)
 
             except Exception as e:
                 logger.error(f"Error in control loop: {e}")
@@ -535,24 +565,32 @@ class RotorLogic:
         manual_direction = motion_state["manual_direction"]
         ramp_start_time = motion_state["ramp_start_time"]
 
+        with self.config_lock:
+            az_speed = self.config["azimuthSpeedDegPerSec"]
+            el_speed = self.config["elevationSpeedDegPerSec"]
+            az_min = self.config["azimuthMin"]
+            az_max = self.config["azimuthMax"]
+            el_min = self.config["elevationMin"]
+            el_max = self.config["elevationMax"]
+
         # Calculate speed factor based on time (soft start)
         elapsed = time.time() - ramp_start_time
         ramp_up_time = 2.0
         factor = 0.2 + (elapsed / ramp_up_time) * 0.8 if elapsed < ramp_up_time else 1.0
-        
+
         is_az = manual_direction in ['R', 'L']
         direction_sign = 1 if manual_direction in ['R', 'U'] else -1
-        
+
         if is_az:
-            step_size = self.config["azimuthSpeedDegPerSec"] * dt * factor
+            step_size = az_speed * dt * factor
             next_az = current_az + (step_size * direction_sign)
-            
+
             # Check limits
-            if next_az < self.config["azimuthMin"]:
-                next_az = self.config["azimuthMin"]
-            if next_az > self.config["azimuthMax"]:
-                next_az = self.config["azimuthMax"]
-                 
+            if next_az < az_min:
+                next_az = az_min
+            if next_az > az_max:
+                next_az = az_max
+
             with self.state_lock:
                 state_unchanged = (
                     self.manual_direction == manual_direction
@@ -562,9 +600,9 @@ class RotorLogic:
                 self._send_direct_target(next_az, None)
         else:
             # Elevation
-            step_size = self.config["elevationSpeedDegPerSec"] * dt * factor
+            step_size = el_speed * dt * factor
             next_el = current_el + (step_size * direction_sign)
-            next_el = clamp(next_el, self.config["elevationMin"], self.config["elevationMax"])
+            next_el = clamp(next_el, el_min, el_max)
             with self.state_lock:
                 state_unchanged = (
                     self.manual_direction == manual_direction
@@ -594,21 +632,26 @@ class RotorLogic:
         clear_az = False
         clear_el = False
 
+        with self.config_lock:
+            az_mode = self.config["azimuthMode"]
+            az_speed = self.config["azimuthSpeedDegPerSec"]
+            el_speed = self.config["elevationSpeedDegPerSec"]
+
         if target_az is not None:
-            delta = shortest_angular_delta(target_az, current_az, self.config["azimuthMode"])
+            delta = shortest_angular_delta(target_az, current_az, az_mode)
             if abs(delta) < 0.5:
                 clear_az = True
             else:
-                step_cap = self.config["azimuthSpeedDegPerSec"] * dt
+                step_cap = az_speed * dt
                 step = min(abs(delta), step_cap) * (1 if delta > 0 else -1)
                 next_az_target = current_az + step
-        
+
         if target_el is not None:
             delta = target_el - current_el
             if abs(delta) < 0.5:
                 clear_el = True
             else:
-                step_cap = self.config["elevationSpeedDegPerSec"] * dt
+                step_cap = el_speed * dt
                 step = min(abs(delta), step_cap) * (1 if delta > 0 else -1)
                 next_el_target = current_el + step
 
