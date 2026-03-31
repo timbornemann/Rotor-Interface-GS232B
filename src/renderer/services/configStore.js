@@ -15,7 +15,7 @@ const defaultConfig = {
   portPath: null,
   
   // Display/Mode
-  azimuthMode: 360,
+  azimuthMode: 450,
   
   // Cone visualization
   coneAngle: 10,
@@ -74,7 +74,7 @@ const defaultConfig = {
   
   // Limits
   azimuthMinLimit: 0,
-  azimuthMaxLimit: 360,
+  azimuthMaxLimit: 450,
   elevationMinLimit: 0,
   elevationMaxLimit: 90,
 

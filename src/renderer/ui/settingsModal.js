@@ -21,6 +21,7 @@ class SettingsModal {
     this.locationSearchAbort = null;
     this.pendingLocation = null;
     this.locationMapReady = false;
+    this.clientsTableClickBound = false;
     this.overlayUtils = (typeof window !== 'undefined' && window.MapOverlayUtils) ? window.MapOverlayUtils : null;
     this.overlayRingValidationErrors = [];
     
@@ -151,6 +152,7 @@ class SettingsModal {
     // Range/Number sync for speed inputs
     this.setupRangeSync('settingsAzSpeedRange', 'settingsAzSpeedInput');
     this.setupRangeSync('settingsElSpeedRange', 'settingsElSpeedInput');
+    this.setupClientsTableActions();
     this.setupLocationSearch();
     this.setupCoordinateSync();
     this.setupPresetToggle();
@@ -549,6 +551,26 @@ class SettingsModal {
   }
   
   // --- Clients Tab Functions ---
+
+  setupClientsTableActions() {
+    if (this.clientsTableClickBound) {
+      return;
+    }
+
+    const tableBody = document.getElementById('clientsTableBody');
+    if (!tableBody) {
+      return;
+    }
+
+    tableBody.addEventListener('click', (e) => {
+      const btn = e.target.closest('.action-btn');
+      if (!btn || !tableBody.contains(btn) || btn.disabled) {
+        return;
+      }
+      void this.handleClientAction(e);
+    });
+    this.clientsTableClickBound = true;
+  }
   
   async loadClientsData() {
     try {
@@ -566,6 +588,7 @@ class SettingsModal {
   }
   
   updateClientsTable(clients) {
+    this.setupClientsTableActions();
     const tableBody = document.getElementById('clientsTableBody');
     if (!tableBody) return;
     
@@ -605,11 +628,6 @@ class SettingsModal {
         </tr>
       `;
     }).join('');
-    
-    // Attach event handlers to action buttons
-    tableBody.querySelectorAll('.action-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => this.handleClientAction(e));
-    });
   }
   
   getActionButton(client, isOwnSession) {
@@ -625,7 +643,9 @@ class SettingsModal {
   }
   
   async handleClientAction(e) {
-    const btn = e.target;
+    const btn = e.target.closest('.action-btn');
+    if (!btn) return;
+
     const action = btn.dataset.action;
     const clientId = btn.dataset.clientId;
     
