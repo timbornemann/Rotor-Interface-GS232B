@@ -2,6 +2,7 @@
 
 import pytest
 import sys
+import threading
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -89,6 +90,8 @@ class TestRotorConnectionMocked:
         connection.serial = mock_serial
         connection.port = "COM1"
         connection.baud_rate = 9600
+        connection._connection_token = 1
+        connection._stop_event = threading.Event()
         return connection
     
     def test_is_connected_with_mock(self, connected_connection):
@@ -149,6 +152,16 @@ class TestRotorConnectionMocked:
         assert "timestamp" in status
         assert isinstance(status["timestamp"], int)
 
+    def test_process_status_line_ignores_invalid_numeric_values(self, connected_connection):
+        """Invalid AZ/EL values should not abort status parsing."""
+        connected_connection._process_status_line("AZ=abc EL=045")
+
+        status = connected_connection.get_status()
+        assert status is not None
+        assert status["raw"] == "AZ=abc EL=045"
+        assert "azimuthRaw" not in status
+        assert status["elevationRaw"] == 45
+
     def test_connect_closes_port_when_startup_fails(self):
         """connect should close an opened port if setup fails after Serial() succeeds."""
         connection = RotorConnection()
@@ -171,4 +184,24 @@ class TestRotorConnectionMocked:
         assert connection.port is None
         assert not connection.read_active
         assert not connection.polling_active
+
+    def test_old_thread_context_is_invalidated_after_disconnect(self):
+        """Worker threads from an old connection must not remain valid after disconnect."""
+        connection = RotorConnection()
+        mock_serial = MagicMock()
+        mock_serial.is_open = True
+        stop_event = threading.Event()
+
+        with connection.serial_lock:
+            connection.serial = mock_serial
+            connection.port = "COM1"
+            connection._connection_token = 1
+            connection._stop_event = stop_event
+
+        assert connection._is_thread_current(mock_serial, 1, stop_event)
+
+        connection.disconnect()
+
+        assert stop_event.is_set()
+        assert not connection._is_thread_current(mock_serial, 1, stop_event)
 
