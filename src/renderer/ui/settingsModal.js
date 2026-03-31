@@ -721,7 +721,28 @@ class SettingsModal {
     this.currentConfig = null;
     this.onSaveCallback = null;
     this.cleanupWebSocketListeners();
-    
+
+    // Abort any in-progress location search
+    if (this.locationSearchAbort) {
+      this.locationSearchAbort.abort();
+      this.locationSearchAbort = null;
+    }
+
+    // Clear search results to release orphaned event listeners
+    const resultsEl = document.getElementById('settingsMapSearchResults');
+    if (resultsEl) {
+      resultsEl.innerHTML = '';
+      resultsEl.classList.add('hidden');
+    }
+
+    // Destroy Leaflet map to free memory and tile resources
+    if (this.locationMap) {
+      this.locationMap.remove();
+      this.locationMap = null;
+      this.locationMarker = null;
+      this.locationMapReady = false;
+    }
+
     // Clear any refresh timers
     if (this.clientsRefreshTimer) {
       clearInterval(this.clientsRefreshTimer);
