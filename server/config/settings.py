@@ -5,9 +5,13 @@ All settings are stored in web-settings.json for consistency across devices.
 """
 
 import json
+import re
 import threading
 from pathlib import Path
 from typing import Dict, Any, List
+
+# Matches valid integer or decimal numbers (optional leading minus sign)
+_NUMERIC_RE = re.compile(r'^-?\d+(\.\d+)?$')
 
 from server.utils.logging import log
 from server.config.defaults import DEFAULT_CONFIG
@@ -84,12 +88,16 @@ class SettingsManager:
                 elif value.startswith('null'):
                     cleaned[key] = None
                 else:
-                    # Try to parse as number
+                    # Try to parse as number – only if the first token looks numeric
                     try:
-                        if '.' in value:
-                            cleaned[key] = float(value.split()[0])
+                        stripped = value.split()[0] if value.split() else ''
+                        if stripped and _NUMERIC_RE.match(stripped):
+                            if '.' in stripped:
+                                cleaned[key] = float(stripped)
+                            else:
+                                cleaned[key] = int(stripped)
                         else:
-                            cleaned[key] = int(value.split()[0])
+                            cleaned[key] = value
                     except (ValueError, IndexError):
                         cleaned[key] = value
             else:
