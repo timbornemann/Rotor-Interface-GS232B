@@ -45,6 +45,11 @@ class TestDefaults:
         assert DEFAULT_CONFIG["mapOverlayLabelMode"] == "both"
         assert DEFAULT_CONFIG["mapOverlayAutoContrast"] is True
         assert DEFAULT_CONFIG["mapOverlayRingRadiiMeters"] == [1000, 5000, 10000, 20000]
+
+    def test_default_config_has_map_source_settings(self):
+        """Default config should include persistent map source settings."""
+        assert DEFAULT_CONFIG["mapSource"] == "arcgis"
+        assert DEFAULT_CONFIG["mapType"] == "satellite"
     
     def test_default_ini_template_is_string(self):
         """Default INI template should be a string."""
@@ -68,6 +73,19 @@ class TestDefaults:
         assert "mapOverlayLabelMode=both" in DEFAULT_INI_TEMPLATE
         assert "mapOverlayAutoContrast=true" in DEFAULT_INI_TEMPLATE
         assert "mapOverlayRingRadiiMeters=1000,5000,10000,20000" in DEFAULT_INI_TEMPLATE
+
+    def test_default_ini_template_has_speed_stage_settings(self):
+        """Default INI template should include ERC-DUO speed stage settings."""
+        assert "azimuthLowSpeedStage=3" in DEFAULT_INI_TEMPLATE
+        assert "azimuthHighSpeedStage=4" in DEFAULT_INI_TEMPLATE
+        assert "elevationLowSpeedStage=3" in DEFAULT_INI_TEMPLATE
+        assert "elevationHighSpeedStage=4" in DEFAULT_INI_TEMPLATE
+        assert "azimuthSpeedAngleCode=3" in DEFAULT_INI_TEMPLATE
+        assert "elevationSpeedAngleCode=3" in DEFAULT_INI_TEMPLATE
+
+    def test_default_ini_template_uses_disabled_ramp_by_default(self):
+        """INI template should match the default rampEnabled setting."""
+        assert "rampEnabled=false" in DEFAULT_INI_TEMPLATE
 
 
 class TestSettingsManager:
@@ -112,11 +130,12 @@ class TestSettingsManager:
             saved = json.load(f)
         assert saved["baudRate"] == 19200
     
-    def test_update_reflects_in_get_all(self, settings):
-        """update should reflect in subsequent get_all calls."""
-        settings.update({"customSetting": "customValue"})
+    def test_update_reflects_valid_settings_in_get_all(self, settings):
+        """Valid updates should reflect in subsequent get_all calls."""
+        settings.update({"mapSource": "google", "mapType": "terrain"})
         config = settings.get_all()
-        assert config["customSetting"] == "customValue"
+        assert config["mapSource"] == "google"
+        assert config["mapType"] == "terrain"
     
     def test_json_overrides_ini(self, settings_dir):
         """JSON settings should override INI settings."""
@@ -164,4 +183,16 @@ class TestSettingsManager:
         settings.update({"mapOverlayRingRadiiMeters": ["abc", 0, -5]})
         config = settings.get_all()
         assert config["mapOverlayRingRadiiMeters"] == [1000, 5000, 10000, 20000]
+
+    def test_update_ignores_unknown_keys(self, settings):
+        """Unknown keys should be ignored during cleaning."""
+        settings.update({
+            "customSetting": "customValue",
+            "mapsource": "osm",
+            "mapSource": "google",
+        })
+        config = settings.get_all()
+        assert "customSetting" not in config
+        assert "mapsource" not in config
+        assert config["mapSource"] == "google"
 
