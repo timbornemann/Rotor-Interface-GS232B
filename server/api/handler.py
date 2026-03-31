@@ -13,6 +13,7 @@ from typing import Any, Optional, TYPE_CHECKING
 from urllib.parse import urlparse
 
 from server.api.middleware import (
+    InvalidJsonError,
     send_json, 
     read_json_body, 
     send_cors_headers,
@@ -321,6 +322,12 @@ class RotorHandler(SimpleHTTPRequestHandler):
                 return
 
             send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)
+        except InvalidJsonError as e:
+            send_json(
+                self,
+                {"error": "Invalid JSON", "message": str(e)},
+                HTTPStatus.BAD_REQUEST
+            )
         except Exception as e:
             # Log the error and send a proper error response
             import traceback
@@ -348,8 +355,14 @@ class RotorHandler(SimpleHTTPRequestHandler):
                 route_id = route_update_match.group(1)
                 routes.handle_update_route(self, self.state, route_id)
                 return
-            
+             
             send_json(self, {"error": "Not Found"}, HTTPStatus.NOT_FOUND)
+        except InvalidJsonError as e:
+            send_json(
+                self,
+                {"error": "Invalid JSON", "message": str(e)},
+                HTTPStatus.BAD_REQUEST
+            )
         except Exception as e:
             import traceback
             from server.utils.logging import log

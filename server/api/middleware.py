@@ -11,6 +11,10 @@ from typing import Any, Dict, Optional, Tuple
 from server.core.session_manager import ClientSession
 
 
+class InvalidJsonError(ValueError):
+    """Raised when a request body contains invalid JSON."""
+
+
 def send_json(
     handler: BaseHTTPRequestHandler,
     payload: Dict[str, Any],
@@ -40,14 +44,23 @@ def read_json_body(handler: BaseHTTPRequestHandler) -> Dict[str, Any]:
         handler: The HTTP request handler instance.
         
     Returns:
-        Parsed JSON as dictionary, or empty dict if parsing fails.
+        Parsed JSON object as dictionary.
+
+    Raises:
+        InvalidJsonError: If the request body is not valid JSON or not a JSON object.
     """
     length = int(handler.headers.get("Content-Length", 0))
     raw = handler.rfile.read(length) if length else b"{}"
     try:
-        return json.loads(raw.decode("utf-8"))
-    except json.JSONDecodeError:
-        return {}
+        payload = json.loads(raw.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise InvalidJsonError("Request body is not valid UTF-8 JSON.") from exc
+    except json.JSONDecodeError as exc:
+        raise InvalidJsonError("Request body contains invalid JSON.") from exc
+
+    if not isinstance(payload, dict):
+        raise InvalidJsonError("JSON request body must be an object.")
+    return payload
 
 
 def send_cors_headers(handler: BaseHTTPRequestHandler) -> None:

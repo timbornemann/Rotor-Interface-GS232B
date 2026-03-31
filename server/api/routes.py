@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Any, Dict
 
-from server.api.middleware import send_json, read_json_body
+from server.api.middleware import InvalidJsonError, send_json, read_json_body
 from server.api.openapi import build_openapi_spec, build_swagger_ui_html, build_redoc_html
 from server.connection.port_scanner import list_available_ports
 from server.control.rotor_logic import RotorLogic
@@ -108,6 +108,19 @@ def _build_status_payload(status: Optional[Dict[str, Any]], config: Dict[str, An
     }
 
 
+def _read_request_payload(handler: BaseHTTPRequestHandler) -> Optional[Dict[str, Any]]:
+    """Read a JSON request payload and send a 400 response on malformed input."""
+    try:
+        return read_json_body(handler)
+    except InvalidJsonError as e:
+        send_json(
+            handler,
+            {"error": "Invalid JSON", "message": str(e)},
+            HTTPStatus.BAD_REQUEST
+        )
+        return None
+
+
 def _send_html(handler: BaseHTTPRequestHandler, html: str, status: HTTPStatus = HTTPStatus.OK) -> None:
     """Send a HTML response with CORS headers."""
     data = html.encode("utf-8")
@@ -173,7 +186,9 @@ def handle_post_settings(handler: BaseHTTPRequestHandler, state: "ServerState") 
         handler: The HTTP request handler instance.
         state: The server state singleton.
     """
-    payload = read_json_body(handler)
+    payload = _read_request_payload(handler)
+    if payload is None:
+        return
     state.settings.update(payload)
     
     # Update RotorLogic config too
@@ -242,7 +257,9 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
         handler: The HTTP request handler instance.
         state: The server state singleton.
     """
-    payload = read_json_body(handler)
+    payload = _read_request_payload(handler)
+    if payload is None:
+        return
     port = payload.get("port")
     baud_rate = payload.get("baudRate", 9600)
 
@@ -261,6 +278,14 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
         return
     
     with state.rotor_lock:
+        if not state.rotor_connection:
+            send_json(
+                handler,
+                {"error": "Rotor connection not initialized"},
+                HTTPStatus.INTERNAL_SERVER_ERROR
+            )
+            return
+
         try:
             if state.rotor_connection.is_connected():
                 if state.rotor_connection.port == port:
@@ -321,7 +346,9 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
         state: The server state singleton.
     """
     try:
-        payload = read_json_body(handler)
+        payload = _read_request_payload(handler)
+        if payload is None:
+            return
         az = _parse_number(payload.get("az"))
         el = _parse_number(payload.get("el"))
 
@@ -395,7 +422,9 @@ def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None
         state: The server state singleton.
     """
     try:
-        payload = read_json_body(handler)
+        payload = _read_request_payload(handler)
+        if payload is None:
+            return
         direction = payload.get("direction")
 
         if not _is_valid_direction(direction):
@@ -434,7 +463,9 @@ def handle_set_target_raw(handler: BaseHTTPRequestHandler, state: "ServerState")
         state: The server state singleton.
     """
     try:
-        payload = read_json_body(handler)
+        payload = _read_request_payload(handler)
+        if payload is None:
+            return
         az = _parse_number(payload.get("az")) if "az" in payload else None
         el = _parse_number(payload.get("el")) if "el" in payload else None
 
@@ -499,7 +530,9 @@ def handle_send_command(handler: BaseHTTPRequestHandler, state: "ServerState") -
         state: The server state singleton.
     """
     try:
-        payload = read_json_body(handler)
+        payload = _read_request_payload(handler)
+        if payload is None:
+            return
         command = payload.get("command")
         
         if not command or not isinstance(command, str):
@@ -703,7 +736,9 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
         handler: The HTTP request handler instance.
         state: The server state singleton.
     """
-    payload = read_json_body(handler)
+    payload = _read_request_payload(handler)
+    if payload is None:
+        return
     
     # Validate settings
     errors = []
@@ -860,7 +895,9 @@ def handle_create_route(handler: BaseHTTPRequestHandler, state: "ServerState") -
         return
     
     try:
-        payload = read_json_body(handler)
+        payload = _read_request_payload(handler)
+        if payload is None:
+            return
         route = state.route_manager.add_route(payload)
         
         # Broadcast update to all clients
@@ -889,7 +926,9 @@ def handle_update_route(handler: BaseHTTPRequestHandler, state: "ServerState", r
         return
     
     try:
-        payload = read_json_body(handler)
+        payload = _read_request_payload(handler)
+        if payload is None:
+            return
         route = state.route_manager.update_route(route_id, payload)
         
         if not route:
