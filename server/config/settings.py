@@ -73,26 +73,27 @@ class SettingsManager:
         valid_keys = set(DEFAULT_CONFIG.keys())
         
         for key, value in config.items():
-            # Skip lowercase duplicates (from old INI parsing)
-            if key.lower() != key or key in valid_keys:
-                # Fix string values that should be other types
-                if isinstance(value, str):
-                    # Handle "true ; alternatives..." format from old INI
-                    if value.startswith('true') or value.startswith('false'):
-                        cleaned[key] = value.lower().startswith('true')
-                    elif value.startswith('null'):
-                        cleaned[key] = None
-                    else:
-                        # Try to parse as number
-                        try:
-                            if '.' in value:
-                                cleaned[key] = float(value.split()[0])
-                            else:
-                                cleaned[key] = int(value.split()[0])
-                        except (ValueError, IndexError):
-                            cleaned[key] = value
+            if key not in valid_keys:
+                continue
+
+            # Fix string values that should be other types
+            if isinstance(value, str):
+                # Handle "true ; alternatives..." format from old INI
+                if value.startswith('true') or value.startswith('false'):
+                    cleaned[key] = value.lower().startswith('true')
+                elif value.startswith('null'):
+                    cleaned[key] = None
                 else:
-                    cleaned[key] = value
+                    # Try to parse as number
+                    try:
+                        if '.' in value:
+                            cleaned[key] = float(value.split()[0])
+                        else:
+                            cleaned[key] = int(value.split()[0])
+                    except (ValueError, IndexError):
+                        cleaned[key] = value
+            else:
+                cleaned[key] = value
         
         return cleaned
 

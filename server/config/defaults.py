@@ -14,6 +14,8 @@ DEFAULT_CONFIG = {
     "mapLatitude": None,
     "mapLongitude": None,
     "satelliteMapEnabled": False,
+    "mapSource": "arcgis",
+    "mapType": "satellite",
     "mapZoomLevel": 15,
     "mapZoomMin": 5,
     "mapZoomMax": 25,
@@ -134,6 +136,8 @@ pollingIntervalMs=1000
 mapLatitude=null
 mapLongitude=null
 satelliteMapEnabled=false
+mapSource=arcgis
+mapType=satellite
 mapZoomLevel=15
 mapZoomMin=5
 mapZoomMax=25
@@ -160,10 +164,16 @@ azimuthSpeedDegPerSec=4
 elevationSpeedDegPerSec=2
 speedMinDegPerSec=0.5
 speedMaxDegPerSec=20
+azimuthLowSpeedStage=3
+azimuthHighSpeedStage=4
+elevationLowSpeedStage=3
+elevationHighSpeedStage=4
+azimuthSpeedAngleCode=3
+elevationSpeedAngleCode=3
 
 [Ramp]
 ; Softstart/Softstop PI controller settings
-rampEnabled=true
+rampEnabled=false
 rampKp=0.4
 rampKi=0.05
 rampSampleTimeMs=400
