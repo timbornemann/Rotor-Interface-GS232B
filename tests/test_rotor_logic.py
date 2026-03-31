@@ -176,6 +176,38 @@ class TestRotorLogic:
         # With factor 2.0: current azimuth should be interpreted as 180.
         mock_connection.send_command.assert_called_with("W180 030")
 
+    def test_handle_target_ramp_does_not_clear_newer_target(self, logic):
+        """Stale control-loop snapshots must not clear a newer target."""
+        with logic.state_lock:
+            logic.target_az = 90.0
+            logic.target_el = None
+
+        motion_state = logic._get_motion_state_snapshot()
+
+        with logic.state_lock:
+            logic.target_az = 180.0
+
+        logic._handle_target_ramp(current_az=90.0, current_el=45.0, dt=0.1, motion_state=motion_state)
+
+        assert logic.target_az == 180.0
+
+    def test_handle_manual_ramp_skips_stale_direction(self, logic):
+        """Stale manual snapshots must not send commands after direction changes."""
+        logic._send_direct_target = Mock()
+
+        with logic.state_lock:
+            logic.manual_direction = 'R'
+            logic.ramp_start_time = time.time() - 0.5
+
+        motion_state = logic._get_motion_state_snapshot()
+
+        with logic.state_lock:
+            logic.manual_direction = 'L'
+
+        logic._handle_manual_ramp(current_az=10.0, current_el=20.0, dt=0.2, motion_state=motion_state)
+
+        logic._send_direct_target.assert_not_called()
+
 
 class TestRotorLogicCalibration:
     """Tests for calibration calculations."""
