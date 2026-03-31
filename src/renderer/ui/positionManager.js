@@ -16,6 +16,7 @@ class PositionManager {
     this.positions = [];
     this.draggedElement = null;
     this.draggedIndex = null;
+    this.renderEventController = null;
     
     this.render();
   }
@@ -44,6 +45,7 @@ class PositionManager {
    * Render the position manager UI
    */
   render() {
+    this.cleanupEventListeners();
     this.root.innerHTML = `
       <div class="positions-manager">
         <div class="positions-header">
@@ -146,16 +148,18 @@ class PositionManager {
    * Bind event listeners
    */
   bindEvents() {
+    this.renderEventController = new AbortController();
+    const { signal } = this.renderEventController;
     const saveCurrentBtn = this.root.querySelector('#saveCurrentBtn');
     const addManualBtn = this.root.querySelector('#addManualBtn');
     const positionsList = this.root.querySelector('#positionsList');
 
     if (saveCurrentBtn) {
-      saveCurrentBtn.addEventListener('click', () => this.handleSaveCurrent());
+      saveCurrentBtn.addEventListener('click', () => this.handleSaveCurrent(), { signal });
     }
 
     if (addManualBtn) {
-      addManualBtn.addEventListener('click', () => this.handleAddManual());
+      addManualBtn.addEventListener('click', () => this.handleAddManual(), { signal });
     }
 
     if (positionsList) {
@@ -181,20 +185,20 @@ class PositionManager {
           this.handleEditPosition(index);
           return;
         }
-      });
+      }, { signal });
 
       // Drag and drop
-      this.setupDragAndDrop(positionsList);
+      this.setupDragAndDrop(positionsList, signal);
     }
 
     // Form events
-    this.bindFormEvents();
+    this.bindFormEvents(signal);
   }
 
   /**
    * Bind form events
    */
-  bindFormEvents() {
+  bindFormEvents(signal) {
     const form = this.root.querySelector('#positionForm');
     const closeBtn = this.root.querySelector('#closeFormBtn');
     const cancelBtn = this.root.querySelector('#cancelFormBtn');
@@ -202,15 +206,15 @@ class PositionManager {
     const nameInput = this.root.querySelector('#positionName');
 
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => this.hideForm());
+      closeBtn.addEventListener('click', () => this.hideForm(), { signal });
     }
 
     if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this.hideForm());
+      cancelBtn.addEventListener('click', () => this.hideForm(), { signal });
     }
 
     if (saveBtn) {
-      saveBtn.addEventListener('click', () => this.handleFormSave());
+      saveBtn.addEventListener('click', () => this.handleFormSave(), { signal });
     }
 
     if (nameInput) {
@@ -218,72 +222,131 @@ class PositionManager {
         if (e.key === 'Enter') {
           this.handleFormSave();
         }
-      });
+      }, { signal });
+    }
+  }
+
+  cleanupEventListeners() {
+    this.resetDragState(this.root.querySelector('#positionsList'));
+    if (this.renderEventController) {
+      this.renderEventController.abort();
+      this.renderEventController = null;
+    }
+  }
+
+  resetDragState(container) {
+    if (this.draggedElement) {
+      this.draggedElement.classList.remove('dragging');
+    }
+    this.draggedElement = null;
+    this.draggedIndex = null;
+
+    if (container) {
+      container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
     }
   }
 
   /**
    * Setup drag and drop for position cards
    */
-  setupDragAndDrop(container) {
-    const cards = container.querySelectorAll('.position-card');
+  setupDragAndDrop(container, signal) {
+    container.addEventListener('dragstart', (e) => {
+      const card = e.target.closest('.position-card');
+      if (!card || !container.contains(card)) {
+        return;
+      }
 
-    cards.forEach((card) => {
-      card.addEventListener('dragstart', (e) => {
-        this.draggedElement = card;
-        this.draggedIndex = parseInt(card.dataset.index, 10);
-        card.classList.add('dragging');
+      this.draggedElement = card;
+      this.draggedIndex = parseInt(card.dataset.index, 10);
+      card.classList.add('dragging');
+
+      if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/html', card.innerHTML);
-      });
+      }
+    }, { signal });
 
-      card.addEventListener('dragend', () => {
-        card.classList.remove('dragging');
-        this.draggedElement = null;
-        this.draggedIndex = null;
-        // Remove all drag-over classes
-        container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-      });
+    container.addEventListener('dragend', (e) => {
+      const card = e.target.closest('.position-card');
+      if (!card || !container.contains(card)) {
+        return;
+      }
 
-      card.addEventListener('dragover', (e) => {
-        e.preventDefault();
+      card.classList.remove('dragging');
+      this.resetDragState(container);
+    }, { signal });
+
+    container.addEventListener('dragover', (e) => {
+      if (this.draggedIndex === null) {
+        return;
+      }
+
+      const card = e.target.closest('.position-card');
+      if (!card || !container.contains(card)) {
+        return;
+      }
+
+      e.preventDefault();
+      if (e.dataTransfer) {
         e.dataTransfer.dropEffect = 'move';
+      }
 
-        const afterElement = this.getDragAfterElement(container, e.clientY);
-        const dragging = container.querySelector('.dragging');
+      const afterElement = this.getDragAfterElement(container, e.clientY);
+      const dragging = this.draggedElement || container.querySelector('.dragging');
+      if (!dragging) {
+        return;
+      }
 
-        if (afterElement == null) {
-          container.appendChild(dragging);
-        } else {
-          container.insertBefore(dragging, afterElement);
-        }
-      });
+      if (afterElement == null) {
+        container.appendChild(dragging);
+      } else {
+        container.insertBefore(dragging, afterElement);
+      }
+    }, { signal });
 
-      card.addEventListener('dragenter', (e) => {
-        if (e.target.classList.contains('position-card')) {
-          e.target.classList.add('drag-over');
-        }
-      });
+    container.addEventListener('dragenter', (e) => {
+      const card = e.target.closest('.position-card');
+      if (!card || !container.contains(card) || card === this.draggedElement) {
+        return;
+      }
 
-      card.addEventListener('dragleave', (e) => {
-        if (e.target.classList.contains('position-card')) {
-          e.target.classList.remove('drag-over');
-        }
-      });
+      card.classList.add('drag-over');
+    }, { signal });
 
-      card.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+    container.addEventListener('dragleave', (e) => {
+      const card = e.target.closest('.position-card');
+      if (!card || !container.contains(card)) {
+        return;
+      }
 
-        if (this.draggedIndex === null) return;
+      if (e.relatedTarget && card.contains(e.relatedTarget)) {
+        return;
+      }
 
-        const targetIndex = parseInt(card.dataset.index, 10);
+      card.classList.remove('drag-over');
+    }, { signal });
 
-        if (this.draggedIndex !== targetIndex) {
-          this.handleReorder(this.draggedIndex, targetIndex);
-        }
-      });
-    });
+    container.addEventListener('drop', (e) => {
+      const card = e.target.closest('.position-card');
+      if (!card || !container.contains(card)) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (this.draggedIndex === null) {
+        return;
+      }
+
+      const targetIndex = parseInt(card.dataset.index, 10);
+
+      if (this.draggedIndex !== targetIndex) {
+        this.handleReorder(this.draggedIndex, targetIndex);
+      }
+
+      this.resetDragState(container);
+    }, { signal });
   }
 
   /**
