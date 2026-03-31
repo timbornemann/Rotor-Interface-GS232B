@@ -54,7 +54,7 @@
   "rampToleranceDegMax": 10,
   "azimuthMode": 450,
   "azimuthMinLimit": 0,
-  "azimuthMaxLimit": 360,
+  "azimuthMaxLimit": 450,
   "elevationMinLimit": 0,
   "elevationMaxLimit": 90,
   "parkPositionsEnabled": false,
