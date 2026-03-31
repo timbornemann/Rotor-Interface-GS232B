@@ -6,6 +6,8 @@ Manages routes stored in routes.json with thread-safe operations.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -53,16 +55,31 @@ class RouteManager:
     
     def _save_routes(self) -> None:
         """Save routes to JSON file."""
+        temp_path: Optional[str] = None
         try:
             # Ensure directory exists
             self.routes_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Write to file
-            with open(self.routes_file, 'w', encoding='utf-8') as f:
+
+            fd, temp_path = tempfile.mkstemp(
+                dir=str(self.routes_file.parent),
+                prefix=f".{self.routes_file.stem}.",
+                suffix=".tmp"
+            )
+
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump({"routes": self._routes}, f, indent=2, ensure_ascii=False)
-            
+                f.flush()
+                os.fsync(f.fileno())
+
+            os.replace(temp_path, self.routes_file)
+            temp_path = None
             log(f"[RouteManager] Saved {len(self._routes)} routes to {self.routes_file}")
         except Exception as e:
+            if temp_path:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
             log(f"[RouteManager] Error saving routes: {e}", level="ERROR")
             raise
     
