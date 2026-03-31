@@ -14,6 +14,7 @@ class SettingsModal {
     this.currentConfig = null;
     this.onSaveCallback = null;
     this.clientsRefreshTimer = null;
+    this.initialized = false;
     this.wsUnsubscribers = [];
     this.locationMap = null;
     this.locationMarker = null;
@@ -111,10 +112,16 @@ class SettingsModal {
   }
 
   init() {
+    if (this.initialized) {
+      return;
+    }
+
     if (!this.modal || !this.closeBtn || !this.saveBtn || !this.cancelBtn) {
       console.error('[SettingsModal] Cannot initialize - required elements missing');
       return;
     }
+
+    this.initialized = true;
 
     // Navigation switching
     this.navItems.forEach(item => {
@@ -169,13 +176,12 @@ class SettingsModal {
       }
     });
     
-    // Setup WebSocket listener for client list updates
-    this.setupWebSocketListeners();
-
     console.log('[SettingsModal] Initialized successfully');
   }
   
   setupWebSocketListeners() {
+    this.cleanupWebSocketListeners();
+
     // Listen for client list updates from WebSocket
     if (typeof window.wsService !== 'undefined') {
       const unsubscribe = window.wsService.on('client_list_updated', (data) => {
@@ -202,6 +208,19 @@ class SettingsModal {
       });
       this.wsUnsubscribers.push(unsubscribeSettings);
     }
+  }
+
+  cleanupWebSocketListeners() {
+    this.wsUnsubscribers.forEach((unsubscribe) => {
+      try {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      } catch (error) {
+        console.warn('[SettingsModal] Error cleaning up WebSocket listener:', error);
+      }
+    });
+    this.wsUnsubscribers = [];
   }
 
   setupRangeSync(rangeId, inputId) {
@@ -659,6 +678,7 @@ class SettingsModal {
   async open(config, onSave) {
     this.currentConfig = { ...config };
     this.onSaveCallback = onSave;
+    this.setupWebSocketListeners();
     
     // Load config into form fields
     this.loadConfigIntoForm(config);
@@ -680,6 +700,7 @@ class SettingsModal {
     document.body.style.overflow = '';
     this.currentConfig = null;
     this.onSaveCallback = null;
+    this.cleanupWebSocketListeners();
     
     // Clear any refresh timers
     if (this.clientsRefreshTimer) {
