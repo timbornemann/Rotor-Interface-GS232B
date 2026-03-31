@@ -127,6 +127,7 @@ class SessionManager:
         """Remove sessions that have been inactive too long."""
         now = datetime.now()
         stale_ids = []
+        clients_snapshot: Optional[List[dict]] = None
         
         with self._lock:
             for session_id, session in self._sessions.items():
@@ -137,10 +138,12 @@ class SessionManager:
             
             for session_id in stale_ids:
                 del self._sessions[session_id]
+            if stale_ids:
+                clients_snapshot = self._get_all_sessions_as_list_unlocked()
                 
         if stale_ids:
             log(f"[SessionManager] Cleaned up {len(stale_ids)} stale sessions")
-            self._broadcast_client_list()
+            self._broadcast_client_list(clients_snapshot)
     
     def enforce_max_clients(self) -> bool:
         """Check if we can accept a new client.
@@ -168,6 +171,7 @@ class SessionManager:
         Returns:
             The existing or new ClientSession, or None if max clients reached.
         """
+        clients_snapshot: Optional[List[dict]] = None
         with self._lock:
             # Try to find existing session
             if session_id and session_id in self._sessions:
@@ -189,10 +193,11 @@ class SessionManager:
                 user_agent=self._parse_user_agent(user_agent)
             )
             self._sessions[new_id] = session
+            clients_snapshot = self._get_all_sessions_as_list_unlocked()
             log(f"[SessionManager] New session created: {new_id[:8]}... from {ip} ({active_count + 1}/{self.max_clients})")
             
         # Broadcast updated client list
-        self._broadcast_client_list()
+        self._broadcast_client_list(clients_snapshot)
         
         return session
     
@@ -269,12 +274,17 @@ class SessionManager:
         Returns:
             True if session was removed, False if not found.
         """
+        clients_snapshot: Optional[List[dict]] = None
         with self._lock:
             if session_id in self._sessions:
                 del self._sessions[session_id]
+                clients_snapshot = self._get_all_sessions_as_list_unlocked()
                 log(f"[SessionManager] Session removed: {session_id[:8]}...")
-                return True
-            return False
+            else:
+                return False
+
+        self._broadcast_client_list(clients_snapshot)
+        return True
     
     def suspend_session(self, session_id: str) -> bool:
         """Suspend a client session.
@@ -285,10 +295,14 @@ class SessionManager:
         Returns:
             True if session was suspended, False if not found.
         """
+        clients_snapshot: Optional[List[dict]] = None
         with self._lock:
-            if session_id in self._sessions:
-                self._sessions[session_id].status = SessionStatus.SUSPENDED
-                log(f"[SessionManager] Session suspended: {session_id[:8]}...")
+            if session_id not in self._sessions:
+                return False
+
+            self._sessions[session_id].status = SessionStatus.SUSPENDED
+            clients_snapshot = self._get_all_sessions_as_list_unlocked()
+            log(f"[SessionManager] Session suspended: {session_id[:8]}...")
                 
         # Notify the suspended client via WebSocket
         if self._websocket_manager:
@@ -297,7 +311,7 @@ class SessionManager:
                 "Your session has been suspended. Reload the page to reconnect."
             )
             
-        self._broadcast_client_list()
+        self._broadcast_client_list(clients_snapshot)
         return True
     
     def resume_session(self, session_id: str) -> bool:
@@ -309,12 +323,16 @@ class SessionManager:
         Returns:
             True if session was resumed, False if not found.
         """
+        clients_snapshot: Optional[List[dict]] = None
         with self._lock:
-            if session_id in self._sessions:
-                self._sessions[session_id].status = SessionStatus.ACTIVE
-                log(f"[SessionManager] Session resumed: {session_id[:8]}...")
+            if session_id not in self._sessions:
+                return False
+
+            self._sessions[session_id].status = SessionStatus.ACTIVE
+            clients_snapshot = self._get_all_sessions_as_list_unlocked()
+            log(f"[SessionManager] Session resumed: {session_id[:8]}...")
                 
-        self._broadcast_client_list()
+        self._broadcast_client_list(clients_snapshot)
         return True
     
     def is_session_suspended(self, session_id: str) -> bool:
@@ -348,7 +366,7 @@ class SessionManager:
             List of session dictionaries suitable for JSON.
         """
         with self._lock:
-            return [session.to_dict() for session in self._sessions.values()]
+            return self._get_all_sessions_as_list_unlocked()
     
     def get_session_count(self) -> int:
         """Get the number of active sessions.
@@ -359,8 +377,12 @@ class SessionManager:
         with self._lock:
             return len(self._sessions)
     
-    def _broadcast_client_list(self) -> None:
+    def _get_all_sessions_as_list_unlocked(self) -> List[dict]:
+        """Return a serialized session snapshot while the caller holds the lock."""
+        return [session.to_dict() for session in self._sessions.values()]
+
+    def _broadcast_client_list(self, clients: Optional[List[dict]] = None) -> None:
         """Broadcast the current client list to all WebSocket clients."""
         if self._websocket_manager:
-            clients = self.get_all_sessions_as_list()
-            self._websocket_manager.broadcast_client_list(clients)
+            snapshot = clients if clients is not None else self.get_all_sessions_as_list()
+            self._websocket_manager.broadcast_client_list(snapshot)
