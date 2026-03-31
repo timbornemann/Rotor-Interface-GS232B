@@ -326,6 +326,43 @@ class TestRotorConnectAPI:
         error_data = json.loads(exc_info.value.read().decode("utf-8"))
         assert "error" in error_data
 
+    def test_connect_invalid_json_returns_bad_request(self, test_server):
+        """POST /api/rotor/connect with malformed JSON should return a JSON parse error."""
+        base_url, state = test_server
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/rotor/connect"),
+            data=b'{"port": "COM3"',
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
+
+        assert exc_info.value.code == 400
+        error_data = json.loads(exc_info.value.read().decode("utf-8"))
+        assert error_data["error"] == "Invalid JSON"
+
+    def test_connect_returns_server_error_when_rotor_connection_missing(self, test_server):
+        """POST /api/rotor/connect should fail cleanly if rotor_connection was not initialized."""
+        base_url, state = test_server
+        state.rotor_connection = None
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/rotor/connect"),
+            data=json.dumps({"port": "COM3"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
+
+        assert exc_info.value.code == 500
+        error_data = json.loads(exc_info.value.read().decode("utf-8"))
+        assert error_data["error"] == "Rotor connection not initialized"
+
 
 class TestRotorDisconnectAPI:
     """Tests for the rotor disconnect API endpoint."""
