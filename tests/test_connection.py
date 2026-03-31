@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from server.connection.port_scanner import list_available_ports, SERIAL_AVAILABLE
+import server.connection.serial_connection as serial_connection_module
 from server.connection.serial_connection import RotorConnection
 
 
@@ -147,4 +148,27 @@ class TestRotorConnectionMocked:
         assert status is not None
         assert "timestamp" in status
         assert isinstance(status["timestamp"], int)
+
+    def test_connect_closes_port_when_startup_fails(self):
+        """connect should close an opened port if setup fails after Serial() succeeds."""
+        connection = RotorConnection()
+        mock_serial = MagicMock()
+        mock_serial.is_open = True
+
+        serial_mock = MagicMock()
+        serial_mock.Serial.return_value = mock_serial
+        serial_mock.PARITY_NONE = object()
+        serial_mock.STOPBITS_ONE = object()
+
+        with patch.object(serial_connection_module, "SERIAL_AVAILABLE", True):
+            with patch.object(serial_connection_module, "serial", serial_mock, create=True):
+                with patch.object(connection, "_start_background_threads", side_effect=RuntimeError("thread failure")):
+                    with pytest.raises(RuntimeError, match="thread failure"):
+                        connection.connect("COM1")
+
+        mock_serial.close.assert_called_once()
+        assert connection.serial is None
+        assert connection.port is None
+        assert not connection.read_active
+        assert not connection.polling_active
 
