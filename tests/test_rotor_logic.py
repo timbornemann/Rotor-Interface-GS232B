@@ -254,6 +254,16 @@ class TestRotorLogicCalibration:
         assert status["azimuth"] == 90
         assert status["elevation"] == 22.5
 
+    def test_calibrated_status_with_zero_scale_falls_back_to_unscaled(self, logic):
+        """Zero scale factors must not raise and should fall back to 1.0."""
+        logic.config["azimuthScaleFactor"] = 0
+        logic.config["elevationScaleFactor"] = 0
+
+        status = logic._get_calibrated_status()
+
+        assert status["azimuth"] == 180
+        assert status["elevation"] == 45
+
     def test_calibrated_status_feedback_correction_disabled(self, logic):
         """Feedback correction disabled should keep adapter raw values unchanged."""
         logic.config["feedbackCorrectionEnabled"] = False
