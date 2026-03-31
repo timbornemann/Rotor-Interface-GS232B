@@ -47,6 +47,7 @@ class RotorConnection:
         self.polling_interval_lock = threading.Lock()  # Lock for thread-safe interval updates
         self.buffer = ""
         self.status: Optional[Dict[str, Any]] = None
+        self.serial_lock = threading.RLock()
         self.status_lock = threading.Lock()
         self.write_lock = threading.Lock()
 
@@ -56,7 +57,46 @@ class RotorConnection:
         Returns:
             True if connected and port is open, False otherwise.
         """
-        return self.serial is not None and self.serial.is_open
+        return self._get_serial_connection() is not None
+
+    def _get_serial_connection(self) -> Optional[Any]:
+        """Get the current open serial connection, if any."""
+        with self.serial_lock:
+            serial_connection = self.serial
+            if serial_connection is None:
+                return None
+            if not getattr(serial_connection, "is_open", False):
+                return None
+            return serial_connection
+
+    def _close_serial_connection(self, serial_connection: Optional[Any]) -> None:
+        """Close a serial connection safely."""
+        if not serial_connection or not getattr(serial_connection, "is_open", False):
+            return
+
+        try:
+            serial_connection.close()
+        except Exception as e:
+            log(f"[RotorConnection] Error closing port: {e}")
+
+    def _start_background_threads(self) -> None:
+        """Start the background read and polling threads."""
+        self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
+        self.read_thread.start()
+        self.polling_thread = threading.Thread(target=self._polling_loop, daemon=True)
+        self.polling_thread.start()
+
+    def _join_background_threads(self) -> None:
+        """Wait for background threads to finish and clear references."""
+        current_thread = threading.current_thread()
+
+        if self.read_thread and self.read_thread.is_alive() and self.read_thread is not current_thread:
+            self.read_thread.join(timeout=2.0)
+        self.read_thread = None
+
+        if self.polling_thread and self.polling_thread.is_alive() and self.polling_thread is not current_thread:
+            self.polling_thread.join(timeout=2.0)
+        self.polling_thread = None
 
     def connect(self, port: str, baud_rate: int = 9600) -> None:
         """Connect to a COM port.
@@ -74,8 +114,9 @@ class RotorConnection:
         if not SERIAL_AVAILABLE:
             raise RuntimeError("pyserial is not installed. Install with: pip install pyserial")
         
+        serial_connection = None
         try:
-            self.serial = serial.Serial(
+            serial_connection = serial.Serial(
                 port=port,
                 baudrate=baud_rate,
                 bytesize=8,
@@ -84,47 +125,46 @@ class RotorConnection:
                 timeout=1.0,
                 write_timeout=1.0
             )
-            self.port = port
+
+            with self.serial_lock:
+                self.serial = serial_connection
+                self.port = port
             self.baud_rate = baud_rate
             self.read_active = True
             self.polling_active = True
+            self.buffer = ""
             
-            # Start background threads
-            self.read_thread = threading.Thread(target=self._read_loop, daemon=True)
-            self.read_thread.start()
-            self.polling_thread = threading.Thread(target=self._polling_loop, daemon=True)
-            self.polling_thread.start()
+            self._start_background_threads()
             
             log(f"[RotorConnection] Connected to {port} at {baud_rate} baud")
         except Exception as e:
-            self.serial = None
+            self.read_active = False
+            self.polling_active = False
+            self._close_serial_connection(serial_connection)
+            self._join_background_threads()
+            with self.serial_lock:
+                if self.serial is serial_connection:
+                    self.serial = None
+                self.port = None
+            self.buffer = ""
+            with self.status_lock:
+                self.status = None
             raise RuntimeError(f"Failed to connect to {port}: {e}")
 
     def disconnect(self) -> None:
         """Disconnect from the port."""
         self.read_active = False
         self.polling_active = False
-        
-        # Wait for threads to finish
-        if self.read_thread and self.read_thread.is_alive():
-            self.read_thread.join(timeout=2.0)
-        self.read_thread = None
 
-        if self.polling_thread and self.polling_thread.is_alive():
-            self.polling_thread.join(timeout=2.0)
-        self.polling_thread = None
-        
-        # Close serial connection
-        if self.serial:
-            if hasattr(self.serial, 'is_open') and self.serial.is_open:
-                try:
-                    self.serial.close()
-                except Exception as e:
-                    log(f"[RotorConnection] Error closing port: {e}")
+        with self.serial_lock:
+            serial_connection = self.serial
+            self.serial = None
+            self.port = None
+
+        self._close_serial_connection(serial_connection)
+        self._join_background_threads()
         
         # Reset state
-        self.serial = None
-        self.port = None
         self.buffer = ""
         with self.status_lock:
             self.status = None
@@ -139,14 +179,16 @@ class RotorConnection:
         Raises:
             RuntimeError: If not connected or send fails.
         """
-        if not self.is_connected():
-            raise RuntimeError("Not connected to rotor")
-        
         command_with_cr = command if command.endswith('\r') else f"{command}\r"
         try:
             with self.write_lock:
-                self.serial.write(command_with_cr.encode('utf-8'))
+                serial_connection = self._get_serial_connection()
+                if serial_connection is None:
+                    raise RuntimeError("Not connected to rotor")
+                serial_connection.write(command_with_cr.encode('utf-8'))
             log(f"[RotorConnection] Sent: {command_with_cr!r}")
+        except RuntimeError:
+            raise
         except Exception as e:
             raise RuntimeError(f"Failed to send command: {e}")
 
@@ -173,7 +215,10 @@ class RotorConnection:
 
     def _polling_loop(self) -> None:
         """Background thread to poll the rotor for status."""
-        while self.polling_active and self.serial and self.serial.is_open:
+        while self.polling_active:
+            if self._get_serial_connection() is None:
+                break
+
             try:
                 # Send C2 with configured interval
                 self.send_command("C2")
@@ -184,7 +229,10 @@ class RotorConnection:
                 sleep_chunk = 0.1  # Sleep in 100ms chunks
                 
                 elapsed = 0.0
-                while self.polling_active and self.serial and self.serial.is_open:
+                while self.polling_active:
+                    if self._get_serial_connection() is None:
+                        break
+
                     # Get current target sleep time (re-read each iteration to catch changes)
                     with self.polling_interval_lock:
                         target_sleep = self.polling_interval_s
@@ -200,16 +248,23 @@ class RotorConnection:
                     elapsed += chunk
                         
             except Exception as e:
+                if not self.polling_active or self._get_serial_connection() is None:
+                    break
                 log(f"[RotorConnection] Polling error: {e}")
                 time.sleep(1.0)
 
     def _read_loop(self) -> None:
         """Background thread to read data from the serial port."""
-        while self.read_active and self.serial and self.serial.is_open:
+        while self.read_active:
+            serial_connection = self._get_serial_connection()
+            if serial_connection is None:
+                break
+
             try:
-                if self.serial.in_waiting > 0:
+                in_waiting = serial_connection.in_waiting
+                if in_waiting > 0:
                     try:
-                        data = self.serial.read(self.serial.in_waiting)
+                        data = serial_connection.read(in_waiting)
                         decoded = data.decode('utf-8', errors='ignore')
                         self.buffer += decoded
                         
@@ -228,7 +283,7 @@ class RotorConnection:
                     time.sleep(0.1)
             except Exception:
                 # Don't spam log on repetitive errors, just break if fatal
-                if not self.serial or not self.serial.is_open:
+                if self._get_serial_connection() is None:
                     break
                 time.sleep(1)
 
