@@ -755,7 +755,7 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
         if not isinstance(ws_port, int) or ws_port < 1024 or ws_port > 65535:
             errors.append("WebSocket port must be between 1024 and 65535")
     
-    if http_port and ws_port and http_port == ws_port:
+    if http_port is not None and ws_port is not None and http_port == ws_port:
         errors.append("HTTP and WebSocket ports must be different")
     
     # Validate polling interval

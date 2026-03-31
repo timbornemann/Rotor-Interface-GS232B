@@ -363,20 +363,24 @@ class WebSocketManager:
         for websocket in clients:
             try:
                 await websocket.send(message)
-            except Exception:
-                pass  # Client may have disconnected
-    
+            except websockets.exceptions.ConnectionClosed:
+                pass  # Client disconnected – expected, no action needed
+            except Exception as e:
+                log(f"[WebSocket] Unexpected error broadcasting to client: {e}")
+
     async def _send(self, websocket: WebSocketServerProtocol, message: str) -> None:
         """Send a message to a specific client.
-        
+
         Args:
             websocket: The WebSocket connection.
             message: The message to send.
         """
         try:
             await websocket.send(message)
-        except Exception:
-            pass
+        except websockets.exceptions.ConnectionClosed:
+            pass  # Client disconnected – expected, no action needed
+        except Exception as e:
+            log(f"[WebSocket] Unexpected error sending to client: {e}")
     
     async def _run_server(self, host: str, port: int) -> None:
         """Run the WebSocket server.
@@ -436,13 +440,14 @@ class WebSocketManager:
             finally:
                 # Clean shutdown of event loop
                 try:
-                    # Cancel all pending tasks
-                    pending = asyncio.all_tasks(self._loop)
-                    for task in pending:
-                        task.cancel()
-                    # Wait for tasks to complete cancellation
-                    if pending:
-                        self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    # Guard against event loop creation failure (self._loop may be None)
+                    if self._loop is not None:
+                        pending = asyncio.all_tasks(self._loop)
+                        for task in pending:
+                            task.cancel()
+                        # Wait for tasks to complete cancellation
+                        if pending:
+                            self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 except Exception:
                     pass
                 finally:
