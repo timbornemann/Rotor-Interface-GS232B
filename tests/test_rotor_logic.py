@@ -132,6 +132,13 @@ class TestRotorLogic:
         assert logic.config["azimuthMax"] == 350
         assert logic.config["azimuthMode"] == 450
         assert logic.config["rampEnabled"] == True
+
+    def test_update_config_normalizes_azimuth_mode_to_int(self, logic):
+        """Azimuth mode should be stored as an integer mode selector."""
+        logic.update_config({"azimuthMode": "450.0"})
+
+        assert logic.config["azimuthMode"] == 450
+        assert isinstance(logic.config["azimuthMode"], int)
     
     def test_update_config_calibration(self, logic):
         """update_config should update calibration values."""
