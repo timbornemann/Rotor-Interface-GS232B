@@ -141,11 +141,19 @@ class RotorLogic:
             except (ValueError, TypeError):
                 return default
 
+        def safe_int(key: str, default: int) -> int:
+            try:
+                if key in new_config:
+                    return int(float(new_config[key]))
+                return int(self.config.get(key, default))
+            except (ValueError, TypeError):
+                return default
+
         self.config["azimuthMin"] = safe_float("azimuthMinLimit", 0)
         self.config["azimuthMax"] = safe_float("azimuthMaxLimit", 360)
         self.config["elevationMin"] = safe_float("elevationMinLimit", 0)
         self.config["elevationMax"] = safe_float("elevationMaxLimit", 90)
-        self.config["azimuthMode"] = float(new_config.get("azimuthMode", 360))
+        self.config["azimuthMode"] = 450 if safe_int("azimuthMode", 360) == 450 else 360
         self.config["azimuthSpeedDegPerSec"] = safe_float("azimuthSpeedDegPerSec", 4.0)
         self.config["elevationSpeedDegPerSec"] = safe_float("elevationSpeedDegPerSec", 2.0)
         self.config["rampEnabled"] = new_config.get("rampEnabled", False) in [True, "true", "True", 1]
