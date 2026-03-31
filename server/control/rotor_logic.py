@@ -386,8 +386,19 @@ class RotorLogic:
         if az_raw is None or el_raw is None:
             return None
 
-        az_scale = self.config.get("azimuthScaleFactor", 1.0) or 1.0
-        el_scale = self.config.get("elevationScaleFactor", 1.0) or 1.0
+        try:
+            az_scale = float(self.config.get("azimuthScaleFactor", 1.0))
+        except (TypeError, ValueError):
+            az_scale = 1.0
+        try:
+            el_scale = float(self.config.get("elevationScaleFactor", 1.0))
+        except (TypeError, ValueError):
+            el_scale = 1.0
+
+        if az_scale <= 0:
+            az_scale = 1.0
+        if el_scale <= 0:
+            el_scale = 1.0
 
         az_cal = (az_raw + self.config["azimuthOffset"]) / az_scale
         el_cal = (el_raw + self.config["elevationOffset"]) / el_scale
