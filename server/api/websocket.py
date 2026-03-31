@@ -7,6 +7,7 @@ connection state synchronization and client management.
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import threading
 from dataclasses import dataclass, field
@@ -341,6 +342,14 @@ class WebSocketManager:
         if self.session_manager:
             clients = self.session_manager.get_all_sessions_as_list()
             self.broadcast_client_list(clients)
+
+    def _is_address_in_use_error(self, error: OSError) -> bool:
+        """Return True when an OSError represents an address-in-use conflict."""
+        address_in_use_errnos = {10048}
+        if hasattr(errno, "EADDRINUSE"):
+            address_in_use_errnos.add(errno.EADDRINUSE)
+
+        return error.errno in address_in_use_errnos or "address already in use" in str(error).lower()
     
     async def _broadcast(self, message: str) -> None:
         """Broadcast a message to all connected clients.
@@ -393,7 +402,7 @@ class WebSocketManager:
                     log("[WebSocket] Server shutdown requested")
                     self._running = False
         except OSError as e:
-            if e.errno == 10048 or "Address already in use" in str(e):
+            if self._is_address_in_use_error(e):
                 log(f"[WebSocket] ERROR: Port {port} is already in use. WebSocket server disabled.")
                 log("[WebSocket] Please stop any other instances of the server or change the port.")
             else:
