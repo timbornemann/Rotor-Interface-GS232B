@@ -131,6 +131,8 @@ class ConfigStore {
    */
   sanitizeConfig(config) {
     const sanitized = { ...config };
+    const azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
+    sanitized.azimuthMode = azimuthMode;
     
     // Ensure speed limits are valid
     sanitized.speedMinDegPerSec = this.sanitizeNumber(
@@ -140,19 +142,49 @@ class ConfigStore {
       config.speedMaxDegPerSec, sanitized.speedMinDegPerSec, 200, defaultConfig.speedMaxDegPerSec
     );
     
+    sanitized.mapZoomMin = this.sanitizeNumber(
+      config.mapZoomMin, 0, 25, defaultConfig.mapZoomMin
+    );
+    sanitized.mapZoomMax = this.sanitizeNumber(
+      config.mapZoomMax, 0, 25, defaultConfig.mapZoomMax
+    );
+
     // Ensure zoom limits are valid
     if (sanitized.mapZoomMin > sanitized.mapZoomMax) {
       const temp = sanitized.mapZoomMin;
       sanitized.mapZoomMin = sanitized.mapZoomMax;
       sanitized.mapZoomMax = temp;
     }
+    sanitized.mapZoomLevel = this.sanitizeNumber(
+      config.mapZoomLevel,
+      sanitized.mapZoomMin,
+      sanitized.mapZoomMax,
+      defaultConfig.mapZoomLevel
+    );
     
-    // Ensure limit values are valid
+    sanitized.azimuthMinLimit = this.sanitizeNumber(
+      config.azimuthMinLimit, 0, azimuthMode, defaultConfig.azimuthMinLimit
+    );
+    sanitized.azimuthMaxLimit = this.sanitizeNumber(
+      config.azimuthMaxLimit, 0, azimuthMode, defaultConfig.azimuthMaxLimit
+    );
+    sanitized.elevationMinLimit = this.sanitizeNumber(
+      config.elevationMinLimit, 0, 90, defaultConfig.elevationMinLimit
+    );
+    sanitized.elevationMaxLimit = this.sanitizeNumber(
+      config.elevationMaxLimit, 0, 90, defaultConfig.elevationMaxLimit
+    );
+
+    // Ensure limit values are valid without dropping either endpoint
     if (sanitized.azimuthMinLimit > sanitized.azimuthMaxLimit) {
-      sanitized.azimuthMaxLimit = sanitized.azimuthMinLimit;
+      const temp = sanitized.azimuthMinLimit;
+      sanitized.azimuthMinLimit = sanitized.azimuthMaxLimit;
+      sanitized.azimuthMaxLimit = temp;
     }
     if (sanitized.elevationMinLimit > sanitized.elevationMaxLimit) {
-      sanitized.elevationMaxLimit = sanitized.elevationMinLimit;
+      const temp = sanitized.elevationMinLimit;
+      sanitized.elevationMinLimit = sanitized.elevationMaxLimit;
+      sanitized.elevationMaxLimit = temp;
     }
 
     // Ensure feedback correction factors are valid and bounded

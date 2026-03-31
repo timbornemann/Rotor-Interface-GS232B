@@ -28,6 +28,22 @@ class RouteExecutor {
     this.positionTimeout = 60000; // 60 seconds max wait
   }
 
+  clearManualWaitCheckInterval(intervalId = this.manualWaitCheckInterval) {
+    if (!intervalId) {
+      return;
+    }
+
+    clearInterval(intervalId);
+    if (this.manualWaitCheckInterval === intervalId) {
+      this.manualWaitCheckInterval = null;
+    }
+  }
+
+  clearPendingManualWait() {
+    this.clearManualWaitCheckInterval();
+    this.manualContinueResolve = null;
+  }
+
   /**
    * Execute a route
    * @param {object} route - Route object with steps array
@@ -65,6 +81,7 @@ class RouteExecutor {
       console.error('[RouteExecutor] Route execution error:', error);
       this.emitComplete({ success: false, route: route, error: error.message });
     } finally {
+      this.clearPendingManualWait();
       this.isExecuting = false;
       this.currentRoute = null;
       this.currentStepIndex = 0;
@@ -170,9 +187,9 @@ class RouteExecutor {
    * Wait for rotor to reach target position
    */
   async waitForArrival(targetAz, targetEl) {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const startTime = Date.now();
-      let lastStatus = null;
+      const hasTimedOut = () => Date.now() - startTime > this.positionTimeout;
 
       const checkPosition = () => {
         if (this.shouldStop) {
@@ -182,16 +199,34 @@ class RouteExecutor {
 
         const status = this.rotorService.currentStatus;
         if (!status) {
+          if (hasTimedOut()) {
+            console.warn('[RouteExecutor] Position arrival timeout - continuing anyway');
+            resolve();
+            return;
+          }
           // No status yet, keep waiting
           setTimeout(checkPosition, 200);
           return;
         }
 
-        lastStatus = status;
-
         // Check if position is within tolerance
-        const currentAz = Number.isFinite(status.azimuthCorrectedRaw) ? status.azimuthCorrectedRaw : status.azimuthRaw;
-        const currentEl = Number.isFinite(status.elevationCorrectedRaw) ? status.elevationCorrectedRaw : status.elevationRaw;
+        const correctedAz = Number(status.azimuthCorrectedRaw);
+        const rawAz = Number(status.azimuthRaw);
+        const correctedEl = Number(status.elevationCorrectedRaw);
+        const rawEl = Number(status.elevationRaw);
+        const currentAz = Number.isFinite(correctedAz) ? correctedAz : rawAz;
+        const currentEl = Number.isFinite(correctedEl) ? correctedEl : rawEl;
+
+        if (!Number.isFinite(currentAz) || !Number.isFinite(currentEl)) {
+          if (hasTimedOut()) {
+            console.warn('[RouteExecutor] Position arrival timeout - continuing anyway');
+            resolve();
+            return;
+          }
+          setTimeout(checkPosition, 200);
+          return;
+        }
+
         const azDiff = Math.abs(currentAz - targetAz);
         const elDiff = Math.abs(currentEl - targetEl);
 
@@ -202,7 +237,7 @@ class RouteExecutor {
         }
 
         // Check timeout
-        if (Date.now() - startTime > this.positionTimeout) {
+        if (hasTimedOut()) {
           console.warn('[RouteExecutor] Position arrival timeout - continuing anyway');
           resolve(); // Don't fail, just continue
           return;
@@ -256,16 +291,24 @@ class RouteExecutor {
    */
   async waitForManualContinue() {
     return new Promise((resolve) => {
-      this.manualContinueResolve = resolve;
-      
+      this.clearPendingManualWait();
+
+      let checkStop = null;
+      const finishWait = () => {
+        if (this.manualContinueResolve === finishWait) {
+          this.manualContinueResolve = null;
+        }
+        this.clearManualWaitCheckInterval(checkStop);
+        checkStop = null;
+        resolve();
+      };
+
+      this.manualContinueResolve = finishWait;
+
       // Also resolve if stop is called
-      const checkStop = setInterval(() => {
+      checkStop = setInterval(() => {
         if (this.shouldStop) {
-          clearInterval(checkStop);
-          if (this.manualContinueResolve === resolve) {
-            this.manualContinueResolve = null;
-          }
-          resolve();
+          finishWait();
         }
       }, 100);
       
@@ -281,13 +324,8 @@ class RouteExecutor {
     if (this.manualContinueResolve) {
       console.log('[RouteExecutor] Manual continue triggered');
       this.manualContinueResolve();
-      this.manualContinueResolve = null;
-    }
-    
-    // Clean up check interval
-    if (this.manualWaitCheckInterval) {
-      clearInterval(this.manualWaitCheckInterval);
-      this.manualWaitCheckInterval = null;
+    } else {
+      this.clearManualWaitCheckInterval();
     }
   }
 
@@ -389,14 +427,9 @@ class RouteExecutor {
     // If waiting for manual continue, resolve it
     if (this.manualContinueResolve) {
       this.manualContinueResolve();
-      this.manualContinueResolve = null;
     }
-    
-    // Clean up check interval
-    if (this.manualWaitCheckInterval) {
-      clearInterval(this.manualWaitCheckInterval);
-      this.manualWaitCheckInterval = null;
-    }
+
+    this.clearManualWaitCheckInterval();
   }
 
   /**
