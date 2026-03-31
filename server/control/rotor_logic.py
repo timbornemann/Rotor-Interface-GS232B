@@ -57,6 +57,7 @@ class RotorLogic:
         self.connection = connection_manager
         self.running = False
         self.thread: Optional[threading.Thread] = None
+        self.state_lock = threading.RLock()
         
         # State
         self.target_az: Optional[float] = None
@@ -96,6 +97,19 @@ class RotorLogic:
             "parkAzimuth": 0.0,
             "parkElevation": 0.0
         }
+
+    def _get_motion_state_snapshot(self) -> Dict[str, Any]:
+        """Return a consistent snapshot of the motion state."""
+        with self.state_lock:
+            return {
+                "target_az": self.target_az,
+                "target_el": self.target_el,
+                "manual_direction": self.manual_direction,
+                "stopping": self.stopping,
+                "stop_phase_start": self.stop_phase_start,
+                "stop_initial_pos": self.stop_initial_pos,
+                "ramp_start_time": self.ramp_start_time,
+            }
 
     def start(self) -> None:
         """Start the control loop thread."""
@@ -249,16 +263,20 @@ class RotorLogic:
                 logger.info(f"Smart Azimuth: Input={az}, Current={current_az}, Candidates={candidates} -> Selected={best_az}")
                 az = best_az
 
-        self.target_az = float(az) if az is not None else None
-        self.target_el = float(el) if el is not None else None
-        self.manual_direction = None
-        self.stopping = False
-        self.ramp_start_time = time.time()
-        logger.info(f"Target set: Az={self.target_az}, El={self.target_el}")
+        target_az = float(az) if az is not None else None
+        target_el = float(el) if el is not None else None
+        ramp_start_time = time.time()
+        with self.state_lock:
+            self.target_az = target_az
+            self.target_el = target_el
+            self.manual_direction = None
+            self.stopping = False
+            self.ramp_start_time = ramp_start_time
+        logger.info(f"Target set: Az={target_az}, El={target_el}")
         
         # Immediate kickoff if ramp disabled
         if not self.config["rampEnabled"]:
-            self._send_direct_target(self.target_az, self.target_el)
+            self._send_direct_target(target_az, target_el)
 
     def manual_move(self, direction: str) -> None:
         """Start manual movement.
@@ -275,11 +293,13 @@ class RotorLogic:
             logger.warning(f"Unknown direction: {direction}")
             return
         
-        self.manual_direction = protocol_cmd
-        self.target_az = None
-        self.target_el = None
-        self.stopping = False
-        self.ramp_start_time = time.time()
+        ramp_start_time = time.time()
+        with self.state_lock:
+            self.manual_direction = protocol_cmd
+            self.target_az = None
+            self.target_el = None
+            self.stopping = False
+            self.ramp_start_time = ramp_start_time
         logger.info(f"Manual move started: {direction} -> {protocol_cmd}")
         
         if not self.config["rampEnabled"]:
@@ -288,9 +308,10 @@ class RotorLogic:
     def stop_motion(self) -> None:
         """Stop all motion."""
         logger.info("Stopping motion")
-        self.manual_direction = None
-        self.target_az = None
-        self.target_el = None
+        with self.state_lock:
+            self.manual_direction = None
+            self.target_az = None
+            self.target_el = None
         
         # Only send stop command if connected
         if not self.connection.is_connected():
@@ -298,15 +319,21 @@ class RotorLogic:
         
         if self.config["rampEnabled"]:
             # Initiate soft stop
-            self.stopping = True
-            self.stop_phase_start = time.time()
             status = self._get_calibrated_status()
             if status:
-                self.stop_initial_pos = status
+                with self.state_lock:
+                    self.stopping = True
+                    self.stop_phase_start = time.time()
+                    self.stop_initial_pos = status
             else:
-                self.stopping = False
+                with self.state_lock:
+                    self.stopping = False
+                    self.stop_initial_pos = None
                 self.connection.send_command("S")
         else:
+            with self.state_lock:
+                self.stopping = False
+                self.stop_initial_pos = None
             self.connection.send_command("S")
 
     def _apply_feedback_correction(self, raw_value: Optional[Any], factor_key: str) -> Optional[float]:
@@ -452,18 +479,19 @@ class RotorLogic:
                 dt = self.config["rampSampleTimeMs"] / 1000.0
                 current_az = status["azimuth"]
                 current_el = status["elevation"]
+                motion_state = self._get_motion_state_snapshot()
                 
                 # 1. Manual Move Ramp
-                if self.manual_direction:
-                    self._handle_manual_ramp(current_az, current_el, dt)
+                if motion_state["manual_direction"]:
+                    self._handle_manual_ramp(current_az, current_el, dt, motion_state)
                 
                 # 2. Target Move Ramp (Goto)
-                elif self.target_az is not None or self.target_el is not None:
-                    self._handle_target_ramp(current_az, current_el, dt)
+                elif motion_state["target_az"] is not None or motion_state["target_el"] is not None:
+                    self._handle_target_ramp(current_az, current_el, dt, motion_state)
                 
                 # 3. Soft Stop
-                elif self.stopping:
-                    self._handle_soft_stop()
+                elif motion_state["stopping"]:
+                    self._handle_soft_stop(motion_state)
 
                 time.sleep(self.config["rampSampleTimeMs"] / 1000.0)
 
@@ -471,7 +499,13 @@ class RotorLogic:
                 logger.error(f"Error in control loop: {e}")
                 time.sleep(1)
 
-    def _handle_manual_ramp(self, current_az: float, current_el: float, dt: float) -> None:
+    def _handle_manual_ramp(
+        self,
+        current_az: float,
+        current_el: float,
+        dt: float,
+        motion_state: Dict[str, Any]
+    ) -> None:
         """Handle ramped manual movement.
         
         Args:
@@ -479,13 +513,16 @@ class RotorLogic:
             current_el: Current elevation position.
             dt: Time delta in seconds.
         """
+        manual_direction = motion_state["manual_direction"]
+        ramp_start_time = motion_state["ramp_start_time"]
+
         # Calculate speed factor based on time (soft start)
-        elapsed = time.time() - self.ramp_start_time
+        elapsed = time.time() - ramp_start_time
         ramp_up_time = 2.0
         factor = 0.2 + (elapsed / ramp_up_time) * 0.8 if elapsed < ramp_up_time else 1.0
         
-        is_az = self.manual_direction in ['R', 'L']
-        direction_sign = 1 if self.manual_direction in ['R', 'U'] else -1
+        is_az = manual_direction in ['R', 'L']
+        direction_sign = 1 if manual_direction in ['R', 'U'] else -1
         
         if is_az:
             step_size = self.config["azimuthSpeedDegPerSec"] * dt * factor
@@ -497,15 +534,33 @@ class RotorLogic:
             if next_az > self.config["azimuthMax"]:
                 next_az = self.config["azimuthMax"]
                  
-            self._send_direct_target(next_az, None)
+            with self.state_lock:
+                state_unchanged = (
+                    self.manual_direction == manual_direction
+                    and self.ramp_start_time == ramp_start_time
+                )
+            if state_unchanged:
+                self._send_direct_target(next_az, None)
         else:
             # Elevation
             step_size = self.config["elevationSpeedDegPerSec"] * dt * factor
             next_el = current_el + (step_size * direction_sign)
             next_el = clamp(next_el, self.config["elevationMin"], self.config["elevationMax"])
-            self._send_direct_target(None, next_el)
+            with self.state_lock:
+                state_unchanged = (
+                    self.manual_direction == manual_direction
+                    and self.ramp_start_time == ramp_start_time
+                )
+            if state_unchanged:
+                self._send_direct_target(None, next_el)
 
-    def _handle_target_ramp(self, current_az: float, current_el: float, dt: float) -> None:
+    def _handle_target_ramp(
+        self,
+        current_az: float,
+        current_el: float,
+        dt: float,
+        motion_state: Dict[str, Any]
+    ) -> None:
         """Handle ramped target movement.
         
         Args:
@@ -513,36 +568,63 @@ class RotorLogic:
             current_el: Current elevation position.
             dt: Time delta in seconds.
         """
+        target_az = motion_state["target_az"]
+        target_el = motion_state["target_el"]
         next_az_target = None
         next_el_target = None
+        clear_az = False
+        clear_el = False
 
-        if self.target_az is not None:
-            delta = shortest_angular_delta(self.target_az, current_az, self.config["azimuthMode"])
+        if target_az is not None:
+            delta = shortest_angular_delta(target_az, current_az, self.config["azimuthMode"])
             if abs(delta) < 0.5:
-                self.target_az = None  # Reached
+                clear_az = True
             else:
                 step_cap = self.config["azimuthSpeedDegPerSec"] * dt
                 step = min(abs(delta), step_cap) * (1 if delta > 0 else -1)
                 next_az_target = current_az + step
         
-        if self.target_el is not None:
-            delta = self.target_el - current_el
+        if target_el is not None:
+            delta = target_el - current_el
             if abs(delta) < 0.5:
-                self.target_el = None  # Reached
+                clear_el = True
             else:
                 step_cap = self.config["elevationSpeedDegPerSec"] * dt
                 step = min(abs(delta), step_cap) * (1 if delta > 0 else -1)
                 next_el_target = current_el + step
+
+        if clear_az or clear_el:
+            with self.state_lock:
+                if clear_az and self.target_az == target_az:
+                    self.target_az = None
+                if clear_el and self.target_el == target_el:
+                    self.target_el = None
         
         if next_az_target is not None or next_el_target is not None:
-            az_to_send = next_az_target if next_az_target is not None else current_az
-            el_to_send = next_el_target if next_el_target is not None else current_el
-            self._send_direct_target(az_to_send, el_to_send)
+            expected_target_az = None if clear_az else target_az
+            expected_target_el = None if clear_el else target_el
+            with self.state_lock:
+                state_unchanged = (
+                    self.target_az == expected_target_az
+                    and self.target_el == expected_target_el
+                    and self.manual_direction is None
+                    and not self.stopping
+                )
+            if state_unchanged:
+                az_to_send = next_az_target if next_az_target is not None else current_az
+                el_to_send = next_el_target if next_el_target is not None else current_el
+                self._send_direct_target(az_to_send, el_to_send)
 
-    def _handle_soft_stop(self) -> None:
+    def _handle_soft_stop(self, motion_state: Dict[str, Any]) -> None:
         """Handle soft stop phase."""
-        elapsed = time.time() - self.stop_phase_start
+        stop_phase_start = motion_state["stop_phase_start"]
+        elapsed = time.time() - stop_phase_start
         ramp_down_time = 1.0
         if elapsed >= ramp_down_time:
-            self.stopping = False
-            self.connection.send_command("S")
+            with self.state_lock:
+                state_unchanged = self.stopping and self.stop_phase_start == stop_phase_start
+                if state_unchanged:
+                    self.stopping = False
+                    self.stop_initial_pos = None
+            if state_unchanged:
+                self.connection.send_command("S")
