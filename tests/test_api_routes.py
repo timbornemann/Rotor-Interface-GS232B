@@ -64,7 +64,7 @@ class TestSettingsAPI:
         
         request = urllib.request.Request(
             urljoin(base_url, "/api/settings"),
-            data=json.dumps({"customSetting": "testValue"}).encode("utf-8"),
+            data=json.dumps({"mapSource": "google"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST"
         )
@@ -74,7 +74,7 @@ class TestSettingsAPI:
             data = json.load(response)
         
         assert data["status"] == "ok"
-        assert data["settings"]["customSetting"] == "testValue"
+        assert data["settings"]["mapSource"] == "google"
 
 
 class TestApiDocumentation:

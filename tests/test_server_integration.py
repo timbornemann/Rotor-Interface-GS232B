@@ -98,7 +98,7 @@ class TestServerIntegration:
         # Update settings via API
         request = urllib.request.Request(
             urljoin(base_url, "/api/settings"),
-            data=json.dumps({"testPersistence": True}).encode("utf-8"),
+            data=json.dumps({"mapSource": "google"}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST"
         )
@@ -113,5 +113,5 @@ class TestServerIntegration:
         with open(json_file) as f:
             saved = json.load(f)
         
-        assert saved["testPersistence"] == True
+        assert saved["mapSource"] == "google"
 

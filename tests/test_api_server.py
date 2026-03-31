@@ -78,7 +78,7 @@ def test_settings_api_post(test_server):
     
     request = urllib.request.Request(
         urljoin(base_url, "/api/settings"),
-        data=json.dumps({"testSetting": "testValue"}).encode("utf-8"),
+        data=json.dumps({"mapType": "terrain"}).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST"
     )
@@ -88,7 +88,7 @@ def test_settings_api_post(test_server):
         data = json.load(response)
     
     assert data["status"] == "ok"
-    assert data["settings"]["testSetting"] == "testValue"
+    assert data["settings"]["mapType"] == "terrain"
 
 
 def test_ports_api(test_server):
