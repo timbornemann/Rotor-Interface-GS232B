@@ -476,12 +476,20 @@ if (document.readyState === 'loading') {
   settingsModal = new SettingsModal();
 }
 
+// When server settings arrive after retries, update config and UI
+configStore.onServerLoaded((loadedConfig) => {
+  config = loadedConfig;
+  updateUIFromConfig();
+  updateConeSettings();
+  console.log('[main] Config updated from server (retry)');
+});
+
 // Load config asynchronously
 configStore.load().then(loadedConfig => {
   if (loadedConfig) {
     config = loadedConfig;
     updateUIFromConfig();
-    updateConeSettings(); // Ensure mapView has correct config after async load
+    updateConeSettings();
   }
   
   // Load routes from server (not from config anymore)

@@ -113,6 +113,8 @@ class ConfigStore {
     this.apiBase = window.location.origin;
     this.cache = null;
     this.saveTimeout = null;
+    this.serverLoaded = false;
+    this._retryTimer = null;
   }
 
   /**
@@ -264,31 +266,77 @@ class ConfigStore {
 
   /**
    * Load configuration from server.
-   * Falls back to defaults if server is unavailable.
+   * Retries with exponential backoff if server is unavailable.
+   * @param {object} [options]
+   * @param {number} [options.maxRetries=10] - Max retry attempts
+   * @param {number} [options.initialDelayMs=1000] - Initial retry delay
+   * @returns {Promise<object>} The loaded config (from server or defaults as last resort)
    */
-  async load() {
+  async load({ maxRetries = 10, initialDelayMs = 1000 } = {}) {
+    const result = await this._fetchFromServer();
+    if (result) return result;
+
+    console.warn('[ConfigStore] Initial load failed, starting background retries...');
+    this._startRetry(maxRetries, initialDelayMs);
+
+    if (!this.cache) {
+      this.cache = { ...defaultConfig };
+    }
+    return this.cache;
+  }
+
+  async _fetchFromServer() {
     try {
-      console.log('[ConfigStore] Fetching settings from server...');
       const resp = await fetch(`${this.apiBase}/api/settings`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
       });
-      
+
       if (resp.ok) {
         const serverConfig = await resp.json();
         this.cache = this.sanitizeConfig({ ...defaultConfig, ...serverConfig });
-        console.log('[ConfigStore] Settings loaded successfully');
+        this.serverLoaded = true;
+        console.log('[ConfigStore] Settings loaded from server');
         return this.cache;
-      } else {
-        console.warn('[ConfigStore] Server returned error:', resp.status);
       }
+      console.warn('[ConfigStore] Server returned error:', resp.status);
     } catch (e) {
-      console.warn('[ConfigStore] Failed to load settings from server:', e.message);
+      console.warn('[ConfigStore] Fetch failed:', e.message);
     }
-    
-    // Fallback to defaults
-    this.cache = { ...defaultConfig };
-    return this.cache;
+    return null;
+  }
+
+  _startRetry(maxRetries, initialDelayMs) {
+    if (this._retryTimer) return;
+    let attempt = 0;
+
+    const tryNext = () => {
+      if (this.serverLoaded || attempt >= maxRetries) {
+        this._retryTimer = null;
+        if (!this.serverLoaded) {
+          console.warn('[ConfigStore] All retries exhausted, using defaults');
+        }
+        return;
+      }
+      const delay = Math.min(initialDelayMs * Math.pow(2, attempt), 30000);
+      attempt++;
+      this._retryTimer = setTimeout(async () => {
+        console.log(`[ConfigStore] Retry ${attempt}/${maxRetries}...`);
+        const result = await this._fetchFromServer();
+        if (result && this._onServerLoaded) {
+          this._onServerLoaded(result);
+        }
+        tryNext();
+      }, delay);
+    };
+    tryNext();
+  }
+
+  /**
+   * Register a callback for when server settings are loaded (after retries).
+   */
+  onServerLoaded(callback) {
+    this._onServerLoaded = callback;
   }
 
   /**
@@ -304,10 +352,22 @@ class ConfigStore {
 
   /**
    * Save configuration to server.
+   * Refuses to save when the server config hasn't been loaded yet to prevent
+   * overwriting real settings with frontend defaults.
    * Returns the merged config from server response.
    */
   async save(partial) {
-    const toSend = this.sanitizeConfig({ ...partial });
+    if (!this.serverLoaded) {
+      console.warn('[ConfigStore] Refusing to save: server settings not loaded yet. Attempting to load first...');
+      const loaded = await this._fetchFromServer();
+      if (!loaded) {
+        console.error('[ConfigStore] Cannot save: server unreachable');
+        return this.cache || { ...defaultConfig };
+      }
+    }
+
+    const merged = { ...this.cache, ...partial };
+    const toSend = this.sanitizeConfig(merged);
     
     try {
       console.log('[ConfigStore] Saving settings to server...', Object.keys(toSend).length, 'keys');
@@ -323,7 +383,8 @@ class ConfigStore {
       if (resp.ok) {
         const result = await resp.json();
         if (result.settings) {
-          this.cache = { ...defaultConfig, ...result.settings };
+          this.cache = this.sanitizeConfig({ ...defaultConfig, ...result.settings });
+          this.serverLoaded = true;
           console.log('[ConfigStore] Settings saved successfully');
           return this.cache;
         }
@@ -334,8 +395,7 @@ class ConfigStore {
       console.error('[ConfigStore] Save failed:', e.message);
     }
     
-    // Optimistic update on failure
-    this.cache = { ...defaultConfig, ...partial };
+    this.cache = { ...this.cache, ...partial };
     return this.cache;
   }
 
@@ -391,6 +451,7 @@ class ConfigStore {
   updateCache(settings) {
     if (settings && typeof settings === 'object') {
       this.cache = this.sanitizeConfig({ ...defaultConfig, ...settings });
+      this.serverLoaded = true;
       console.log('[ConfigStore] Cache updated from external source');
     }
   }
