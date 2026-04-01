@@ -503,11 +503,11 @@ class RotorLogic:
             # Clamp to valid range
             el_clamped = max(0, min(el, 90))
             if len(vals) == 0:
-                # If only EL provided, we need current AZ for the W command
-                effective_status = self.get_effective_raw_status()
-                curr_az_raw = effective_status.get("azimuth", 0) if effective_status else 0
-                curr_az_raw = clamp(curr_az_raw, 0, az_mode)
-                vals.append(f"{int(round(curr_az_raw)):03d}")
+                # If only EL provided, we need current hardware AZ for the W command
+                raw_status = self.connection.get_status()
+                curr_az_hw = float(raw_status.get("azimuthRaw", 0)) if raw_status else 0.0
+                curr_az_hw = clamp(curr_az_hw, 0, az_mode)
+                vals.append(f"{int(round(curr_az_hw)):03d}")
             
             vals.append(f"{int(round(el_clamped)):03d}")
 

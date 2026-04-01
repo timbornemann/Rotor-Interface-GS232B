@@ -35,57 +35,66 @@ const gotoElInput = document.getElementById('gotoElInput');
 const elevation = new Elevation(document.getElementById('elevationRoot'));
 const mapView = new MapView(document.getElementById('mapCanvas'));
 
+/**
+ * Kalibrierte Azimut-Grad → Hardware-Raw für GS232 (gleiche Umrechnung wie Status/Karte).
+ * @returns {number|null} Hardware-Raw oder null wenn kein gültiger Kandidat
+ */
+function calibratedAzimuthToHardwareRaw(azimuthCalibrated) {
+  const scale = config.azimuthScaleFactor || 1.0;
+  const offset = config.azimuthOffset || 0.0;
+  const feedbackEnabled = config.feedbackCorrectionEnabled;
+  const azFeedbackFactor = (feedbackEnabled && config.azimuthFeedbackFactor > 0) ? config.azimuthFeedbackFactor : 1.0;
+
+  const maxAz = config.azimuthMode === 450 ? 450 : 360;
+  const candidates = [
+    ((azimuthCalibrated * scale) - offset) / azFeedbackFactor,
+    (((azimuthCalibrated - 360) * scale) - offset) / azFeedbackFactor,
+    (((azimuthCalibrated + 360) * scale) - offset) / azFeedbackFactor
+  ];
+
+  const currentRaw = rotor.currentStatus?.azimuthRaw ?? 0;
+  const validCandidates = candidates.filter((raw) => raw >= 0 && raw <= maxAz);
+  if (validCandidates.length === 0) {
+    return null;
+  }
+  return validCandidates.reduce((closest, candidate) =>
+    Math.abs(candidate - currentRaw) < Math.abs(closest - currentRaw) ? candidate : closest
+  );
+}
+
+/**
+ * Kalibrierte Elevation → Hardware-Raw (Umkehrung der Anzeige-Formel).
+ */
+function calibratedElevationToHardwareRaw(elCalibrated) {
+  const scale = config.elevationScaleFactor || 1.0;
+  const offset = config.elevationOffset || 0.0;
+  const feedbackEnabled = config.feedbackCorrectionEnabled;
+  const elFeedbackFactor = (feedbackEnabled && config.elevationFeedbackFactor > 0) ? config.elevationFeedbackFactor : 1.0;
+  return ((elCalibrated * scale) - offset) / elFeedbackFactor;
+}
+
 // Setup click handler for map
 mapView.setOnClick(async (azimuth, elevation) => {
   if (!connected) {
     logAction('Klick auf Karte verworfen, nicht verbunden', { azimuth });
     return;
   }
-  
-  // Karten-Klick gibt kalibrierte Position zurück (was auf der Karte angezeigt wird)
-  // Berechne die kürzeste Hardware-Raw-Position, die dieser kalibrierten Position entspricht
-  const scale = config.azimuthScaleFactor || 1.0;
-  const offset = config.azimuthOffset || 0.0;
-  const feedbackEnabled = config.feedbackCorrectionEnabled;
-  const azFeedbackFactor = (feedbackEnabled && config.azimuthFeedbackFactor > 0) ? config.azimuthFeedbackFactor : 1.0;
-  
-  // Kalibriert → Hardware-Raw:
-  // calibrated = (hardware_raw * feedbackFactor + offset) / scale
-  // hardware_raw = ((calibrated * scale) - offset) / feedbackFactor
-  const candidates = [
-    ((azimuth * scale) - offset) / azFeedbackFactor,
-    (((azimuth - 360) * scale) - offset) / azFeedbackFactor,
-    (((azimuth + 360) * scale) - offset) / azFeedbackFactor
-  ];
-  
-  // Wähle den Kandidaten, der im gültigen Bereich liegt und am nächsten zur aktuellen Position ist
-  const maxAz = config.azimuthMode === 450 ? 450 : 360;
-  const currentRaw = rotor.currentStatus?.azimuthRaw || 0;
-  
-  // Filtere ungültige Kandidaten
-  const validCandidates = candidates.filter(raw => raw >= 0 && raw <= maxAz);
-  
-  if (validCandidates.length === 0) {
+
+  const rawAzimuth = calibratedAzimuthToHardwareRaw(azimuth);
+  if (rawAzimuth === null) {
     showLimitWarning(`Keine gültige Raw-Position für ${azimuth.toFixed(1)}° (kalibriert) gefunden.`);
-    logAction('Klick auf Karte verworfen, keine gültige Raw-Position', { calibrated: azimuth, candidates });
+    logAction('Klick auf Karte verworfen, keine gültige Raw-Position', { calibrated: azimuth });
     return;
   }
-  
-  // Wähle den nächstgelegenen Kandidaten zur aktuellen Position
-  const rawAzimuth = validCandidates.reduce((closest, candidate) => {
-    return Math.abs(candidate - currentRaw) < Math.abs(closest - currentRaw) ? candidate : closest;
-  });
-  
-  logAction('Klick auf Karte - Rotor wird bewegt (nur Azimut)', { 
-    calibrated: azimuth.toFixed(1), 
+
+  const currentRaw = rotor.currentStatus?.azimuthRaw ?? 0;
+  logAction('Klick auf Karte - Rotor wird bewegt (nur Azimut)', {
+    calibrated: azimuth.toFixed(1),
     raw: rawAzimuth.toFixed(1),
-    currentRaw: currentRaw.toFixed(1),
-    candidates: candidates.map(c => c.toFixed(1))
+    currentRaw: Number(currentRaw).toFixed(1)
   });
   try {
-    // Klick auf Karte bricht Route ab
-    await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
-    // Sende Raw-Wert direkt an Motor
+    await rotor.stopRoute().catch(() => {});
     await rotor.setAzimuthRaw(rawAzimuth);
   } catch (error) {
     reportError(error);
@@ -319,35 +328,46 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       controls.showRouteHint(null);
       return;
     }
-    // Goto-Eingabe ist ein Raw-Wert (Hardware-Position), wird direkt an Motor gesendet
-    // Validierung: Einfach gegen 0-360/450 für Azimut und 0-90 für Elevation
+    // Goto: gleiche Bedeutung wie Karte/Status (kalibrierte °), Umrechnung → Hardware-Raw fürs Protokoll
     const maxAz = config.azimuthMode === 450 ? 450 : 360;
     let validationError = null;
-    
+
     if (azimuth < 0 || azimuth > maxAz) {
-      validationError = `Ziel-Azimut ${azimuth}° (Raw) liegt außerhalb des gültigen Bereichs (0…${maxAz}°).`;
+      validationError = `Ziel-Azimut ${azimuth}° (kalibriert) liegt außerhalb des gültigen Bereichs (0…${maxAz}°).`;
     }
     if (elevation < 0 || elevation > 90) {
-      if (validationError) {
-        validationError += ` Ziel-Elevation ${elevation}° (Raw) liegt außerhalb des gültigen Bereichs (0…90°).`;
-      } else {
-        validationError = `Ziel-Elevation ${elevation}° (Raw) liegt außerhalb des gültigen Bereichs (0…90°).`;
-      }
+      validationError = validationError
+        ? `${validationError} Ziel-Elevation ${elevation}° (kalibriert) liegt außerhalb (0…90°).`
+        : `Ziel-Elevation ${elevation}° (kalibriert) liegt außerhalb des gültigen Bereichs (0…90°).`;
     }
-    
-    if (validationError) {
-      showLimitWarning(validationError);
-      logAction('Azimut/Elevation-Befehl verworfen, Ziel ausserhalb Bereich', { raw: { az: azimuth, el: elevation } });
+    if (!validationError && !validateTargets({ az: azimuth, el: elevation })) {
       controls.showRouteHint(null);
       return;
     }
-    
-    logAction('Azimut/Elevation-Befehl senden (Raw)', { raw: { az: azimuth, el: elevation } });
+    if (validationError) {
+      showLimitWarning(validationError);
+      logAction('Azimut/Elevation-Befehl verworfen, Ziel ausserhalb Bereich', { calibrated: { az: azimuth, el: elevation } });
+      controls.showRouteHint(null);
+      return;
+    }
+
+    const rawAz = calibratedAzimuthToHardwareRaw(azimuth);
+    if (rawAz === null) {
+      showLimitWarning(`Keine gültige Hardware-Position für Azimut ${azimuth}° (kalibriert).`);
+      logAction('Goto verworfen, keine gültige Raw-Az-Position', { calibrated: azimuth });
+      controls.showRouteHint(null);
+      return;
+    }
+    const rawElUncapped = calibratedElevationToHardwareRaw(elevation);
+    const rawEl = Math.max(0, Math.min(90, rawElUncapped));
+
+    logAction('Goto Az/El (kalibriert → Hardware-Raw)', {
+      calibrated: { az: azimuth, el: elevation },
+      raw: { az: rawAz, el: rawEl }
+    });
     try {
-      // Goto Az/El bricht Route ab
-      await rotor.stopRoute().catch(() => {}); // Ignore error if no route running
-      // Sende Raw-Werte direkt an Motor, ohne Umrechnung
-      await rotor.setAzElRaw({ az: azimuth, el: elevation });
+      await rotor.stopRoute().catch(() => {});
+      await rotor.setAzElRaw({ az: rawAz, el: rawEl });
     } catch (error) {
       reportError(error);
     }
