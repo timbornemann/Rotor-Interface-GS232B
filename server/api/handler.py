@@ -195,10 +195,6 @@ class RotorHandler(SimpleHTTPRequestHandler):
             routes.handle_get_position(self, self.state)
             return
         
-        if parsed.path == "/api/config/ini":
-            routes.handle_get_config_ini(self, self.state)
-            return
-        
         if parsed.path == "/api/clients":
             routes.handle_get_clients(self, self.state)
             return

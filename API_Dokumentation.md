@@ -47,7 +47,6 @@ Der Server hostet gleichzeitig die Web-Oberfläche aus `src/renderer` unter `htt
 |----------|---------|--------------|
 | `/api/settings` | GET | Rotor-Konfiguration abrufen (Kalibrierung, Limits, etc.) |
 | `/api/settings` | POST | Rotor-Konfiguration aktualisieren |
-| `/api/config/ini` | GET | rotor-config.ini Datei lesen (read-only) |
 
 ### Server-Verwaltung
 
@@ -541,33 +540,6 @@ requests.post("http://localhost:8081/api/settings",
 
 ---
 
-### GET /api/config/ini
-
-Liefert den kompletten Inhalt der `rotor-config.ini` Datei (read-only). Nützlich für Backup oder externe Konfigurationstools.
-
-**Response 200:**
-```json
-{
-  "content": "[Calibration]\nazimuthOffset = 4.0\nelevationOffset = 1.5\n..."
-}
-```
-
-**Response 404:** rotor-config.ini nicht gefunden
-
-**cURL:**
-```bash
-curl -s http://localhost:8081/api/config/ini
-```
-
-**Python:**
-```python
-import requests
-ini = requests.get("http://localhost:8081/api/config/ini").json()["content"]
-print(ini)
-```
-
----
-
 ## Server-Verwaltung
 
 ### GET /api/server/settings
@@ -889,12 +861,6 @@ class RotorClient:
         """Rotor-Einstellungen aktualisieren."""
         response = requests.post(self._url("/api/settings"), json=settings)
         return self._log("UpdateSettings", response)
-
-    def get_config_ini(self) -> str:
-        """rotor-config.ini Inhalt abrufen."""
-        response = requests.get(self._url("/api/config/ini"))
-        data = response.json()
-        return data.get("content", "")
 
     # --- Server Management ---
 

@@ -611,32 +611,6 @@ def handle_get_position(handler: BaseHTTPRequestHandler, state: "ServerState") -
             send_json(handler, {"connected": False, "clientCount": client_count})
 
 
-def handle_get_config_ini(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
-    """Handle GET /api/config/ini - Get rotor-config.ini content (read-only).
-    
-    Args:
-        handler: The HTTP request handler instance.
-        state: The server state singleton.
-    """
-    try:
-        # Try to read rotor-config.ini from the project root
-        config_file = state.settings.config_dir / "rotor-config.ini"
-        
-        if config_file.exists():
-            with open(config_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-            send_json(handler, {"content": content})
-        else:
-            send_json(handler, {"error": "rotor-config.ini not found"}, HTTPStatus.NOT_FOUND)
-    except Exception as e:
-        log(f"[Routes] Error reading rotor-config.ini: {e}")
-        send_json(
-            handler, 
-            {"error": "Failed to read configuration file", "message": str(e)}, 
-            HTTPStatus.INTERNAL_SERVER_ERROR
-        )
-
-
 # --- Client Management Routes ---
 
 def handle_get_clients(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:

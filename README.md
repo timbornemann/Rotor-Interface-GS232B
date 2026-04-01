@@ -211,11 +211,7 @@ Zentrale Konfigurationsquelle (vom Server geladen/geschrieben). Beispiele:
 
 Persistente Routenablage (serverseitig). CRUD erfolgt über `/api/routes...`.
 
-### 6.3 `rotor-config.ini`
-
-Wird derzeit als Referenz-/Legacy-Datei genutzt und via `/api/config/ini` read-only ausgeliefert.
-
-### 6.4 Migration alter Routen
+### 6.3 Migration alter Routen
 
 Falls alte Routen in `web-settings.json` unter `savedRoutes` liegen:
 
@@ -254,7 +250,6 @@ Base URL: `http://<host>:<http-port>`
 |---|---|---|
 | GET | `/api/settings` | Gesamte Konfiguration |
 | POST | `/api/settings` | Teil-Update Konfiguration |
-| GET | `/api/config/ini` | Inhalt `rotor-config.ini` |
 
 ### 7.3 Server
 

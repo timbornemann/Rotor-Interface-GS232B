@@ -78,14 +78,6 @@ def build_openapi_spec(handler: Any, state: Any) -> Dict[str, Any]:
                 },
             },
         },
-        "/api/config/ini": {
-            "get": {
-                "tags": ["Settings"],
-                "summary": "Get rotor-config.ini content",
-                "security": op_security,
-                "responses": {"200": {"description": "INI content"}},
-            }
-        },
         "/api/rotor/connect": {
             "post": {
                 "tags": ["Rotor"],

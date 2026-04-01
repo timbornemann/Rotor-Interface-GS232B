@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from server.config.defaults import DEFAULT_CONFIG, DEFAULT_INI_TEMPLATE
+from server.config.defaults import DEFAULT_CONFIG
 from server.config.settings import SettingsManager
 
 
@@ -51,43 +51,6 @@ class TestDefaults:
         assert DEFAULT_CONFIG["mapSource"] == "arcgis"
         assert DEFAULT_CONFIG["mapType"] == "satellite"
     
-    def test_default_ini_template_is_string(self):
-        """Default INI template should be a string."""
-        assert isinstance(DEFAULT_INI_TEMPLATE, str)
-    
-    def test_default_ini_template_has_sections(self):
-        """Default INI template should have expected sections."""
-        assert "[Connection]" in DEFAULT_INI_TEMPLATE
-        assert "[Calibration]" in DEFAULT_INI_TEMPLATE
-        assert "[Limits]" in DEFAULT_INI_TEMPLATE
-
-    def test_default_ini_template_has_feedback_correction_settings(self):
-        """Default INI template should include feedback correction settings."""
-        assert "feedbackCorrectionEnabled=false" in DEFAULT_INI_TEMPLATE
-        assert "azimuthFeedbackFactor=1.0" in DEFAULT_INI_TEMPLATE
-        assert "elevationFeedbackFactor=1.0" in DEFAULT_INI_TEMPLATE
-
-    def test_default_ini_template_has_overlay_settings(self):
-        """Default INI template should include map overlay settings."""
-        assert "mapOverlayEnabled=true" in DEFAULT_INI_TEMPLATE
-        assert "mapOverlayLabelMode=both" in DEFAULT_INI_TEMPLATE
-        assert "mapOverlayAutoContrast=true" in DEFAULT_INI_TEMPLATE
-        assert "mapOverlayRingRadiiMeters=1000,5000,10000,20000" in DEFAULT_INI_TEMPLATE
-
-    def test_default_ini_template_has_speed_stage_settings(self):
-        """Default INI template should include ERC-DUO speed stage settings."""
-        assert "azimuthLowSpeedStage=3" in DEFAULT_INI_TEMPLATE
-        assert "azimuthHighSpeedStage=4" in DEFAULT_INI_TEMPLATE
-        assert "elevationLowSpeedStage=3" in DEFAULT_INI_TEMPLATE
-        assert "elevationHighSpeedStage=4" in DEFAULT_INI_TEMPLATE
-        assert "azimuthSpeedAngleCode=3" in DEFAULT_INI_TEMPLATE
-        assert "elevationSpeedAngleCode=3" in DEFAULT_INI_TEMPLATE
-
-    def test_default_ini_template_uses_disabled_ramp_by_default(self):
-        """INI template should match the default rampEnabled setting."""
-        assert "rampEnabled=false" in DEFAULT_INI_TEMPLATE
-
-
 class TestSettingsManager:
     """Tests for the SettingsManager class."""
     
@@ -136,20 +99,6 @@ class TestSettingsManager:
         config = settings.get_all()
         assert config["mapSource"] == "google"
         assert config["mapType"] == "terrain"
-    
-    def test_json_overrides_ini(self, settings_dir):
-        """JSON settings should override INI settings."""
-        # Create INI with default baudRate=9600
-        ini_content = "[Connection]\nbaudRate=9600\n"
-        (settings_dir / "rotor-config.ini").write_text(ini_content)
-        
-        # Create JSON with different baudRate
-        json_content = {"baudRate": 19200}
-        (settings_dir / "web-settings.json").write_text(json.dumps(json_content))
-        
-        # Load settings
-        settings = SettingsManager(settings_dir)
-        assert settings.get("baudRate") == 19200
     
     def test_reload_updates_cache(self, settings_dir, settings):
         """reload should update cache from files."""
