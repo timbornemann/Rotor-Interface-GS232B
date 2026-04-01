@@ -46,20 +46,34 @@ function calibratedAzimuthToHardwareRaw(azimuthCalibrated) {
   const azFeedbackFactor = (feedbackEnabled && config.azimuthFeedbackFactor > 0) ? config.azimuthFeedbackFactor : 1.0;
 
   const maxAz = config.azimuthMode === 450 ? 450 : 360;
+
+  // Physical position = raw * feedbackFactor. The motor can only reach
+  // physical positions in [0, maxAz]. So the maximum valid raw command
+  // value is maxAz / feedbackFactor (e.g. 450/2 = 225 when feedbackFactor=2).
+  const maxValidRaw = maxAz / azFeedbackFactor;
+
   const candidates = [
     ((azimuthCalibrated * scale) - offset) / azFeedbackFactor,
     (((azimuthCalibrated - 360) * scale) - offset) / azFeedbackFactor,
     (((azimuthCalibrated + 360) * scale) - offset) / azFeedbackFactor
   ];
 
-  const currentRaw = rotor.currentStatus?.azimuthRaw ?? 0;
-  const validCandidates = candidates.filter((raw) => raw >= 0 && raw <= maxAz);
+  // Use corrected raw (physical position) for distance comparison so the
+  // selection accounts for the actual motor position, not just the
+  // compressed adapter value.
+  const currentCorrectedRaw = rotor.currentStatus?.azimuthCorrectedRaw
+    ?? ((rotor.currentStatus?.azimuthRaw ?? 0) * azFeedbackFactor);
+
+  const validCandidates = candidates.filter((raw) => raw >= 0 && raw <= maxValidRaw);
   if (validCandidates.length === 0) {
     return null;
   }
-  return validCandidates.reduce((closest, candidate) =>
-    Math.abs(candidate - currentRaw) < Math.abs(closest - currentRaw) ? candidate : closest
-  );
+  return validCandidates.reduce((closest, candidate) => {
+    const candidatePhysical = candidate * azFeedbackFactor;
+    const closestPhysical = closest * azFeedbackFactor;
+    return Math.abs(candidatePhysical - currentCorrectedRaw) < Math.abs(closestPhysical - currentCorrectedRaw)
+      ? candidate : closest;
+  });
 }
 
 /**

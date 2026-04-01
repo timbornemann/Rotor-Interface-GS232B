@@ -267,6 +267,32 @@ class RotorLogic:
                 if az > 360 and az - 360 >= 0:
                      candidates.append(az - 360)
 
+                # Filter out candidates whose raw command value would exceed
+                # the physical motor range (relevant when feedbackFactor != 1).
+                with self.config_lock:
+                    az_scale = self.config.get("azimuthScaleFactor", 1.0) or 1.0
+                    az_offset = self.config.get("azimuthOffset", 0.0)
+                    feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
+                    az_feedback_raw = self.config.get("azimuthFeedbackFactor", 1.0)
+                    az_mode = self.config.get("azimuthMode", 360)
+
+                try:
+                    az_fb = float(az_feedback_raw)
+                except (TypeError, ValueError):
+                    az_fb = 1.0
+                if not feedback_enabled or az_fb <= 0:
+                    az_fb = 1.0
+                az_raw_max = az_mode / az_fb
+
+                reachable = []
+                for c in candidates:
+                    raw_c = ((c * az_scale) - az_offset) / az_fb
+                    if 0 <= raw_c <= az_raw_max:
+                        reachable.append(c)
+
+                if reachable:
+                    candidates = reachable
+
                 # Select candidate with shortest linear distance to current position
                 # We use simple abs difference because we can't "wrap" physically across the stop.
                 best_az = min(candidates, key=lambda x: abs(x - current_az))
@@ -459,10 +485,14 @@ class RotorLogic:
         if not feedback_enabled or el_feedback <= 0:
             el_feedback = 1.0
 
+        # Physical position = raw * feedbackFactor. Clamp to the raw value
+        # that corresponds to the physical limit (az_mode / feedbackFactor).
+        az_raw_max = int(round(az_mode / az_feedback))
+
         vals = []
         if az is not None:
             raw_az = ((az * az_scale) - az_offset) / az_feedback
-            raw_az_int = max(0, min(int(round(raw_az)), az_mode))
+            raw_az_int = max(0, min(int(round(raw_az)), az_raw_max))
             vals.append(f"{raw_az_int:03d}")
 
         if el is not None:
@@ -492,11 +522,23 @@ class RotorLogic:
         # Send raw values directly to motor without any calibration conversion
         with self.config_lock:
             az_mode = self.config.get("azimuthMode", 360)
+            feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
+            az_feedback_raw = self.config.get("azimuthFeedbackFactor", 1.0)
+
+        try:
+            az_feedback = float(az_feedback_raw)
+        except (TypeError, ValueError):
+            az_feedback = 1.0
+        if not feedback_enabled or az_feedback <= 0:
+            az_feedback = 1.0
+
+        # Physical position = raw * feedbackFactor. Clamp to the raw value
+        # that corresponds to the physical limit (az_mode / feedbackFactor).
+        az_raw_max = az_mode / az_feedback
 
         vals = []
         if az is not None:
-            # Clamp to valid range
-            az_clamped = max(0, min(az, az_mode))
+            az_clamped = max(0, min(az, az_raw_max))
             vals.append(f"{int(round(az_clamped)):03d}")
 
         if el is not None:
