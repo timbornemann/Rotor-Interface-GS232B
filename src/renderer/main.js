@@ -43,22 +43,24 @@ mapView.setOnClick(async (azimuth, elevation) => {
   }
   
   // Karten-Klick gibt kalibrierte Position zurück (was auf der Karte angezeigt wird)
-  // Berechne die kürzeste Raw-Position, die dieser kalibrierten Position entspricht
+  // Berechne die kürzeste Hardware-Raw-Position, die dieser kalibrierten Position entspricht
   const scale = config.azimuthScaleFactor || 1.0;
   const offset = config.azimuthOffset || 0.0;
+  const feedbackEnabled = config.feedbackCorrectionEnabled;
+  const azFeedbackFactor = (feedbackEnabled && config.azimuthFeedbackFactor > 0) ? config.azimuthFeedbackFactor : 1.0;
   
-  // Mögliche Raw-Werte für die angeklickte kalibrierte Position:
-  // raw = (calibrated * scale) - offset
-  // Aber "calibrated" könnte auch calibrated - 360 oder calibrated + 360 sein
+  // Kalibriert → Hardware-Raw:
+  // calibrated = (hardware_raw * feedbackFactor + offset) / scale
+  // hardware_raw = ((calibrated * scale) - offset) / feedbackFactor
   const candidates = [
-    (azimuth * scale) - offset,           // z.B. 350° → 410°
-    ((azimuth - 360) * scale) - offset,   // z.B. -10° → 50°
-    ((azimuth + 360) * scale) - offset    // z.B. 710° → 770°
+    ((azimuth * scale) - offset) / azFeedbackFactor,
+    (((azimuth - 360) * scale) - offset) / azFeedbackFactor,
+    (((azimuth + 360) * scale) - offset) / azFeedbackFactor
   ];
   
   // Wähle den Kandidaten, der im gültigen Bereich liegt und am nächsten zur aktuellen Position ist
   const maxAz = config.azimuthMode === 450 ? 450 : 360;
-  const currentRaw = rotor.currentStatus?.azimuthCorrectedRaw || rotor.currentStatus?.azimuthRaw || 0;
+  const currentRaw = rotor.currentStatus?.azimuthRaw || 0;
   
   // Filtere ungültige Kandidaten
   const validCandidates = candidates.filter(raw => raw >= 0 && raw <= maxAz);
@@ -1141,12 +1143,16 @@ function handleStatus(status) {
     updateConeSettings();
   }
   
-  if (typeof status.azimuthCorrectedRaw === 'number') {
+  if (typeof status.azimuth === 'number') {
+    azValue.textContent = `${status.azimuth.toFixed(0)}deg`;
+  } else if (typeof status.azimuthCorrectedRaw === 'number') {
     azValue.textContent = `${status.azimuthCorrectedRaw.toFixed(0)}deg`;
   } else if (typeof status.azimuthRaw === 'number') {
     azValue.textContent = `${status.azimuthRaw.toFixed(0)}deg`;
   }
-  if (typeof status.elevationCorrectedRaw === 'number') {
+  if (typeof status.elevation === 'number') {
+    elValue.textContent = `${status.elevation.toFixed(0)}deg`;
+  } else if (typeof status.elevationCorrectedRaw === 'number') {
     elValue.textContent = `${status.elevationCorrectedRaw.toFixed(0)}deg`;
   } else if (typeof status.elevationRaw === 'number') {
     elValue.textContent = `${status.elevationRaw.toFixed(0)}deg`;
@@ -1155,13 +1161,12 @@ function handleStatus(status) {
   mapView.update(status.azimuth, status.elevation);
   
   const time = new Date(status.timestamp).toLocaleTimeString();
-  // "Letzter Status:" zeigt korrigierte Ist-Werte (Fallback: Adapter-Rohwerte)
-  const az = typeof status.azimuthCorrectedRaw === 'number'
-    ? status.azimuthCorrectedRaw.toFixed(0)
-    : (typeof status.azimuthRaw === 'number' ? status.azimuthRaw.toFixed(0) : '--');
-  const el = typeof status.elevationCorrectedRaw === 'number'
-    ? status.elevationCorrectedRaw.toFixed(0)
-    : (typeof status.elevationRaw === 'number' ? status.elevationRaw.toFixed(0) : '--');
+  const az = typeof status.azimuth === 'number'
+    ? status.azimuth.toFixed(0)
+    : (typeof status.azimuthCorrectedRaw === 'number' ? status.azimuthCorrectedRaw.toFixed(0) : '--');
+  const el = typeof status.elevation === 'number'
+    ? status.elevation.toFixed(0)
+    : (typeof status.elevationCorrectedRaw === 'number' ? status.elevationCorrectedRaw.toFixed(0) : '--');
   lastStatusValue.textContent = `${time} | Az: ${az}° | El: ${el}°`;
   logAction('Status aktualisiert', { status, display: lastStatusValue.textContent });
   

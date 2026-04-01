@@ -166,11 +166,12 @@ class TestRotorLogic:
         assert logic.config["azimuthFeedbackFactor"] == 2.0
         assert logic.config["elevationFeedbackFactor"] == 1.5
 
-    def test_send_direct_target_el_only_uses_corrected_current_azimuth(self, logic, mock_connection):
-        """Elevation-only W command should use corrected azimuth as current raw value."""
+    def test_send_direct_target_el_only_uses_hardware_raw_azimuth(self, logic, mock_connection):
+        """Elevation-only W command should use hardware raw azimuth (not feedback-corrected)."""
         logic.update_config({
             "feedbackCorrectionEnabled": True,
             "azimuthFeedbackFactor": 2.0,
+            "elevationFeedbackFactor": 2.0,
             "azimuthMode": 450
         })
         mock_connection.get_status.return_value = {
@@ -180,8 +181,9 @@ class TestRotorLogic:
 
         logic._send_direct_target(None, 30)
 
-        # With factor 2.0: current azimuth should be interpreted as 180.
-        mock_connection.send_command.assert_called_with("W180 030")
+        # AZ: hardware raw = 90 (unchanged, not multiplied by feedback)
+        # EL: calibrated=30, hardware_raw = ((30*1)-0)/2 = 15
+        mock_connection.send_command.assert_called_with("W090 015")
 
     def test_handle_target_ramp_does_not_clear_newer_target(self, logic):
         """Stale control-loop snapshots must not clear a newer target."""

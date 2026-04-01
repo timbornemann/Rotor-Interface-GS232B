@@ -1,7 +1,7 @@
 {
   "baudRate": 9600,
   "pollingIntervalMs": 1000,
-  "portPath": "COM3",
+  "portPath": "COM10",
   "mapLatitude": 48.572632,
   "mapLongitude": 7.164545,
   "satelliteMapEnabled": true,
@@ -14,10 +14,13 @@
   "mapOverlayLabelMode": "both",
   "mapOverlayAutoContrast": true,
   "mapOverlayRingRadiiMeters": [
+    250,
+    500,
     1000,
-    5000,
-    10000,
-    20000
+    1500,
+    2000,
+    2500,
+    3000
   ],
   "coneAngle": 10,
   "coneLength": 1000,
@@ -69,8 +72,8 @@
   "elevationOffset": 0,
   "azimuthScaleFactor": 1,
   "elevationScaleFactor": 1,
-  "feedbackCorrectionEnabled": false,
-  "azimuthFeedbackFactor": 1,
+  "feedbackCorrectionEnabled": true,
+  "azimuthFeedbackFactor": 2,
   "elevationFeedbackFactor": 1,
   "azimuthScaleFactorMin": 0.1,
   "azimuthScaleFactorMax": 2,

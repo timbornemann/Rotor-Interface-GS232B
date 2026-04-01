@@ -432,9 +432,9 @@ class RotorLogic:
             az: Target azimuth in calibrated degrees (from frontend).
             el: Target elevation in calibrated degrees (from frontend).
         """
-        # Convert Target Degrees (Calibrated) -> Raw Command Values
-        # Formula: calibrated = (raw + offset) / scale
-        # Inverse: raw = (calibrated * scale) - offset
+        # Convert Target Degrees (Calibrated) -> Raw Hardware Command Values
+        # Forward:  calibrated = (hardware_raw * feedbackFactor + offset) / scale
+        # Inverse:  hardware_raw = ((calibrated * scale) - offset) / feedbackFactor
         
         with self.config_lock:
             az_scale = self.config.get("azimuthScaleFactor", 1.0)
@@ -442,24 +442,38 @@ class RotorLogic:
             el_scale = self.config.get("elevationScaleFactor", 1.0)
             el_offset = self.config.get("elevationOffset", 0.0)
             az_mode = self.config.get("azimuthMode", 360)
+            feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
+            az_feedback_raw = self.config.get("azimuthFeedbackFactor", 1.0)
+            el_feedback_raw = self.config.get("elevationFeedbackFactor", 1.0)
+
+        try:
+            az_feedback = float(az_feedback_raw)
+        except (TypeError, ValueError):
+            az_feedback = 1.0
+        try:
+            el_feedback = float(el_feedback_raw)
+        except (TypeError, ValueError):
+            el_feedback = 1.0
+        if not feedback_enabled or az_feedback <= 0:
+            az_feedback = 1.0
+        if not feedback_enabled or el_feedback <= 0:
+            el_feedback = 1.0
 
         vals = []
         if az is not None:
-            raw_az = (az * az_scale) - az_offset
-            # Clamp after rounding to prevent exceeding hardware limits
+            raw_az = ((az * az_scale) - az_offset) / az_feedback
             raw_az_int = max(0, min(int(round(raw_az)), az_mode))
             vals.append(f"{raw_az_int:03d}")
 
         if el is not None:
-            raw_el = (el * el_scale) - el_offset
-            # Clamp after rounding to prevent exceeding hardware limits
+            raw_el = ((el * el_scale) - el_offset) / el_feedback
             raw_el_int = max(0, min(int(round(raw_el)), 90))
             if len(vals) == 0:
-                # If only EL provided, we need current AZ for the W command
-                effective_status = self.get_effective_raw_status()
-                curr_az_raw = effective_status.get("azimuth", 0) if effective_status else 0
-                curr_az_raw = clamp(curr_az_raw, 0, az_mode)
-                vals.append(f"{int(round(curr_az_raw)):03d}")
+                # If only EL provided, we need current hardware AZ for the W command
+                raw_status = self.connection.get_status()
+                curr_az_hw = float(raw_status.get("azimuthRaw", 0)) if raw_status else 0.0
+                curr_az_hw = clamp(curr_az_hw, 0, az_mode)
+                vals.append(f"{int(round(curr_az_hw)):03d}")
 
             vals.append(f"{raw_el_int:03d}")
 
