@@ -1,5 +1,7 @@
 # Rotor-Interface GS232B
 
+![Programm-Uebersicht](docs/images/Program-Overview.png)
+
 Webbasierte Rotor-Steuerung für GS-232B-kompatible Controller mit Python-Backend, REST-API und WebSocket-Synchronisierung für mehrere Clients.
 
 Die Anwendung besteht aus:
@@ -169,6 +171,13 @@ In der aktuellen Implementierung haben Werte aus `web-settings.json` Vorrang. CL
   - berechnet Ziel-Azimut aus Klickposition
   - sendet Raw-Azimut (nur Azimut)
 
+Video: Steuerung per Maus-Klicks
+
+<video src="docs/images/Control-via-mouse-clicks.mp4" controls muted playsinline width="100%"></video>
+
+Falls der Video-Player in deinem Markdown-Viewer nicht sichtbar ist:
+[Control-via-mouse-clicks.mp4](docs/images/Control-via-mouse-clicks.mp4)
+
 ### 5.3 Routen
 
 - Routen im linken Panel erstellen/bearbeiten
@@ -177,6 +186,13 @@ In der aktuellen Implementierung haben Werte aus `web-settings.json` Vorrang. CL
   - Wait (zeitbasiert oder manuell)
   - Loop (inkl. verschachtelter Schritte)
 - Ausführung ist serverseitig und wird per WebSocket an alle Clients gespiegelt
+
+Video: Routen-Ausfuehrung
+
+<video src="docs/images/Route-execution.mp4" controls muted playsinline width="100%"></video>
+
+Falls der Video-Player in deinem Markdown-Viewer nicht sichtbar ist:
+[Route-execution.mp4](docs/images/Route-execution.mp4)
 
 ### 5.4 Einstellungen
 
