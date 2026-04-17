@@ -25,6 +25,7 @@ DOCS_ASSETS = {
     "swagger-ui-bundle.js": ("application/javascript; charset=utf-8", DOCS_ASSET_DIR / "swagger-ui-bundle.js"),
     "redoc.standalone.js": ("application/javascript; charset=utf-8", DOCS_ASSET_DIR / "redoc.standalone.js"),
 }
+ROTOR_DISCONNECTED_CODE = "ROTOR_DISCONNECTED"
 
 
 # --- Settings Routes ---
@@ -119,6 +120,33 @@ def _read_request_payload(handler: BaseHTTPRequestHandler) -> Optional[Dict[str,
             HTTPStatus.BAD_REQUEST
         )
         return None
+
+
+def _send_rotor_disconnected(
+    handler: BaseHTTPRequestHandler,
+    message: str = "Not connected to rotor"
+) -> None:
+    """Send normalized disconnected response payload for control endpoints."""
+    send_json(
+        handler,
+        {"error": message, "code": ROTOR_DISCONNECTED_CODE},
+        HTTPStatus.BAD_REQUEST
+    )
+
+
+def _is_rotor_disconnected_exception(error: Exception) -> bool:
+    """Return True for runtime errors that indicate a lost/disconnected rotor link."""
+    text = str(error).strip().lower()
+    if not text:
+        return False
+    disconnected_markers = (
+        "not connected",
+        "connection lost",
+        "write failed",
+        "read failed",
+        "failed to send command",
+    )
+    return any(marker in text for marker in disconnected_markers)
 
 
 def _send_html(handler: BaseHTTPRequestHandler, html: str, status: HTTPStatus = HTTPStatus.OK) -> None:
@@ -276,7 +304,8 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
     if baud_rate <= 0:
         send_json(handler, {"error": "baudRate must be a positive integer"}, HTTPStatus.BAD_REQUEST)
         return
-    
+
+    state.notify_manual_connect_attempt()
     with state.rotor_lock:
         if not state.rotor_connection:
             send_json(
@@ -292,7 +321,7 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
                     # Already connected to this port
                     send_json(handler, {"status": "ok", "message": "Already connected"})
                     # Still broadcast state so the requesting client gets updated
-                    state.broadcast_connection_state()
+                    state.broadcast_connection_state(reason="manual_connect")
                     return
                 else:
                     send_json(
@@ -303,10 +332,11 @@ def handle_connect(handler: BaseHTTPRequestHandler, state: "ServerState") -> Non
                     return
             
             state.rotor_connection.connect(port, baud_rate)
+            state.notify_connection_established(port, baud_rate)
             send_json(handler, {"status": "ok"})
             
             # Broadcast connection state to all clients
-            state.broadcast_connection_state()
+            state.broadcast_connection_state(reason="manual_connect")
             
         except Exception as e:
             send_json(handler, {"error": str(e)}, HTTPStatus.INTERNAL_SERVER_ERROR)
@@ -319,6 +349,7 @@ def handle_disconnect(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
         handler: The HTTP request handler instance.
         state: The server state singleton.
     """
+    state.notify_manual_disconnect_requested()
     with state.rotor_lock:
         if state.rotor_connection and state.rotor_connection.is_connected():
             settings = state.settings.get_all()
@@ -331,7 +362,7 @@ def handle_disconnect(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             send_json(handler, {"status": "ok", "message": "Disconnected"})
             
             # Broadcast disconnection to all clients
-            state.broadcast_connection_state()
+            state.broadcast_connection_state(reason="manual_disconnect")
         else:
             send_json(handler, {"status": "ok", "message": "Not connected"})
 
@@ -365,13 +396,22 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             return
         
         if not state.rotor_connection or not state.rotor_connection.is_connected():
-            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            _send_rotor_disconnected(handler)
             return
         
         state.rotor_logic.set_target(az, el)
         send_json(handler, {"status": "ok"})
+    except RuntimeError as e:
+        if _is_rotor_disconnected_exception(e):
+            _send_rotor_disconnected(handler, str(e))
+            return
+        log(f"[Routes] Runtime error in handle_set_target: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to set target", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
     except Exception as e:
-        from server.utils.logging import log
         log(f"[Routes] Error in handle_set_target: {e}")
         send_json(
             handler, 
@@ -382,36 +422,72 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
 
 def handle_home(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     """Handle POST /api/rotor/home - Move to home preset."""
-    if not state.rotor_logic:
-        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
-        return
-    if not state.rotor_connection or not state.rotor_connection.is_connected():
-        send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
-        return
-    if not state.settings.get("parkPositionsEnabled", False):
-        send_json(handler, {"error": "Preset positions disabled"}, HTTPStatus.BAD_REQUEST)
-        return
-    if not state.rotor_logic.home():
-        send_json(handler, {"error": "Failed to move to home preset"}, HTTPStatus.BAD_REQUEST)
-        return
-    send_json(handler, {"status": "ok"})
+    try:
+        if not state.rotor_logic:
+            send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        if not state.rotor_connection or not state.rotor_connection.is_connected():
+            _send_rotor_disconnected(handler)
+            return
+        if not state.settings.get("parkPositionsEnabled", False):
+            send_json(handler, {"error": "Preset positions disabled"}, HTTPStatus.BAD_REQUEST)
+            return
+        if not state.rotor_logic.home():
+            send_json(handler, {"error": "Failed to move to home preset"}, HTTPStatus.BAD_REQUEST)
+            return
+        send_json(handler, {"status": "ok"})
+    except RuntimeError as e:
+        if _is_rotor_disconnected_exception(e):
+            _send_rotor_disconnected(handler, str(e))
+            return
+        log(f"[Routes] Runtime error in handle_home: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to move home", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
+    except Exception as e:
+        log(f"[Routes] Error in handle_home: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to move home", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 def handle_park(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
     """Handle POST /api/rotor/park - Move to park preset."""
-    if not state.rotor_logic:
-        send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
-        return
-    if not state.rotor_connection or not state.rotor_connection.is_connected():
-        send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
-        return
-    if not state.settings.get("parkPositionsEnabled", False):
-        send_json(handler, {"error": "Preset positions disabled"}, HTTPStatus.BAD_REQUEST)
-        return
-    if not state.rotor_logic.park():
-        send_json(handler, {"error": "Failed to move to park preset"}, HTTPStatus.BAD_REQUEST)
-        return
-    send_json(handler, {"status": "ok"})
+    try:
+        if not state.rotor_logic:
+            send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        if not state.rotor_connection or not state.rotor_connection.is_connected():
+            _send_rotor_disconnected(handler)
+            return
+        if not state.settings.get("parkPositionsEnabled", False):
+            send_json(handler, {"error": "Preset positions disabled"}, HTTPStatus.BAD_REQUEST)
+            return
+        if not state.rotor_logic.park():
+            send_json(handler, {"error": "Failed to move to park preset"}, HTTPStatus.BAD_REQUEST)
+            return
+        send_json(handler, {"status": "ok"})
+    except RuntimeError as e:
+        if _is_rotor_disconnected_exception(e):
+            _send_rotor_disconnected(handler, str(e))
+            return
+        log(f"[Routes] Runtime error in handle_park: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to move park", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
+    except Exception as e:
+        log(f"[Routes] Error in handle_park: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to move park", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
 
 
 def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
@@ -440,13 +516,22 @@ def handle_manual(handler: BaseHTTPRequestHandler, state: "ServerState") -> None
             return
         
         if not state.rotor_connection or not state.rotor_connection.is_connected():
-            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            _send_rotor_disconnected(handler)
             return
         
         state.rotor_logic.manual_move(direction)
         send_json(handler, {"status": "ok"})
+    except RuntimeError as e:
+        if _is_rotor_disconnected_exception(e):
+            _send_rotor_disconnected(handler, str(e))
+            return
+        log(f"[Routes] Runtime error in handle_manual: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to start manual movement", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
     except Exception as e:
-        from server.utils.logging import log
         log(f"[Routes] Error in handle_manual: {e}")
         send_json(
             handler, 
@@ -483,13 +568,22 @@ def handle_set_target_raw(handler: BaseHTTPRequestHandler, state: "ServerState")
             return
         
         if not state.rotor_connection or not state.rotor_connection.is_connected():
-            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            _send_rotor_disconnected(handler)
             return
         
         state.rotor_logic.set_target_raw(az, el)
         send_json(handler, {"status": "ok"})
+    except RuntimeError as e:
+        if _is_rotor_disconnected_exception(e):
+            _send_rotor_disconnected(handler, str(e))
+            return
+        log(f"[Routes] Runtime error in handle_set_target_raw: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to set raw target", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
     except Exception as e:
-        from server.utils.logging import log
         log(f"[Routes] Error in handle_set_target_raw: {e}")
         send_json(
             handler, 
@@ -509,11 +603,23 @@ def handle_stop(handler: BaseHTTPRequestHandler, state: "ServerState") -> None:
         if not state.rotor_logic:
             send_json(handler, {"error": "Logic not initialized"}, HTTPStatus.INTERNAL_SERVER_ERROR)
             return
+        if not state.rotor_connection or not state.rotor_connection.is_connected():
+            _send_rotor_disconnected(handler)
+            return
         
         state.rotor_logic.stop_motion()
         send_json(handler, {"status": "ok"})
+    except RuntimeError as e:
+        if _is_rotor_disconnected_exception(e):
+            _send_rotor_disconnected(handler, str(e))
+            return
+        log(f"[Routes] Runtime error in handle_stop: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to stop motion", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
     except Exception as e:
-        from server.utils.logging import log
         log(f"[Routes] Error in handle_stop: {e}")
         send_json(
             handler, 
@@ -540,11 +646,21 @@ def handle_send_command(handler: BaseHTTPRequestHandler, state: "ServerState") -
             return
         
         if not state.rotor_connection or not state.rotor_connection.is_connected():
-            send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+            _send_rotor_disconnected(handler)
             return
         
         state.rotor_connection.send_command(command)
         send_json(handler, {"status": "ok"})
+    except RuntimeError as e:
+        if _is_rotor_disconnected_exception(e):
+            _send_rotor_disconnected(handler, str(e))
+            return
+        log(f"[Routes] Runtime error in handle_send_command: {e}")
+        send_json(
+            handler,
+            {"error": "Failed to send command", "message": str(e)},
+            HTTPStatus.INTERNAL_SERVER_ERROR
+        )
     except Exception as e:
         log(f"[Routes] Error in handle_send_command: {e}")
         send_json(
@@ -963,7 +1079,7 @@ def handle_start_route(handler: BaseHTTPRequestHandler, state: "ServerState", ro
         return
     
     if not state.rotor_connection or not state.rotor_connection.is_connected():
-        send_json(handler, {"error": "Not connected to rotor"}, HTTPStatus.BAD_REQUEST)
+        _send_rotor_disconnected(handler)
         return
     
     try:

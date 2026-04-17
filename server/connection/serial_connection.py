@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import time
 import threading
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from server.utils.logging import log
 from server.connection.port_scanner import SERIAL_AVAILABLE
@@ -30,7 +30,11 @@ class RotorConnection:
     - Parsing of status responses (AZ=xxx EL=xxx format)
     """
 
-    def __init__(self, polling_interval_ms: int = 500) -> None:
+    def __init__(
+        self,
+        polling_interval_ms: int = 500,
+        on_unexpected_disconnect: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> None:
         """Initialize the rotor connection.
         
         Args:
@@ -52,6 +56,14 @@ class RotorConnection:
         self._stop_event: Optional[threading.Event] = None
         self.status_lock = threading.Lock()
         self.write_lock = threading.Lock()
+        self._on_unexpected_disconnect = on_unexpected_disconnect
+
+    def set_unexpected_disconnect_callback(
+        self,
+        callback: Optional[Callable[[Dict[str, Any]], None]]
+    ) -> None:
+        """Set callback invoked when a live connection is lost unexpectedly."""
+        self._on_unexpected_disconnect = callback
 
     def is_connected(self) -> bool:
         """Check if connected to a port.
@@ -104,6 +116,114 @@ class RotorConnection:
             serial_connection.close()
         except Exception as e:
             log(f"[RotorConnection] Error closing port: {e}")
+
+    def _detach_connection_context(
+        self
+    ) -> Tuple[Optional[Any], Optional[threading.Event], Optional[str], int]:
+        """Detach and invalidate the current connection context."""
+        with self.serial_lock:
+            serial_connection = self.serial
+            stop_event = self._stop_event
+            port = self.port
+            baud_rate = self.baud_rate
+            if serial_connection is not None or stop_event is not None:
+                self._connection_token += 1
+            self.serial = None
+            self.port = None
+            self._stop_event = None
+            return serial_connection, stop_event, port, baud_rate
+
+    def _detach_connection_context_if_current(
+        self,
+        serial_connection: Any,
+        connection_token: int,
+        stop_event: threading.Event
+    ) -> Optional[Tuple[Any, threading.Event, Optional[str], int]]:
+        """Detach context only if it still matches the active connection."""
+        with self.serial_lock:
+            if (
+                self.serial is not serial_connection
+                or self._connection_token != connection_token
+                or self._stop_event is not stop_event
+            ):
+                return None
+
+            port = self.port
+            baud_rate = self.baud_rate
+            self._connection_token += 1
+            self.serial = None
+            self.port = None
+            self._stop_event = None
+            return serial_connection, stop_event, port, baud_rate
+
+    def _reset_runtime_state(self) -> None:
+        """Reset in-memory runtime state to disconnected defaults."""
+        self.read_active = False
+        self.polling_active = False
+        self.buffer = ""
+        with self.status_lock:
+            self.status = None
+
+    def _finalize_disconnect_cleanup(
+        self,
+        serial_connection: Optional[Any],
+        stop_event: Optional[threading.Event]
+    ) -> None:
+        """Finalize cleanup after the connection context was detached."""
+        self._reset_runtime_state()
+        if stop_event:
+            stop_event.set()
+        self._close_serial_connection(serial_connection)
+        self._join_background_threads()
+
+    def _notify_unexpected_disconnect(
+        self,
+        port: Optional[str],
+        baud_rate: int,
+        reason: str
+    ) -> None:
+        """Notify upstream listeners about an unexpected disconnect."""
+        callback = self._on_unexpected_disconnect
+        if not callback:
+            return
+
+        payload = {
+            "port": port,
+            "baudRate": baud_rate,
+            "reason": reason,
+            "timestamp": int(time.time() * 1000),
+        }
+        try:
+            callback(payload)
+        except Exception as e:
+            log(f"[RotorConnection] Unexpected disconnect callback failed: {e}")
+
+    def _handle_unexpected_disconnect(
+        self,
+        serial_connection: Any,
+        connection_token: int,
+        stop_event: threading.Event,
+        reason: str
+    ) -> bool:
+        """Mark an active connection as lost and notify exactly once.
+
+        Returns:
+            True when this call transitioned the connection to disconnected state.
+            False when another thread already handled cleanup.
+        """
+        detached = self._detach_connection_context_if_current(
+            serial_connection,
+            connection_token,
+            stop_event
+        )
+        if detached is None:
+            return False
+
+        detached_serial, detached_stop_event, lost_port, lost_baud = detached
+        self._finalize_disconnect_cleanup(detached_serial, detached_stop_event)
+        log(f"[RotorConnection] Connection lost on {lost_port or 'unknown'}: {reason}")
+        self._notify_unexpected_disconnect(lost_port, lost_baud, reason)
+        return True
 
     def _write_to_connection(
         self,
@@ -174,6 +294,7 @@ class RotorConnection:
         
         serial_connection = None
         stop_event: Optional[threading.Event] = None
+        connection_token = 0
         try:
             serial_connection = serial.Serial(
                 port=port,
@@ -201,46 +322,24 @@ class RotorConnection:
             
             log(f"[RotorConnection] Connected to {port} at {baud_rate} baud")
         except Exception as e:
-            self.read_active = False
-            self.polling_active = False
-            with self.serial_lock:
-                if self.serial is serial_connection or self._stop_event is stop_event:
-                    self._connection_token += 1
-                    self.serial = None
-                    self.port = None
-                    self._stop_event = None
-            if stop_event:
-                stop_event.set()
-            self._close_serial_connection(serial_connection)
-            self._join_background_threads()
-            self.buffer = ""
-            with self.status_lock:
-                self.status = None
+            detached = None
+            if stop_event is not None:
+                detached = self._detach_connection_context_if_current(
+                    serial_connection,
+                    connection_token,
+                    stop_event
+                )
+            if detached is not None:
+                detached_serial, detached_stop_event, _, _ = detached
+                self._finalize_disconnect_cleanup(detached_serial, detached_stop_event)
+            else:
+                self._finalize_disconnect_cleanup(serial_connection, stop_event)
             raise RuntimeError(f"Failed to connect to {port}: {e}")
 
     def disconnect(self) -> None:
         """Disconnect from the port."""
-        self.read_active = False
-        self.polling_active = False
-
-        with self.serial_lock:
-            serial_connection = self.serial
-            stop_event = self._stop_event
-            if serial_connection is not None or stop_event is not None:
-                self._connection_token += 1
-            self.serial = None
-            self.port = None
-            self._stop_event = None
-
-        if stop_event:
-            stop_event.set()
-        self._close_serial_connection(serial_connection)
-        self._join_background_threads()
-        
-        # Reset state
-        self.buffer = ""
-        with self.status_lock:
-            self.status = None
+        serial_connection, stop_event, _, _ = self._detach_connection_context()
+        self._finalize_disconnect_cleanup(serial_connection, stop_event)
         log("[RotorConnection] Disconnected")
 
     def send_command(self, command: str) -> None:
@@ -252,6 +351,9 @@ class RotorConnection:
         Raises:
             RuntimeError: If not connected or send fails.
         """
+        serial_connection: Optional[Any] = None
+        connection_token = 0
+        stop_event: Optional[threading.Event] = None
         try:
             serial_connection, connection_token, stop_event = self._get_connection_context()
             if serial_connection is None or stop_event is None:
@@ -260,7 +362,14 @@ class RotorConnection:
         except RuntimeError:
             raise
         except Exception as e:
-            raise RuntimeError(f"Failed to send command: {e}")
+            if serial_connection is not None and stop_event is not None:
+                self._handle_unexpected_disconnect(
+                    serial_connection,
+                    connection_token,
+                    stop_event,
+                    f"Write failed: {e}"
+                )
+            raise RuntimeError(f"Not connected to rotor: {e}")
 
     def get_status(self) -> Optional[Dict[str, Any]]:
         """Get the current status.
@@ -321,12 +430,28 @@ class RotorConnection:
                     chunk = min(sleep_chunk, remaining)
                     stop_event.wait(chunk)
                     elapsed += chunk
-                        
+            except RuntimeError as e:
+                if stop_event.is_set() or not self._is_thread_current(serial_connection, connection_token, stop_event):
+                    break
+                if "Not connected to rotor" in str(e):
+                    break
+                self._handle_unexpected_disconnect(
+                    serial_connection,
+                    connection_token,
+                    stop_event,
+                    f"Polling runtime error: {e}"
+                )
+                break
             except Exception as e:
                 if stop_event.is_set() or not self._is_thread_current(serial_connection, connection_token, stop_event):
                     break
-                log(f"[RotorConnection] Polling error: {e}")
-                stop_event.wait(1.0)
+                self._handle_unexpected_disconnect(
+                    serial_connection,
+                    connection_token,
+                    stop_event,
+                    f"Polling error: {e}"
+                )
+                break
 
     def _read_loop(
         self,
@@ -345,6 +470,17 @@ class RotorConnection:
                 if in_waiting > 0:
                     try:
                         data = serial_connection.read(in_waiting)
+                    except Exception as e:
+                        if stop_event.is_set() or not self._is_thread_current(serial_connection, connection_token, stop_event):
+                            break
+                        self._handle_unexpected_disconnect(
+                            serial_connection,
+                            connection_token,
+                            stop_event,
+                            f"Read failed: {e}"
+                        )
+                        break
+                    try:
                         decoded = data.decode('utf-8', errors='ignore')
                         buffer += decoded
                         
@@ -361,11 +497,16 @@ class RotorConnection:
                         log(f"[RotorConnection] Decode error: {e}")
                 else:
                     stop_event.wait(0.1)
-            except Exception:
-                # Don't spam log on repetitive errors, just break if fatal
+            except Exception as e:
                 if stop_event.is_set() or not self._is_thread_current(serial_connection, connection_token, stop_event):
                     break
-                stop_event.wait(1)
+                self._handle_unexpected_disconnect(
+                    serial_connection,
+                    connection_token,
+                    stop_event,
+                    f"Read loop error: {e}"
+                )
+                break
 
     def _parse_status_value(self, raw_value: str, field_name: str) -> Optional[int]:
         """Parse a numeric field from a status response."""

@@ -242,6 +242,38 @@ class TestRotorStatusAPI:
         assert "azimuth" in data["status"]["calibrated"]
         assert "elevation" in data["status"]["calibrated"]
 
+    def test_get_status_reports_disconnected_after_unexpected_disconnect(self, test_server):
+        """GET /api/rotor/status should return connected=false after unexpected disconnect."""
+        base_url, state = test_server
+        from unittest.mock import MagicMock
+
+        # Simulate active connection context
+        mock_serial = MagicMock()
+        mock_serial.is_open = True
+        mock_serial.in_waiting = 0
+        stop_event = threading.Event()
+
+        with state.rotor_connection.serial_lock:
+            state.rotor_connection.serial = mock_serial
+            state.rotor_connection.port = "COM9"
+            state.rotor_connection.baud_rate = 9600
+            state.rotor_connection._connection_token = 7
+            state.rotor_connection._stop_event = stop_event
+
+        # Avoid starting reconnect worker in this deterministic test
+        state._start_auto_reconnect = MagicMock()
+
+        transitioned = state.rotor_connection._handle_unexpected_disconnect(
+            mock_serial, 7, stop_event, "test_disconnect"
+        )
+        assert transitioned is True
+
+        with urllib.request.urlopen(urljoin(base_url, "/api/rotor/status")) as response:
+            assert response.status == 200
+            data = json.load(response)
+
+        assert data["connected"] is False
+
     def test_get_status_applies_feedback_correction(self, test_server):
         """GET /api/rotor/status should expose correctedRaw and calibrated values based on correction factors."""
         base_url, state = test_server
@@ -407,6 +439,7 @@ class TestRotorControlAPI:
         error_data = json.loads(exc_info.value.read().decode("utf-8"))
         assert "error" in error_data
         assert "Not connected" in error_data["error"]
+        assert error_data["code"] == "ROTOR_DISCONNECTED"
     
     def test_manual_move_requires_connection(self, test_server):
         """POST /api/rotor/manual should require connection."""
@@ -427,9 +460,28 @@ class TestRotorControlAPI:
         error_data = json.loads(exc_info.value.read().decode("utf-8"))
         assert "error" in error_data
         assert "Not connected" in error_data["error"]
+        assert error_data["code"] == "ROTOR_DISCONNECTED"
+
+    def test_set_target_raw_requires_connection(self, test_server):
+        """POST /api/rotor/set_target_raw should return normalized disconnected error."""
+        base_url, state = test_server
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/rotor/set_target_raw"),
+            data=json.dumps({"az": 180, "el": 45}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
+
+        assert exc_info.value.code == 400
+        error_data = json.loads(exc_info.value.read().decode("utf-8"))
+        assert error_data["code"] == "ROTOR_DISCONNECTED"
     
     def test_stop(self, test_server):
-        """POST /api/rotor/stop should succeed."""
+        """POST /api/rotor/stop should fail with disconnected error when not connected."""
         base_url, state = test_server
         
         request = urllib.request.Request(
@@ -438,10 +490,33 @@ class TestRotorControlAPI:
             headers={"Content-Type": "application/json"},
             method="POST"
         )
-        
-        with urllib.request.urlopen(request) as response:
-            assert response.status == 200
-            data = json.load(response)
-        
-        assert data["status"] == "ok"
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
+
+        assert exc_info.value.code == 400
+        error_data = json.loads(exc_info.value.read().decode("utf-8"))
+        assert error_data["code"] == "ROTOR_DISCONNECTED"
+
+    def test_send_command_returns_disconnected_code_on_runtime_disconnect(self, test_server):
+        """POST /api/rotor/command should return 400 with code when link drops during send."""
+        base_url, state = test_server
+        from unittest.mock import MagicMock
+
+        state.rotor_connection.is_connected = MagicMock(return_value=True)
+        state.rotor_connection.send_command = MagicMock(side_effect=RuntimeError("Not connected to rotor"))
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/rotor/command"),
+            data=json.dumps({"command": "C2"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
+
+        assert exc_info.value.code == 400
+        error_data = json.loads(exc_info.value.read().decode("utf-8"))
+        assert error_data["code"] == "ROTOR_DISCONNECTED"
 

@@ -205,3 +205,72 @@ class TestRotorConnectionMocked:
         assert stop_event.is_set()
         assert not connection._is_thread_current(mock_serial, 1, stop_event)
 
+    def test_send_command_io_error_disconnects_and_notifies_once(self, connected_connection, mock_serial):
+        """Write failures should mark connection as lost and trigger callback exactly once."""
+        callback = Mock()
+        connected_connection.set_unexpected_disconnect_callback(callback)
+        mock_serial.write.side_effect = OSError("USB disconnected")
+
+        with pytest.raises(RuntimeError, match="Not connected to rotor"):
+            connected_connection.send_command("C2")
+
+        assert not connected_connection.is_connected()
+        assert connected_connection.port is None
+        callback.assert_called_once()
+        event_payload = callback.call_args[0][0]
+        assert event_payload["port"] == "COM1"
+        assert event_payload["baudRate"] == 9600
+        assert "Write failed" in event_payload["reason"]
+
+    def test_polling_loop_io_error_disconnects_and_notifies_once(self, connected_connection, mock_serial):
+        """Polling write errors should disconnect and notify once."""
+        callback = Mock()
+        connected_connection.set_unexpected_disconnect_callback(callback)
+        mock_serial.write.side_effect = OSError("Cable pulled")
+
+        stop_event = connected_connection._stop_event
+        assert stop_event is not None
+        connected_connection._polling_loop(mock_serial, connected_connection._connection_token, stop_event)
+
+        assert not connected_connection.is_connected()
+        callback.assert_called_once()
+        event_payload = callback.call_args[0][0]
+        assert event_payload["port"] == "COM1"
+        assert "Polling error" in event_payload["reason"] or "Write failed" in event_payload["reason"]
+
+    def test_read_loop_io_error_disconnects_and_notifies_once(self, connected_connection, mock_serial):
+        """Read errors should disconnect and notify once."""
+        callback = Mock()
+        connected_connection.set_unexpected_disconnect_callback(callback)
+        mock_serial.in_waiting = 1
+        mock_serial.read.side_effect = OSError("Read timeout")
+
+        stop_event = connected_connection._stop_event
+        assert stop_event is not None
+        connected_connection._read_loop(mock_serial, connected_connection._connection_token, stop_event)
+
+        assert not connected_connection.is_connected()
+        callback.assert_called_once()
+        event_payload = callback.call_args[0][0]
+        assert event_payload["port"] == "COM1"
+        assert "Read failed" in event_payload["reason"]
+
+    def test_unexpected_disconnect_callback_is_emitted_once(self, connected_connection, mock_serial):
+        """Concurrent handlers should not emit duplicate disconnect callbacks."""
+        callback = Mock()
+        connected_connection.set_unexpected_disconnect_callback(callback)
+        token = connected_connection._connection_token
+        stop_event = connected_connection._stop_event
+        assert stop_event is not None
+
+        first = connected_connection._handle_unexpected_disconnect(
+            mock_serial, token, stop_event, "test-disconnect"
+        )
+        second = connected_connection._handle_unexpected_disconnect(
+            mock_serial, token, stop_event, "duplicate-disconnect"
+        )
+
+        assert first is True
+        assert second is False
+        callback.assert_called_once()
+

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING, Any
+from typing import Optional, TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from server.config.settings import SettingsManager
@@ -72,6 +72,13 @@ class ServerState:
         
         # Thread safety
         self.rotor_lock = threading.Lock()
+        self._auto_reconnect_lock = threading.Lock()
+        self._auto_reconnect_thread: Optional[threading.Thread] = None
+        self._auto_reconnect_stop_event: Optional[threading.Event] = None
+        self._manual_disconnect_requested = False
+        self._shutdown_requested = False
+        self._last_connected_port: Optional[str] = None
+        self._last_connected_baud_rate: int = 9600
 
     def initialize(
         self,
@@ -106,6 +113,13 @@ class ServerState:
         # Initialize settings
         self.settings = SettingsManager(self.config_dir)
         config = self.settings.get_all()
+        self._shutdown_requested = False
+        self._manual_disconnect_requested = False
+        self._last_connected_port = None
+        try:
+            self._last_connected_baud_rate = int(config.get("baudRate", 9600) or 9600)
+        except (TypeError, ValueError):
+            self._last_connected_baud_rate = 9600
         
         # Override ports from config if available
         self.http_port = config.get("serverHttpPort", http_port)
@@ -119,7 +133,10 @@ class ServerState:
         log(f"[ServerState] Initializing with HTTP port {self.http_port}, WebSocket port {self.websocket_port}")
         
         # Initialize rotor connection with polling interval
-        self.rotor_connection = RotorConnection(polling_interval_ms=polling_interval_ms)
+        self.rotor_connection = RotorConnection(
+            polling_interval_ms=polling_interval_ms,
+            on_unexpected_disconnect=self._handle_unexpected_rotor_disconnect
+        )
         
         # Initialize rotor logic with connection
         self.rotor_logic = RotorLogic(self.rotor_connection)
@@ -167,6 +184,8 @@ class ServerState:
         from server.utils.logging import log
         log("[ServerState] Server restart requested")
         self._restart_requested = True
+        self._shutdown_requested = True
+        self.cancel_auto_reconnect()
     
     def is_restart_requested(self) -> bool:
         """Check if a restart has been requested.
@@ -178,6 +197,8 @@ class ServerState:
 
     def stop(self) -> None:
         """Stop all background processes and cleanup."""
+        self._shutdown_requested = True
+        self.notify_manual_disconnect_requested()
         if self.route_executor:
             self.route_executor.stop_route()
         if self.rotor_logic:
@@ -219,23 +240,140 @@ class ServerState:
         self.route_executor = None
         self.http_server = None
 
-    def broadcast_connection_state(self) -> None:
+    def broadcast_connection_state(self, reason: Optional[str] = None) -> None:
         """Broadcast current connection state to all WebSocket clients."""
         if not self.websocket_manager:
             return
-            
+             
         if self.rotor_connection and self.rotor_connection.is_connected():
             self.websocket_manager.broadcast_connection_state(
                 connected=True,
                 port=self.rotor_connection.port,
-                baud_rate=self.rotor_connection.baud_rate
+                baud_rate=self.rotor_connection.baud_rate,
+                reason=reason
             )
         else:
             self.websocket_manager.broadcast_connection_state(
                 connected=False,
                 port=None,
-                baud_rate=None
+                baud_rate=None,
+                reason=reason
             )
+
+    def notify_manual_connect_attempt(self) -> None:
+        """Disable manual disconnect guard and stop pending auto reconnect attempts."""
+        self._manual_disconnect_requested = False
+        self.cancel_auto_reconnect()
+
+    def notify_connection_established(self, port: str, baud_rate: int) -> None:
+        """Persist latest successful connection information."""
+        self._last_connected_port = port
+        self._last_connected_baud_rate = int(baud_rate)
+        self._manual_disconnect_requested = False
+        self.cancel_auto_reconnect()
+
+    def notify_manual_disconnect_requested(self) -> None:
+        """Mark disconnect as user initiated and stop auto reconnect worker."""
+        self._manual_disconnect_requested = True
+        self.cancel_auto_reconnect()
+
+    def cancel_auto_reconnect(self) -> None:
+        """Cancel currently running auto reconnect worker if active."""
+        with self._auto_reconnect_lock:
+            thread = self._auto_reconnect_thread
+            stop_event = self._auto_reconnect_stop_event
+            self._auto_reconnect_thread = None
+            self._auto_reconnect_stop_event = None
+
+        if stop_event:
+            stop_event.set()
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=0.5)
+
+    def _start_auto_reconnect(self, port: Optional[str], baud_rate: int) -> None:
+        """Start background worker that reconnects to the last known COM port."""
+        from server.utils.logging import log
+
+        if not port:
+            log("[ServerState] Auto reconnect skipped: no target port available", level="WARNING")
+            return
+        if self._shutdown_requested or self._manual_disconnect_requested:
+            return
+
+        self.cancel_auto_reconnect()
+        stop_event = threading.Event()
+
+        def worker() -> None:
+            from server.connection.port_scanner import list_available_ports
+
+            backoff_s = 1.0
+            log(f"[ServerState] Auto reconnect worker started for {port} @ {baud_rate}")
+            try:
+                while not stop_event.is_set():
+                    if self._shutdown_requested or self._manual_disconnect_requested:
+                        return
+
+                    if self.rotor_connection and self.rotor_connection.is_connected():
+                        return
+
+                    try:
+                        available_ports = {entry.get("path") for entry in list_available_ports()}
+                    except Exception as e:
+                        log(f"[ServerState] Auto reconnect port scan failed: {e}", level="WARNING")
+                        available_ports = set()
+
+                    if port in available_ports:
+                        with self.rotor_lock:
+                            if stop_event.is_set() or self._shutdown_requested or self._manual_disconnect_requested:
+                                return
+                            if not self.rotor_connection or self.rotor_connection.is_connected():
+                                return
+                            try:
+                                self.rotor_connection.connect(port, baud_rate)
+                            except Exception as e:
+                                log(f"[ServerState] Auto reconnect attempt failed for {port}: {e}", level="WARNING")
+                            else:
+                                self.notify_connection_established(port, baud_rate)
+                                self.broadcast_connection_state(reason="auto_reconnect_success")
+                                log(f"[ServerState] Auto reconnect succeeded on {port}")
+                                return
+
+                    stop_event.wait(backoff_s)
+                    backoff_s = min(backoff_s * 1.5, 5.0)
+            finally:
+                with self._auto_reconnect_lock:
+                    if self._auto_reconnect_thread is threading.current_thread():
+                        self._auto_reconnect_thread = None
+                        self._auto_reconnect_stop_event = None
+
+        thread = threading.Thread(target=worker, daemon=True, name="RotorAutoReconnect")
+        with self._auto_reconnect_lock:
+            self._auto_reconnect_thread = thread
+            self._auto_reconnect_stop_event = stop_event
+        thread.start()
+
+    def _handle_unexpected_rotor_disconnect(self, event: Dict[str, Any]) -> None:
+        """React to unexpected COM disconnect notifications from RotorConnection."""
+        from server.utils.logging import log
+
+        if self._shutdown_requested or self._manual_disconnect_requested:
+            return
+
+        lost_port = event.get("port") or self._last_connected_port
+        baud_rate = int(event.get("baudRate") or self._last_connected_baud_rate or 9600)
+        reason = event.get("reason") or "unexpected_disconnect"
+
+        if lost_port:
+            self._last_connected_port = lost_port
+            self._last_connected_baud_rate = baud_rate
+
+        log(f"[ServerState] Unexpected rotor disconnect detected: port={lost_port} reason={reason}", level="WARNING")
+
+        if self.route_executor and self.route_executor.is_executing():
+            self.route_executor.stop_route()
+
+        self.broadcast_connection_state(reason="unexpected_disconnect")
+        self._start_auto_reconnect(lost_port, baud_rate)
 
     @classmethod
     def get_instance(cls) -> "ServerState":

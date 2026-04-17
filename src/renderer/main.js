@@ -467,6 +467,9 @@ let config = configStore.loadSync();
 let connected = false;
 let unsubscribeStatus = null;
 const unsubscribeError = rotor.onError((error) => reportError(error));
+const unsubscribeConnectionState = rotor.onConnectionStateChange((state) => {
+  handleConnectionStateChange(state);
+});
 let settingsModal = null;
 
 // Initialize settings modal
@@ -539,26 +542,7 @@ async function setupWebSocket() {
   // Handle connection state broadcasts from server
   wsService.on('connection_state_changed', (state) => {
     logAction('WebSocket: Verbindungsstatus empfangen', state);
-    
-    // Update local connection state
     rotor.handleConnectionStateUpdate(state);
-    
-    // Update UI
-    if (state.connected) {
-      connected = true;
-      setConnectionState(true);
-      
-      // Update port select to show connected port
-      if (state.port) {
-        const option = Array.from(portSelect.options).find(o => o.value === state.port);
-        if (option) {
-          portSelect.value = state.port;
-        }
-      }
-    } else {
-      connected = false;
-      setConnectionState(false);
-    }
   });
   
   // Handle client list updates
@@ -1004,7 +988,7 @@ async function handleDisconnect() {
     reportError(error);
   } finally {
     connected = false;
-    setConnectionState(false);
+    setConnectionState(false, { reason: 'manual_disconnect' });
   }
 }
 
@@ -1126,7 +1110,30 @@ function updateConnectionStatusText() {
   connectionStatus.textContent = 'Verbunden';
 }
 
-function setConnectionState(state) {
+function handleConnectionStateChange(state) {
+  if (!state || typeof state !== 'object') {
+    return;
+  }
+
+  const isConnected = Boolean(state.connected);
+  const reason = typeof state.reason === 'string' ? state.reason : null;
+  connected = isConnected;
+  setConnectionState(isConnected, { reason });
+
+  if (isConnected) {
+    if (state.port) {
+      const option = Array.from(portSelect.options).find(o => o.value === state.port);
+      if (option) {
+        portSelect.value = state.port;
+      }
+    }
+  } else {
+    void refreshPorts();
+  }
+}
+
+function setConnectionState(state, options = {}) {
+  const reason = options && typeof options.reason === 'string' ? options.reason : null;
   connected = state;
   logAction('Verbindungsstatus gesetzt', { connected: state });
   controls.setEnabled(state);
@@ -1157,7 +1164,11 @@ function setConnectionState(state) {
       }
     }, 2000);
   } else {
-    connectionStatus.textContent = 'Getrennt';
+    if (reason === 'unexpected_disconnect' || reason === 'api_disconnect') {
+      connectionStatus.textContent = 'Verbindung verloren';
+    } else {
+      connectionStatus.textContent = 'Getrennt';
+    }
     if (statusCheckInterval) {
       clearInterval(statusCheckInterval);
       statusCheckInterval = null;
@@ -1276,6 +1287,12 @@ function reportError(error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error('[UI] Fehler', error);
   logAction('Fehler gemeldet', { message });
+  if (error && typeof error === 'object' && error.code === 'ROTOR_DISCONNECTED') {
+    connectionStatus.textContent = 'Verbindung verloren';
+    connectionStatus.classList.remove('connected');
+    connectionStatus.classList.add('disconnected');
+    return;
+  }
   connectionStatus.textContent = `Fehler: ${message}`;
   connectionStatus.classList.remove('connected');
   connectionStatus.classList.add('disconnected');
@@ -1291,6 +1308,7 @@ window.addEventListener('beforeunload', () => {
   // Clean up event listeners
   if (unsubscribeStatus) unsubscribeStatus();
   if (typeof unsubscribeError === 'function') unsubscribeError();
+  if (typeof unsubscribeConnectionState === 'function') unsubscribeConnectionState();
 
   // Clear connection status check interval
   if (statusCheckInterval) {

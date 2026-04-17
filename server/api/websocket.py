@@ -173,21 +173,32 @@ class WebSocketManager:
         except Exception as e:
             log(f"[WebSocket] Error handling message: {e}")
     
-    def broadcast_connection_state(self, connected: bool, port: Optional[str], baud_rate: Optional[int]) -> None:
+    def broadcast_connection_state(
+        self,
+        connected: bool,
+        port: Optional[str],
+        baud_rate: Optional[int],
+        reason: Optional[str] = None
+    ) -> None:
         """Broadcast connection state change to all clients.
         
         Args:
             connected: Whether connected to a COM port.
             port: The COM port name (if connected).
             baud_rate: The baud rate (if connected).
+            reason: Optional reason for state change (additive metadata).
         """
+        payload: Dict[str, Any] = {
+            "connected": connected,
+            "port": port,
+            "baudRate": baud_rate
+        }
+        if reason:
+            payload["reason"] = reason
+
         message = {
             "type": "connection_state_changed",
-            "data": {
-                "connected": connected,
-                "port": port,
-                "baudRate": baud_rate
-            }
+            "data": payload
         }
         self._schedule_broadcast(json.dumps(message))
     

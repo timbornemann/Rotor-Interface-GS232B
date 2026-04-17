@@ -103,6 +103,69 @@ class RotorService {
     return headers;
   }
 
+  /**
+   * Perform an API request and normalize backend errors.
+   * @param {string} path - API path starting with /api
+   * @param {object} options - Fetch options
+   * @returns {Promise<any>} Parsed JSON payload when available, otherwise null
+   */
+  async _request(path, options = {}) {
+    const headers = {
+      ...this.getSessionHeaders(),
+      ...(options.headers || {})
+    };
+
+    const response = await fetch(`${this.apiBase}${path}`, {
+      ...options,
+      headers
+    });
+
+    let payload = null;
+    const contentType = response.headers && typeof response.headers.get === 'function'
+      ? (response.headers.get('content-type') || '')
+      : '';
+
+    if (contentType.includes('application/json')) {
+      try {
+        payload = await response.json();
+      } catch (_ignore) {
+        payload = null;
+      }
+    } else {
+      try {
+        const text = await response.text();
+        if (text) {
+          payload = { message: text };
+        }
+      } catch (_ignore) {
+        payload = null;
+      }
+    }
+
+    if (!response.ok) {
+      const message = payload && (payload.error || payload.message)
+        ? (payload.error || payload.message)
+        : `Server Error: ${response.status}`;
+      const error = new Error(message);
+      error.status = response.status;
+      error.code = payload && payload.code ? payload.code : null;
+      error.payload = payload;
+
+      if (error.code === 'ROTOR_DISCONNECTED') {
+        this.handleConnectionStateUpdate({
+          connected: false,
+          port: null,
+          baudRate: null,
+          reason: 'api_disconnect'
+        });
+      }
+
+      throw error;
+    }
+
+    return payload;
+  }
+
   // --- API Wrappers ---
   
   async listPorts() {
@@ -124,23 +187,17 @@ class RotorService {
 
   async connect(config) {
     try {
-        const resp = await fetch(`${this.apiBase}/api/rotor/connect`, {
-            method: 'POST',
-            headers: this.getSessionHeaders(),
-            body: JSON.stringify({ port: config.path, baudRate: config.baudRate || 9600 })
+        await this._request('/api/rotor/connect', {
+          method: 'POST',
+          body: JSON.stringify({ port: config.path, baudRate: config.baudRate || 9600 })
         });
-        
-        if (!resp.ok) {
-            const err = await resp.json();
-            throw new Error(err.error || resp.statusText);
-        }
-        
-        // Connection state will be updated via WebSocket broadcast
-        // But set local state optimistically
-        this.isConnected = true;
-        this.startPolling();
+        this.handleConnectionStateUpdate({
+          connected: true,
+          port: config.path,
+          baudRate: config.baudRate || 9600,
+          reason: 'manual_connect'
+        });
         console.log("[RotorService] Connected");
-        
     } catch (e) {
         this.emitError(e);
         throw e;
@@ -150,13 +207,19 @@ class RotorService {
   async disconnect() {
     this.stopPolling();
     try {
-        await fetch(`${this.apiBase}/api/rotor/disconnect`, { 
-          method: 'POST',
-          headers: this.getSessionHeaders()
+        await this._request('/api/rotor/disconnect', { 
+          method: 'POST'
         });
-    } catch(e) { console.warn(e); }
-    // Connection state will be updated via WebSocket broadcast
-    this.isConnected = false;
+    } catch(e) {
+      // Treat disconnect failures as non-fatal for local UI shutdown.
+      console.warn(e);
+    }
+    this.handleConnectionStateUpdate({
+      connected: false,
+      port: null,
+      baudRate: null,
+      reason: 'manual_disconnect'
+    });
   }
   
   /**
@@ -190,10 +253,9 @@ class RotorService {
    * @param {number|null} el - Target elevation in degrees
    */
   async setAzEl({ az, el }) {
-      await fetch(`${this.apiBase}/api/rotor/set_target`, {
-          method: 'POST',
-          headers: this.getSessionHeaders(),
-          body: JSON.stringify({ az, el })
+      await this._request('/api/rotor/set_target', {
+        method: 'POST',
+        body: JSON.stringify({ az, el })
       });
   }
   
@@ -211,10 +273,9 @@ class RotorService {
    * @param {number|null} el - Target elevation in raw degrees (hardware position)
    */
   async setAzElRaw({ az, el }) {
-      await fetch(`${this.apiBase}/api/rotor/set_target_raw`, {
-          method: 'POST',
-          headers: this.getSessionHeaders(),
-          body: JSON.stringify({ az, el })
+      await this._request('/api/rotor/set_target_raw', {
+        method: 'POST',
+        body: JSON.stringify({ az, el })
       });
   }
   
@@ -231,10 +292,9 @@ class RotorService {
    * @param {string} direction - One of: 'left', 'right', 'up', 'down'
    */
   async manualMove(direction) {
-      await fetch(`${this.apiBase}/api/rotor/manual`, {
-          method: 'POST',
-          headers: this.getSessionHeaders(),
-          body: JSON.stringify({ direction })
+      await this._request('/api/rotor/manual', {
+        method: 'POST',
+        body: JSON.stringify({ direction })
       });
   }
   
@@ -242,9 +302,8 @@ class RotorService {
    * Stop all rotor motion
    */
   async stopMotion() {
-      await fetch(`${this.apiBase}/api/rotor/stop`, { 
-        method: 'POST',
-        headers: this.getSessionHeaders()
+      await this._request('/api/rotor/stop', { 
+        method: 'POST'
       });
   }
 
@@ -252,9 +311,8 @@ class RotorService {
    * Move rotor to Home preset.
    */
   async home() {
-      await fetch(`${this.apiBase}/api/rotor/home`, {
-        method: 'POST',
-        headers: this.getSessionHeaders()
+      await this._request('/api/rotor/home', {
+        method: 'POST'
       });
   }
 
@@ -262,9 +320,8 @@ class RotorService {
    * Move rotor to Park preset.
    */
   async park() {
-      await fetch(`${this.apiBase}/api/rotor/park`, {
-        method: 'POST',
-        headers: this.getSessionHeaders()
+      await this._request('/api/rotor/park', {
+        method: 'POST'
       });
   }
 
