@@ -1,81 +1,162 @@
 # Rotor Interface GS232B - API Dokumentation
 
-Diese Dokumentation beschreibt die vollständige REST-API des Rotor Interface GS232B Servers. Der Server bietet sowohl Low-Level-Steuerung (direkte GS-232B Befehle) als auch High-Level-Steuerung (abstrahierte Bewegungsbefehle) sowie umfangreiche Konfigurations- und Verwaltungsfunktionen.
+Diese Datei beschreibt den aktuellen REST-API-Stand der Anwendung.
 
----
+Stand: 2026-04-17
+API-Version: v2.0.0
+HTTP-Server Header: RotorHTTP/2.0
 
-## Übersicht
+## 1. Uebersicht
 
-- **Base URL:** `http://localhost:8081` (mit `--port` änderbar)
-- **Content-Type:** `application/json`
-- **CORS:** `Access-Control-Allow-Origin: *`
-- **Authentifizierung:** keine - bitte nur im vertrauenswürdigen Netzwerk nutzen
-- **Session-Management:** Der Server verwaltet Client-Sessions zur Steuerung von Multi-User-Zugriff
-- **Kalibrierung:** Alle Positions-Endpunkte liefern sowohl RAW (direkt vom Rotor) als auch KALIBRIERTE Werte (mit Offset/Skalierung)
+- Base URL: `http://<host>:<http-port>` (Standard lokal: `http://localhost:8081`)
+- Content-Type bei JSON-Requests: `application/json`
+- JSON-Responses enthalten CORS Header `Access-Control-Allow-Origin: *`
+- Session-Header (falls genutzt): `X-Session-ID: <session-id>`
 
-### Schnellstart
+Wichtige Quellen fuer den API-Stand:
 
-```bash
-pip install -r requirements.txt
-python -m server.main --port 8081 --websocket-port 8082
+1. Laufende OpenAPI Spec: `GET /api/openapi.json`
+2. Swagger UI: `GET /api/docs`
+3. ReDoc UI: `GET /api/redoc`
+4. Server-Handler Code in `server/api/handler.py` und `server/api/routes.py`
+
+## 2. Vollstaendige Endpunkt-Matrix
+
+### 2.1 Session
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/session` | Session holen oder erzeugen |
+
+### 2.2 Rotor
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/rotor/ports` | Verfuegbare serielle Ports |
+| POST | `/api/rotor/connect` | Mit COM-Port verbinden |
+| POST | `/api/rotor/disconnect` | Verbindung trennen |
+| GET | `/api/rotor/status` | Rotorstatus (RAW, correctedRaw, calibrated) |
+| GET | `/api/rotor/position` | Erweiterter Status inkl. `cone` |
+| POST | `/api/rotor/command` | Direkten GS-232B Befehl senden |
+| POST | `/api/rotor/manual` | Manuelle Bewegung starten |
+| POST | `/api/rotor/stop` | Bewegung stoppen |
+| POST | `/api/rotor/set_target` | Zielposition in kalibrierten Werten setzen |
+| POST | `/api/rotor/set_target_raw` | Zielposition in RAW-Werten setzen |
+| POST | `/api/rotor/home` | Home-Preset anfahren |
+| POST | `/api/rotor/park` | Park-Preset anfahren |
+
+### 2.3 Einstellungen
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/settings` | Gesamte Konfiguration laden |
+| POST | `/api/settings` | Konfiguration teilweise aktualisieren |
+
+### 2.4 Server
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/server/settings` | Aktive Serverparameter abrufen |
+| POST | `/api/server/settings` | Serverparameter validieren/speichern |
+| POST | `/api/server/restart` | Geordneten Neustart anfordern |
+
+### 2.5 Clients
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/clients` | Alle Sessions listen |
+| POST | `/api/clients/{id}/suspend` | Session sperren |
+| POST | `/api/clients/{id}/resume` | Session entsperren |
+
+### 2.6 Routen
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/routes` | Alle Routen laden |
+| POST | `/api/routes` | Route anlegen |
+| PUT | `/api/routes/{id}` | Route aktualisieren |
+| DELETE | `/api/routes/{id}` | Route loeschen |
+| POST | `/api/routes/{id}/start` | Route starten |
+| POST | `/api/routes/stop` | Aktive Routenausfuehrung stoppen |
+| POST | `/api/routes/continue` | Manuellen Wait-Schritt fortsetzen |
+| GET | `/api/routes/execution` | Aktuellen Ausfuehrungsstatus lesen |
+
+### 2.7 API-Dokumentation
+
+| Methode | Endpoint | Beschreibung |
+|---|---|---|
+| GET | `/api/openapi.json` | OpenAPI 3.1 Spezifikation |
+| GET | `/api/docs` | Swagger UI (Try it out) |
+| GET | `/api/redoc` | ReDoc Ansicht |
+
+## 3. Session, Zugriff, Security
+
+### 3.1 Session-Grundlagen
+
+- Session-ID wird ueber `GET /api/session` erzeugt oder geladen.
+- Session kann per Header `X-Session-ID` oder per Cookie `session_id` uebermittelt werden.
+- Session-Status ist `active` oder `suspended`.
+
+### GET /api/session
+
+Beschreibung: Liefert vorhandene Session oder erstellt eine neue Session.
+
+Response `200`:
+
+```json
+{
+  "sessionId": "3b9f1c2a-...",
+  "status": "active"
+}
 ```
 
-Der Server hostet gleichzeitig die Web-Oberfläche aus `src/renderer` unter `http://localhost:8081`.
+### 3.2 `serverRequireSession`
 
----
+Wenn `serverRequireSession=true` gesetzt ist:
 
-## Endpunkt-Übersicht
+- API-Requests ohne gueltige Session erhalten `401`.
+- Gesperrte Sessions erhalten `403`.
 
-### Rotor-Steuerung
+Wenn `serverRequireSession=false`:
 
-| Endpunkt | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/rotor/ports` | GET | Verfügbare COM-Ports auflisten |
-| `/api/rotor/connect` | POST | Verbindung zu COM-Port herstellen |
-| `/api/rotor/disconnect` | POST | Verbindung trennen |
-| `/api/rotor/status` | GET | Aktuellen Status (Position, Verbindung) abrufen |
-| `/api/rotor/position` | GET | Position mit Kegel-Visualisierungsparametern |
-| `/api/rotor/command` | POST | **Direkter GS-232B Befehl** (Low-Level) |
-| `/api/rotor/set_target` | POST | **Zielposition setzen** (kalibrierte Werte) |
-| `/api/rotor/set_target_raw` | POST | **Zielposition setzen** (RAW Hardware-Werte) |
-| `/api/rotor/manual` | POST | **Manuelle Bewegung** starten (left/right/up/down) |
-| `/api/rotor/stop` | POST | **Alle Bewegungen stoppen** |
+- Session ist optional.
+- Gesperrte Sessions bleiben weiterhin blockiert (`403`).
 
-### Konfiguration
+### 3.3 Oeffentliche API-Endpunkte (ohne Session-Pruefung)
 
-| Endpunkt | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/settings` | GET | Rotor-Konfiguration abrufen (Kalibrierung, Limits, etc.) |
-| `/api/settings` | POST | Rotor-Konfiguration aktualisieren |
+- `GET /api/session`
+- `GET /api/openapi.json`
+- `GET /api/docs` und `GET /api/docs/`
+- `GET /api/redoc` und `GET /api/redoc/`
+- `GET /api/docs/assets/*`
 
-### Server-Verwaltung
+### 3.4 CORS-Hinweis
 
-| Endpunkt | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/server/settings` | GET | Server-Einstellungen abrufen (Ports, Polling, etc.) |
-| `/api/server/settings` | POST | Server-Einstellungen aktualisieren |
-| `/api/server/restart` | POST | Server neu starten |
+- Preflight (`OPTIONS`) liefert aktuell `Access-Control-Allow-Methods: GET, POST, OPTIONS`.
+- Browser-Cross-Origin fuer `PUT`/`DELETE` kann dadurch blockiert sein.
 
-### Client-Verwaltung (Multi-User)
+## 4. API-Doku Endpunkte
 
-| Endpunkt | Methode | Beschreibung |
-|----------|---------|--------------|
-| `/api/session` | GET | Eigene Session-ID abrufen |
-| `/api/clients` | GET | Alle verbundenen Clients auflisten |
-| `/api/clients/{id}/suspend` | POST | Client suspendieren (Zugriff sperren) |
-| `/api/clients/{id}/resume` | POST | Client wieder aktivieren |
+### GET /api/openapi.json
 
----
+Liefert die aktuelle OpenAPI 3.1 Spezifikation als JSON.
 
-## Rotor-Steuerung
+### GET /api/docs
+
+Liefert lokale Swagger UI (ohne externes CDN).
+
+### GET /api/redoc
+
+Liefert lokale ReDoc Seite.
+
+## 5. Rotor API im Detail
 
 ### GET /api/rotor/ports
 
-Listet alle verfügbaren COM-Ports auf dem Server.
+Beschreibung: Serielle Ports auflisten.
 
-**Request:** keine Parameter
+Response `200`:
 
-**Response 200:**
 ```json
 {
   "ports": [
@@ -89,25 +170,12 @@ Listet alle verfügbaren COM-Ports auf dem Server.
 }
 ```
 
-**cURL:**
-```bash
-curl -s http://localhost:8081/api/rotor/ports
-```
-
-**Python:**
-```python
-import requests
-ports = requests.get("http://localhost:8081/api/rotor/ports").json()["ports"]
-print("Verfügbare Ports:", [p["path"] for p in ports])
-```
-
----
-
 ### POST /api/rotor/connect
 
-Verbindet den Server mit einem COM-Port. Nur eine Verbindung gleichzeitig möglich.
+Beschreibung: Verbindung zum seriellen Port aufbauen.
 
-**Body:**
+Request Body:
+
 ```json
 {
   "port": "COM3",
@@ -115,39 +183,40 @@ Verbindet den Server mit einem COM-Port. Nur eine Verbindung gleichzeitig mögli
 }
 ```
 
-**Response 200:**
+Validierung:
+
+- `port` muss non-empty string sein.
+- `baudRate` muss positive Integer sein.
+
+Response `200`:
+
 ```json
 {
   "status": "ok"
 }
 ```
 
-**Fehler:**
-- `400 Bad Request`: Port fehlt oder bereits mit anderem Port verbunden
-- `500 Internal Server Error`: Verbindungsfehler
+Alternative `200` bei bereits verbundenem gleichen Port:
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/rotor/connect -H "Content-Type: application/json" -d '{"port":"COM3","baudRate":9600}'
+```json
+{
+  "status": "ok",
+  "message": "Already connected"
+}
 ```
 
-**Python:**
-```python
-import requests
-response = requests.post("http://localhost:8081/api/rotor/connect", 
-                        json={"port": "COM3", "baudRate": 9600})
-print(response.json())
-```
+Typische Fehler:
 
----
+- `400`: bereits mit anderem Port verbunden
+- `400`: ungueltige Parameter
+- `500`: Verbindungsfehler
 
 ### POST /api/rotor/disconnect
 
-Trennt die aktive Verbindung. Mehrfaches Aufrufen ist unkritisch.
+Beschreibung: Aktive Verbindung trennen.
 
-**Request:** kein Body
+Response `200` (verbunden):
 
-**Response 200:**
 ```json
 {
   "status": "ok",
@@ -155,46 +224,48 @@ Trennt die aktive Verbindung. Mehrfaches Aufrufen ist unkritisch.
 }
 ```
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/rotor/disconnect
-```
+Response `200` (nicht verbunden):
 
-**Python:**
-```python
-import requests
-requests.post("http://localhost:8081/api/rotor/disconnect")
+```json
+{
+  "status": "ok",
+  "message": "Not connected"
+}
 ```
-
----
 
 ### GET /api/rotor/status
 
-Liefert den aktuellen Rotorstatus mit RAW- und kalibrierten Werten.
+Beschreibung: Aktueller Verbindungs- und Positionsstatus.
 
-**Response 200 (verbunden):**
+Response `200` (verbunden):
+
 ```json
 {
   "connected": true,
   "port": "COM3",
   "baudRate": 9600,
-  "clientCount": 2,
   "status": {
-    "timestamp": 1705320000000,
     "rawLine": "AZ=123 EL=045",
+    "timestamp": 1705320000000,
     "rph": {
       "azimuth": 123,
       "elevation": 45
+    },
+    "correctedRaw": {
+      "azimuth": 123.0,
+      "elevation": 45.0
     },
     "calibrated": {
       "azimuth": 127.0,
       "elevation": 46.5
     }
-  }
+  },
+  "clientCount": 2
 }
 ```
 
-**Response 200 (nicht verbunden):**
+Response `200` (nicht verbunden):
+
 ```json
 {
   "connected": false,
@@ -202,43 +273,32 @@ Liefert den aktuellen Rotorstatus mit RAW- und kalibrierten Werten.
 }
 ```
 
-**cURL:**
-```bash
-curl -s http://localhost:8081/api/rotor/status | jq
-```
-
-**Python:**
-```python
-import requests
-status = requests.get("http://localhost:8081/api/rotor/status").json()
-if status["connected"]:
-    print(f"Position: Az={status['status']['calibrated']['azimuth']}, "
-          f"El={status['status']['calibrated']['elevation']}")
-```
-
----
-
 ### GET /api/rotor/position
 
-Erweiterte Positionsinformationen mit Kegel-Visualisierungsparametern.
+Beschreibung: Status plus Cone-Parameter und Kalibrierungsblock.
 
-**Query-Parameter (optional):**
-- `coneAngle` (float, Grad, Standard: 10)
-- `coneLength` (float, Meter, Standard: 1000)
+Optionale Query-Parameter:
 
-**Response 200 (verbunden):**
+- `coneAngle` (default: `10`)
+- `coneLength` (default: `1000`)
+
+Response `200` (verbunden):
+
 ```json
 {
   "connected": true,
   "port": "COM3",
   "baudRate": 9600,
-  "clientCount": 1,
   "position": {
-    "timestamp": 1705320000000,
     "rawLine": "AZ=180 EL=045",
+    "timestamp": 1705320000000,
     "rph": {
       "azimuth": 180,
       "elevation": 45
+    },
+    "correctedRaw": {
+      "azimuth": 180.0,
+      "elevation": 45.0
     },
     "calibrated": {
       "azimuth": 182.0,
@@ -254,78 +314,80 @@ Erweiterte Positionsinformationen mit Kegel-Visualisierungsparametern.
   "cone": {
     "angle": 15,
     "length": 2000
-  }
+  },
+  "clientCount": 1
 }
 ```
 
-**cURL:**
-```bash
-curl -s "http://localhost:8081/api/rotor/position?coneAngle=15&coneLength=2000"
-```
-
-**Python:**
-```python
-import requests
-pos = requests.get("http://localhost:8081/api/rotor/position", 
-                   params={"coneAngle": 12, "coneLength": 1500}).json()
-print("Kalibrierte Position:", pos["position"]["calibrated"])
-```
-
----
-
 ### POST /api/rotor/command
 
-**Low-Level-Steuerung:** Sendet einen direkten GS-232B Befehl an den Rotor. Der Server ergänzt automatisch `\r`.
+Beschreibung: Direkten GS-232B Befehl senden.
 
-**Body:**
+Request Body:
+
 ```json
 {
   "command": "C2"
 }
 ```
 
-**Response 200:**
+Response `200`:
+
 ```json
 {
   "status": "ok"
 }
 ```
 
-**Fehler:**
-- `400 Bad Request`: Nicht verbunden oder command fehlt
-- `500 Internal Server Error`: Sendefehler
+Typische Fehler:
 
-**GS-232B Befehlsreferenz:**
+- `400`: ungueltiger `command`
+- `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
+- `500`: Sendefehler
 
-| Befehl | Wirkung |
-|--------|---------|
-| `C2` | Aktuellen Status abfragen |
-| `Mxxx` | Azimut auf xxx Grad setzen (z.B. `M180`) |
-| `Wxxx yyy` | Azimut + Elevation setzen (z.B. `W180 045`) |
-| `R` / `L` | Dauerlauf rechts / links |
-| `U` / `D` | Elevation hoch / runter |
-| `A` | Stop Azimut |
-| `E` | Stop Elevation |
-| `S` | Stop alles |
+### POST /api/rotor/manual
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/rotor/command -H "Content-Type: application/json" -d '{"command":"C2"}'
+Beschreibung: Dauerbewegung starten.
+
+Request Body:
+
+```json
+{
+  "direction": "right"
+}
 ```
 
-**Python:**
-```python
-import requests
-requests.post("http://localhost:8081/api/rotor/command", json={"command": "M180"})
+Gueltige Werte:
+
+- `left`, `right`, `up`, `down`
+- `L`, `R`, `U`, `D`
+
+Response `200`:
+
+```json
+{
+  "status": "ok"
+}
 ```
 
----
+### POST /api/rotor/stop
+
+Beschreibung: Bewegung stoppen.
+
+Response `200`:
+
+```json
+{
+  "status": "ok"
+}
+```
 
 ### POST /api/rotor/set_target
 
-**High-Level-Steuerung:** Setzt eine Zielposition mit **kalibrierten** Werten. Der Server wendet automatisch Offsets und Skalierung an. Optional Ramping (sanftes Anfahren) möglich.
+Beschreibung: Zielposition in kalibrierten Werten setzen.
 
-**Body:**
+Request Body (`az` und `el` sind beide Pflicht und numerisch):
+
 ```json
 {
   "az": 180.5,
@@ -333,38 +395,26 @@ requests.post("http://localhost:8081/api/rotor/command", json={"command": "M180"
 }
 ```
 
-- `az`: Ziel-Azimut in Grad (kalibriert) - optional
-- `el`: Ziel-Elevation in Grad (kalibriert) - optional
+Response `200`:
 
-**Response 200:**
 ```json
 {
   "status": "ok"
 }
 ```
 
-**Fehler:**
-- `400 Bad Request`: Nicht verbunden
-- `500 Internal Server Error`: Logic nicht initialisiert
+Typische Fehler:
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/rotor/set_target -H "Content-Type: application/json" -d '{"az":180,"el":45}'
-```
-
-**Python:**
-```python
-import requests
-requests.post("http://localhost:8081/api/rotor/set_target", json={"az": 180, "el": 45})
-```
-
----
+- `400`: `az` oder `el` fehlt/ungueltig
+- `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
+- `500`: interne Ausfuehrungsfehler
 
 ### POST /api/rotor/set_target_raw
 
-**Raw Hardware-Steuerung:** Setzt eine Zielposition mit **RAW Hardware-Werten** ohne Kalibrierung. Nützlich für direkte Hardware-Kontrolle oder Kalibrierungstests.
+Beschreibung: Zielposition mit RAW-Werten setzen.
 
-**Body:**
+Request Body (`az` oder `el` oder beide):
+
 ```json
 {
   "az": 180,
@@ -372,181 +422,111 @@ requests.post("http://localhost:8081/api/rotor/set_target", json={"az": 180, "el
 }
 ```
 
-**Response 200:**
+Regel: Mindestens eines der Felder muss numerisch gesetzt sein.
+
+Response `200`:
+
 ```json
 {
   "status": "ok"
 }
 ```
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/rotor/set_target_raw -H "Content-Type: application/json" -d '{"az":180,"el":45}'
-```
+Typische Fehler:
 
-**Python:**
-```python
-import requests
-requests.post("http://localhost:8081/api/rotor/set_target_raw", json={"az": 180, "el": 45})
-```
+- `400`: weder `az` noch `el` gueltig gesetzt
+- `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
 
----
+### POST /api/rotor/home
 
-### POST /api/rotor/manual
+Beschreibung: Home-Preset anfahren.
 
-**Manuelle Bewegung:** Startet eine kontinuierliche Bewegung in eine Richtung. Bewegung läuft bis `stop` aufgerufen wird oder ein Limit erreicht wird.
+Voraussetzungen:
 
-**Body:**
-```json
-{
-  "direction": "right"
-}
-```
+- Rotor verbunden
+- `parkPositionsEnabled=true`
 
-**Gültige Richtungen:**
-- `left` / `right` - Azimut
-- `up` / `down` - Elevation
-- `L` / `R` / `U` / `D` - GS-232B Protokoll-Befehle (Backward-Kompatibilität)
+Response `200`:
 
-**Response 200:**
 ```json
 {
   "status": "ok"
 }
 ```
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/rotor/manual -H "Content-Type: application/json" -d '{"direction":"right"}'
-```
+Typische Fehler:
 
-**Python:**
-```python
-import requests
-import time
+- `400`: Presets deaktiviert
+- `400`: Home konnte nicht gestartet werden
+- `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
 
-# Rechts bewegen für 3 Sekunden
-requests.post("http://localhost:8081/api/rotor/manual", json={"direction": "right"})
-time.sleep(3)
-requests.post("http://localhost:8081/api/rotor/stop")
-```
+### POST /api/rotor/park
 
----
+Beschreibung: Park-Preset anfahren.
 
-### POST /api/rotor/stop
+Voraussetzungen und Fehler analog zu `/api/rotor/home`.
 
-Stoppt alle aktiven Bewegungen (manuelle Bewegung oder Zielfahrt).
-
-**Request:** kein Body
-
-**Response 200:**
-```json
-{
-  "status": "ok"
-}
-```
-
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/rotor/stop
-```
-
-**Python:**
-```python
-import requests
-requests.post("http://localhost:8081/api/rotor/stop")
-```
-
----
-
-## Konfiguration
+## 6. Einstellungen API
 
 ### GET /api/settings
 
-Ruft alle Rotor-Konfigurationseinstellungen ab (Kalibrierung, Limits, Geschwindigkeit, etc.).
+Beschreibung: Gesamte persistierte Konfiguration (`web-settings.json`) laden.
 
-**Response 200:**
+Response `200`:
+
 ```json
 {
-  "azimuthMinLimit": 0,
-  "azimuthMaxLimit": 360,
-  "elevationMinLimit": 0,
-  "elevationMaxLimit": 90,
-  "azimuthMode": 360,
-  "azimuthOffset": 4.0,
-  "elevationOffset": 1.5,
-  "azimuthScaleFactor": 1.0,
-  "elevationScaleFactor": 1.0,
-  "azimuthSpeedDegPerSec": 4.0,
-  "elevationSpeedDegPerSec": 2.0,
-  "rampEnabled": false,
-  "rampKp": 0.4,
-  "rampSampleTimeMs": 400
+  "baudRate": 9600,
+  "pollingIntervalMs": 1000,
+  "azimuthMode": 450,
+  "azimuthOffset": 0,
+  "elevationOffset": 0,
+  "feedbackCorrectionEnabled": false,
+  "serverHttpPort": 8081,
+  "serverWebSocketPort": 8082,
+  "serverRequireSession": false
 }
 ```
 
-**cURL:**
-```bash
-curl -s http://localhost:8081/api/settings | jq
-```
-
-**Python:**
-```python
-import requests
-settings = requests.get("http://localhost:8081/api/settings").json()
-print(f"Azimuth Offset: {settings['azimuthOffset']}")
-```
-
----
+Hinweis: Das Objekt enthaelt viele weitere Felder (Map, Ramp, Limits, Presets, Server etc.).
 
 ### POST /api/settings
 
-Aktualisiert Rotor-Konfigurationseinstellungen. Nur die übergebenen Felder werden geändert.
+Beschreibung: Teil-Update der Konfiguration.
 
-**Body (Beispiel - alle Felder optional):**
+Request Body: beliebiges JSON-Objekt mit zu aktualisierenden Feldern.
+
+Beispiel:
+
 ```json
 {
-  "azimuthOffset": 5.0,
-  "elevationOffset": 2.0,
-  "azimuthMinLimit": 0,
-  "azimuthMaxLimit": 450,
-  "azimuthMode": 450
+  "azimuthOffset": 4.0,
+  "elevationOffset": 1.5,
+  "feedbackCorrectionEnabled": true,
+  "azimuthFeedbackFactor": 1.02
 }
 ```
 
-**Response 200:**
+Response `200`:
+
 ```json
 {
   "status": "ok",
   "settings": {
-    "azimuthOffset": 5.0,
-    "elevationOffset": 2.0,
-    ...
+    "azimuthOffset": 4.0,
+    "elevationOffset": 1.5
   }
 }
 ```
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/settings -H "Content-Type: application/json" -d '{"azimuthOffset":5.0}'
-```
-
-**Python:**
-```python
-import requests
-requests.post("http://localhost:8081/api/settings", 
-             json={"azimuthOffset": 5.0, "elevationOffset": 2.0})
-```
-
----
-
-## Server-Verwaltung
+## 7. Server API
 
 ### GET /api/server/settings
 
-Ruft Server-spezifische Einstellungen ab (Ports, Polling-Intervall, Session-Timeout, etc.).
+Beschreibung: Aktive (laufende) Serverparameter.
 
-**Response 200:**
+Response `200`:
+
 ```json
 {
   "httpPort": 8081,
@@ -554,64 +534,63 @@ Ruft Server-spezifische Einstellungen ab (Ports, Polling-Intervall, Session-Time
   "pollingIntervalMs": 500,
   "sessionTimeoutS": 300,
   "maxClients": 10,
-  "loggingLevel": "INFO"
+  "loggingLevel": "INFO",
+  "requireSession": false
 }
 ```
 
-**cURL:**
-```bash
-curl -s http://localhost:8081/api/server/settings
-```
-
----
-
 ### POST /api/server/settings
 
-Aktualisiert Server-Einstellungen. Einige Änderungen (z.B. Ports) erfordern einen Neustart.
+Beschreibung: Validiert und speichert Serverparameter.
 
-**Body (Beispiel):**
+Request Body Felder:
+
+- `serverHttpPort` (1024..65535)
+- `serverWebSocketPort` (1024..65535)
+- `serverPollingIntervalMs` (250..2000)
+- `serverSessionTimeoutS` (60..3600)
+- `serverMaxClients` (1..100)
+- `serverLoggingLevel` (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `serverRequireSession` (`true`/`false`)
+
+Beispiel:
+
 ```json
 {
   "serverPollingIntervalMs": 250,
   "serverSessionTimeoutS": 600,
-  "serverLoggingLevel": "DEBUG"
+  "serverLoggingLevel": "DEBUG",
+  "serverRequireSession": true
 }
 ```
 
-**Gültige Felder:**
-- `serverHttpPort`: 1024-65535
-- `serverWebSocketPort`: 1024-65535
-- `serverPollingIntervalMs`: 250-2000
-- `serverSessionTimeoutS`: 60-3600
-- `serverMaxClients`: 1-100
-- `serverLoggingLevel`: "DEBUG", "INFO", "WARNING", "ERROR"
+Response `200`:
 
-**Response 200:**
 ```json
 {
   "status": "ok",
   "message": "Server settings saved. Restart required for port changes to take effect.",
-  "restartRequired": false
+  "restartRequired": true
 }
 ```
 
-**Fehler:**
-- `400 Bad Request`: Validierungsfehler (z.B. ungültige Port-Nummer)
+Validierungsfehler `400`:
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/server/settings -H "Content-Type: application/json" -d '{"serverPollingIntervalMs":250}'
+```json
+{
+  "error": "Validation failed",
+  "details": [
+    "HTTP port must be between 1024 and 65535"
+  ]
+}
 ```
-
----
 
 ### POST /api/server/restart
 
-Startet den Server neu. Sinnvoll nach Port-Änderungen. Der Batch-Wrapper startet den Server automatisch neu (Exit-Code 42).
+Beschreibung: Geordneten Neustart anfordern.
 
-**Request:** kein Body
+Response `200`:
 
-**Response 200:**
 ```json
 {
   "status": "restarting",
@@ -619,409 +598,333 @@ Startet den Server neu. Sinnvoll nach Port-Änderungen. Der Batch-Wrapper starte
 }
 ```
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/server/restart
-```
-
----
-
-## Client-Verwaltung (Multi-User)
-
-### GET /api/session
-
-Erstellt eine Session (falls noch keine existiert) und liefert die Session-ID zurück.
-
-**Response 200:**
-```json
-{
-  "sessionId": "abc123...",
-  "status": "active"
-}
-```
-
-**cURL:**
-```bash
-curl -s http://localhost:8081/api/session
-```
-
----
+## 8. Clients API
 
 ### GET /api/clients
 
-Listet alle verbundenen Client-Sessions auf.
+Beschreibung: Alle bekannten Sessions listen.
 
-**Response 200:**
+Response `200`:
+
 ```json
 {
   "clients": [
     {
-      "id": "abc123...",
-      "status": "active",
-      "lastSeen": 1705320000000,
-      "userAgent": "Mozilla/5.0..."
-    },
-    {
-      "id": "xyz789...",
-      "status": "suspended",
-      "lastSeen": 1705320100000,
-      "userAgent": "Python/3.10..."
+      "id": "3b9f1c2a-...",
+      "ip": "192.168.1.20",
+      "userAgent": "Chrome/136",
+      "connectedAt": "2026-04-17T14:30:12.123456",
+      "lastSeen": "2026-04-17T14:35:08.654321",
+      "status": "active"
     }
   ]
 }
 ```
 
-**cURL:**
-```bash
-curl -s http://localhost:8081/api/clients
-```
-
----
-
 ### POST /api/clients/{id}/suspend
 
-Suspendiert einen Client. Suspendierte Clients erhalten HTTP 403 auf API-Anfragen (außer session-Endpunkt).
+Beschreibung: Session sperren.
 
-**Response 200:**
+Response `200`:
+
 ```json
 {
   "status": "ok",
-  "message": "Client abc123... suspended"
+  "message": "Client 3b9f1c2a... suspended"
 }
 ```
 
-**Fehler:**
-- `404 Not Found`: Client-ID existiert nicht
+Fehler:
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/clients/abc123.../suspend
-```
-
----
+- `404`: Client nicht gefunden
 
 ### POST /api/clients/{id}/resume
 
-Hebt die Suspendierung eines Clients auf.
+Beschreibung: Session entsperren.
 
-**Response 200:**
+Response `200`:
+
 ```json
 {
   "status": "ok",
-  "message": "Client abc123... resumed"
+  "message": "Client 3b9f1c2a... resumed"
 }
 ```
 
-**cURL:**
-```bash
-curl -X POST http://localhost:8081/api/clients/abc123.../resume
+Fehler:
+
+- `404`: Client nicht gefunden
+
+## 9. Routen API
+
+### 9.1 Routenobjekt
+
+Eine Route ist ein JSON-Objekt, typischerweise:
+
+```json
+{
+  "id": "route_1776423995375_ak3ijtces",
+  "name": "Turn 180",
+  "description": "",
+  "order": 0,
+  "steps": [
+    {
+      "id": "step_1",
+      "type": "position",
+      "name": "Position",
+      "azimuth": 180,
+      "elevation": 0
+    },
+    {
+      "id": "step_2",
+      "type": "wait",
+      "duration": 5000,
+      "message": ""
+    },
+    {
+      "id": "step_3",
+      "type": "loop",
+      "iterations": 2,
+      "steps": []
+    }
+  ]
+}
 ```
 
----
+### 9.2 Schritt-Typen
 
-## Fehlerbehandlung
+- `position`: faehrt RAW auf `azimuth`/`elevation`
+- `wait`: 
+  - `duration` in ms (>0) = zeitbasiert
+  - `duration` `0` oder `null` = manueller Wait
+- `loop`:
+  - `iterations` > 0 = feste Wiederholungen
+  - `iterations` `0`, `null` oder unendlich = Endlosschleife (mit Sicherheitslimit)
 
-| Code | Beschreibung |
-|------|--------------|
-| `200 OK` | Erfolg |
-| `400 Bad Request` | Ungültige Eingabe, fehlende Parameter |
-| `403 Forbidden` | Client suspendiert |
-| `404 Not Found` | Endpunkt oder Ressource nicht gefunden |
-| `405 Method Not Allowed` | Falsche HTTP-Methode |
-| `500 Internal Server Error` | Server-Fehler |
+### GET /api/routes
 
-**Fehlerantworten:**
+Response `200`:
+
+```json
+{
+  "routes": []
+}
+```
+
+### POST /api/routes
+
+Beschreibung: Neue Route anlegen.
+
+Wichtig:
+
+- `id` ist Pflicht.
+- `id` muss eindeutig sein.
+
+Response `200`:
+
+```json
+{
+  "status": "ok",
+  "route": {
+    "id": "route_1",
+    "name": "Demo",
+    "steps": []
+  }
+}
+```
+
+Fehler:
+
+- `400`: fehlende/duplizierte Route-ID
+
+### PUT /api/routes/{id}
+
+Beschreibung: Bestehende Route aktualisieren.
+
+Wichtig:
+
+- Pfad-`id` gewinnt; Body-`id` wird auf Pfadwert gesetzt.
+
+Response `200`:
+
+```json
+{
+  "status": "ok",
+  "route": {
+    "id": "route_1",
+    "name": "Demo aktualisiert",
+    "steps": []
+  }
+}
+```
+
+Fehler:
+
+- `404`: Route nicht gefunden
+
+### DELETE /api/routes/{id}
+
+Response `200`:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Fehler:
+
+- `404`: Route nicht gefunden
+
+### POST /api/routes/{id}/start
+
+Beschreibung: Routenausfuehrung starten.
+
+Voraussetzungen:
+
+- Rotor verbunden
+- keine andere Route aktiv
+- Route existiert
+
+Response `200`:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Fehler:
+
+- `400`: nicht startbar (nicht gefunden / bereits aktiv)
+- `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
+
+### POST /api/routes/stop
+
+Beschreibung: Aktive Route stoppen.
+
+Response `200`:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### POST /api/routes/continue
+
+Beschreibung: Manuellen Wait-Schritt fortsetzen.
+
+Response `200`:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Fehler:
+
+- `400`: kein manueller Wait aktiv
+
+### GET /api/routes/execution
+
+Beschreibung: Aktueller Laufzustand.
+
+Response `200`:
+
+```json
+{
+  "executing": true,
+  "routeId": "route_1",
+  "routeName": "Demo",
+  "currentStepIndex": 1,
+  "totalSteps": 5
+}
+```
+
+### 9.3 Laufzeitregeln der Ausfuehrung
+
+- Positionstoleranz: `2.0` Grad
+- Timeout pro Positionsschritt: `60` Sekunden
+- Positionscheck-Intervall: `0.2` Sekunden
+- Endlosschleifen-Sicherheitsgrenze: `100000` Iterationen
+
+## 10. Einheitliches Fehlerverhalten
+
+### 10.1 Typische Statuscodes
+
+- `200` OK
+- `400` Bad Request
+- `401` Unauthorized (bei aktivem `serverRequireSession` und fehlender/ungueltiger Session)
+- `403` Forbidden (suspendierte Session)
+- `404` Not Found
+- `500` Internal Server Error
+
+### 10.2 Standard-Fehlerobjekt
+
 ```json
 {
   "error": "Fehlermeldung",
-  "message": "Detaillierte Beschreibung (optional)"
+  "message": "Optionale Detailinfo"
 }
 ```
 
----
+### 10.3 Rotor-Disconnected Spezialfall
 
-## Python Client-Klasse
+Mehrere Rotor-Steuerendpunkte liefern bei fehlender Verbindung:
 
-Vollständiger Python-Client für alle API-Endpunkte:
-
-```python
-import json
-import time
-from typing import Dict, Optional, Any
-
-import requests
-
-
-class RotorClient:
-    """Vollständiger Client für die Rotor Interface GS232B API."""
-
-    def __init__(self, base_url: str = "http://localhost:8081"):
-        self.base_url = base_url.rstrip("/")
-        self.session_id: Optional[str] = None
-        print(f"[RotorClient] API unter {self.base_url}")
-        self._init_session()
-
-    def _url(self, path: str) -> str:
-        return f"{self.base_url}{path}"
-
-    def _log(self, label: str, response: requests.Response) -> Dict:
-        data = response.json()
-        print(f"[RotorClient] {label} -> {response.status_code}")
-        if response.status_code != 200:
-            print(json.dumps(data, indent=2))
-        return data
-
-    def _init_session(self) -> None:
-        """Initialisiere Session."""
-        try:
-            response = requests.get(self._url("/api/session"))
-            data = response.json()
-            self.session_id = data.get("sessionId")
-            print(f"[RotorClient] Session: {self.session_id[:8]}...")
-        except Exception as e:
-            print(f"[RotorClient] Session-Fehler: {e}")
-
-    # --- Rotor Control ---
-
-    def list_ports(self) -> Dict:
-        """Verfügbare COM-Ports auflisten."""
-        response = requests.get(self._url("/api/rotor/ports"))
-        return self._log("Ports", response)
-
-    def connect(self, port: str, baud_rate: int = 9600) -> Dict:
-        """Verbindung zu COM-Port herstellen."""
-        payload = {"port": port, "baudRate": baud_rate}
-        response = requests.post(self._url("/api/rotor/connect"), json=payload)
-        return self._log(f"Connect {port}", response)
-
-    def disconnect(self) -> Dict:
-        """Verbindung trennen."""
-        response = requests.post(self._url("/api/rotor/disconnect"))
-        return self._log("Disconnect", response)
-
-    def get_status(self) -> Dict:
-        """Aktuellen Status abrufen."""
-        response = requests.get(self._url("/api/rotor/status"))
-        return response.json()
-
-    def get_position(self, cone_angle: Optional[float] = None, 
-                    cone_length: Optional[float] = None) -> Dict:
-        """Position mit Kegel-Parametern abrufen."""
-        params = {}
-        if cone_angle is not None:
-            params["coneAngle"] = cone_angle
-        if cone_length is not None:
-            params["coneLength"] = cone_length
-        response = requests.get(self._url("/api/rotor/position"), params=params or None)
-        return self._log("Position", response)
-
-    def send_command(self, command: str) -> Dict:
-        """Direkten GS-232B Befehl senden (Low-Level)."""
-        response = requests.post(self._url("/api/rotor/command"), json={"command": command})
-        return self._log(f"Command {command}", response)
-
-    def set_target(self, az: Optional[float] = None, el: Optional[float] = None) -> Dict:
-        """Zielposition setzen (kalibrierte Werte)."""
-        payload = {}
-        if az is not None:
-            payload["az"] = az
-        if el is not None:
-            payload["el"] = el
-        response = requests.post(self._url("/api/rotor/set_target"), json=payload)
-        return self._log("SetTarget", response)
-
-    def set_target_raw(self, az: Optional[float] = None, el: Optional[float] = None) -> Dict:
-        """Zielposition setzen (RAW Hardware-Werte)."""
-        payload = {}
-        if az is not None:
-            payload["az"] = az
-        if el is not None:
-            payload["el"] = el
-        response = requests.post(self._url("/api/rotor/set_target_raw"), json=payload)
-        return self._log("SetTargetRaw", response)
-
-    def manual_move(self, direction: str) -> Dict:
-        """Manuelle Bewegung starten (left/right/up/down)."""
-        response = requests.post(self._url("/api/rotor/manual"), json={"direction": direction})
-        return self._log(f"Manual {direction}", response)
-
-    def stop(self) -> Dict:
-        """Alle Bewegungen stoppen."""
-        response = requests.post(self._url("/api/rotor/stop"))
-        return self._log("Stop", response)
-
-    # --- Configuration ---
-
-    def get_settings(self) -> Dict:
-        """Rotor-Einstellungen abrufen."""
-        response = requests.get(self._url("/api/settings"))
-        return response.json()
-
-    def update_settings(self, settings: Dict[str, Any]) -> Dict:
-        """Rotor-Einstellungen aktualisieren."""
-        response = requests.post(self._url("/api/settings"), json=settings)
-        return self._log("UpdateSettings", response)
-
-    # --- Server Management ---
-
-    def get_server_settings(self) -> Dict:
-        """Server-Einstellungen abrufen."""
-        response = requests.get(self._url("/api/server/settings"))
-        return response.json()
-
-    def update_server_settings(self, settings: Dict[str, Any]) -> Dict:
-        """Server-Einstellungen aktualisieren."""
-        response = requests.post(self._url("/api/server/settings"), json=settings)
-        return self._log("UpdateServerSettings", response)
-
-    def restart_server(self) -> Dict:
-        """Server neu starten."""
-        response = requests.post(self._url("/api/server/restart"))
-        return self._log("Restart", response)
-
-    # --- Client Management ---
-
-    def list_clients(self) -> Dict:
-        """Alle verbundenen Clients auflisten."""
-        response = requests.get(self._url("/api/clients"))
-        return response.json()
-
-    def suspend_client(self, client_id: str) -> Dict:
-        """Client suspendieren."""
-        response = requests.post(self._url(f"/api/clients/{client_id}/suspend"))
-        return self._log(f"Suspend {client_id[:8]}", response)
-
-    def resume_client(self, client_id: str) -> Dict:
-        """Client wieder aktivieren."""
-        response = requests.post(self._url(f"/api/clients/{client_id}/resume"))
-        return self._log(f"Resume {client_id[:8]}", response)
-
-    # --- Convenience Methods ---
-
-    def poll_status(self, duration_sec: float = 5.0, interval_sec: float = 0.5) -> None:
-        """Status periodisch abrufen (nützlich für Monitoring)."""
-        start = time.time()
-        while time.time() - start < duration_sec:
-            status = self.get_status()
-            if status.get("connected"):
-                rph = status["status"]["rph"]
-                cal = status["status"]["calibrated"]
-                print(f"[Poll] RAW: Az={rph['azimuth']} El={rph['elevation']} | "
-                      f"CAL: Az={cal['azimuth']:.1f} El={cal['elevation']:.1f}")
-            else:
-                print("[Poll] Nicht verbunden")
-            time.sleep(interval_sec)
-
-
-# Beispiel-Nutzung
-if __name__ == "__main__":
-    client = RotorClient()
-    
-    # Ports auflisten
-    ports = client.list_ports().get("ports", [])
-    print(f"Gefundene Ports: {[p['path'] for p in ports]}")
-    
-    if ports:
-        # Verbinden
-        client.connect(ports[0]["path"], 9600)
-        time.sleep(1)
-        
-        # Status abfragen
-        client.send_command("C2")
-        time.sleep(0.5)
-        
-        # Position setzen (kalibriert)
-        client.set_target(az=180, el=45)
-        time.sleep(5)
-        
-        # Manuelle Bewegung
-        client.manual_move("right")
-        time.sleep(2)
-        client.stop()
-        
-        # Status überwachen
-        client.poll_status(duration_sec=3)
-        
-        # Einstellungen anzeigen
-        settings = client.get_settings()
-        print(f"Azimuth Offset: {settings.get('azimuthOffset')}")
-        
-        # Trennen
-        client.disconnect()
-    else:
-        print("Keine Ports verfügbar - Simulation verwenden oder Hardware prüfen")
+```json
+{
+  "error": "Not connected to rotor",
+  "code": "ROTOR_DISCONNECTED"
+}
 ```
 
----
+## 11. Kurze cURL Beispiele
 
-## Steuerungskonzepte
+Session holen:
 
-### Low-Level vs. High-Level Steuerung
-
-**Low-Level (direkter GS-232B Befehl):**
-```python
-# Direkter Hardware-Befehl
-client.send_command("M180")  # Fahre zu 180° Azimut (RAW)
+```bash
+curl -s http://localhost:8081/api/session
 ```
 
-**High-Level (kalibrierte Position):**
-```python
-# Kalibrierte Position mit Offset/Skalierung
-client.set_target(az=180, el=45)  # Server wendet Kalibrierung an
+Ports listen:
+
+```bash
+curl -s http://localhost:8081/api/rotor/ports
 ```
 
-**High-Level (RAW Hardware-Wert):**
-```python
-# RAW Hardware-Position ohne Kalibrierung
-client.set_target_raw(az=180, el=45)  # Direkter Hardware-Wert
+Verbinden:
+
+```bash
+curl -X POST http://localhost:8081/api/rotor/connect \
+  -H "Content-Type: application/json" \
+  -d '{"port":"COM3","baudRate":9600}'
 ```
 
-### Kalibrierung
+Kalibriertes Ziel setzen:
 
-Alle Positions-APIs (`/status`, `/position`) liefern sowohl:
-- **RPH-Werte**: Direkte Rotor-Hardware-Position
-- **Kalibrierte Werte**: Mit Offset/Skalierung berechnet
-
-**Formel:**
-```
-kalibriert = (raw + offset) / scale_factor
-raw = (kalibriert * scale_factor) - offset
+```bash
+curl -X POST http://localhost:8081/api/rotor/set_target \
+  -H "Content-Type: application/json" \
+  -d '{"az":180,"el":45}'
 ```
 
-**Konfiguration über:**
-```python
-client.update_settings({
-    "azimuthOffset": 4.0,
-    "elevationOffset": 1.5,
-    "azimuthScaleFactor": 1.0,
-    "elevationScaleFactor": 1.0
-})
+Route starten:
+
+```bash
+curl -X POST http://localhost:8081/api/routes/route_1/start
 ```
 
-### Multi-User Session-Management
+OpenAPI abrufen:
 
-Der Server verwaltet Client-Sessions:
-- Jeder Client erhält automatisch eine Session-ID
-- Suspendierte Clients erhalten HTTP 403
-- Admins können Clients über `/api/clients` verwalten
+```bash
+curl -s http://localhost:8081/api/openapi.json
+```
 
----
+## 12. Hinweise zur Pflege
 
-## Betrieb & Support
-
-- **Server starten:** `python -m server.main [--port 8081] [--websocket-port 8082]`
-- **Batch-Start (Windows):** `start_server.bat` (mit Auto-Restart bei Exit-Code 42)
-- **Web-UI:** `http://localhost:8081`
-- **WebSocket:** Port 8082 (konfigurierbar)
-- **Abhängigkeiten:** `pip install -r requirements.txt` (pyserial erforderlich)
-- **Logs:** Konsolen-Output, Level über `/api/server/settings` anpassbar
-
-**Weitere Dokumentation:**
-- `GS232B_Befehle.md` - Vollständige GS-232B Befehlsreferenz
-- `README.md` - Projekt-Übersicht
-
----
-
-**Letzte Aktualisierung:** 2025  
-**Server-Version:** RotorHTTP/2.0  
-**API-Version:** v2.0
+- Bei API-Aenderungen immer zuerst `server/api/routes.py`, `server/api/handler.py` und `server/api/openapi.py` pruefen.
+- Diese Datei soll mit `GET /api/openapi.json` konsistent bleiben.
+- Die Detailbeispiele hier sind exemplarisch; zusaetzliche Felder in `settings` oder Route-Schritten sind moeglich.
