@@ -123,6 +123,18 @@ def run_server(
         for ip in local_ips:
             log(f"  - http://{ip}:{state.http_port}/api/")
         log("")
+        log("API-Dokumentation erreichbar unter:")
+        docs_endpoints = [
+            ("/api/openapi.json", "OpenAPI 3.1 Spezifikation"),
+            ("/api/docs", 'Swagger UI (interaktiv, inkl. "Try it out")'),
+            ("/api/redoc", "ReDoc-Ansicht"),
+        ]
+        for endpoint, description in docs_endpoints:
+            log(f"  - GET {endpoint} - {description}")
+            log(f"    http://localhost:{state.http_port}{endpoint}")
+            for ip in local_ips:
+                log(f"    http://{ip}:{state.http_port}{endpoint}")
+        log("")
         log("WebSocket API erreichbar unter:")
         log(f"  - ws://localhost:{state.websocket_port}")
         for ip in local_ips:
