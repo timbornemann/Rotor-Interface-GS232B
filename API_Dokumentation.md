@@ -17,7 +17,7 @@ Diese Dokumentation beschreibt die vollständige REST-API des Rotor Interface GS
 
 ```bash
 pip install -r requirements.txt
-python python_server.py --port 8081
+python -m server.main --port 8081 --websocket-port 8082
 ```
 
 Der Server hostet gleichzeitig die Web-Oberfläche aus `src/renderer` unter `http://localhost:8081`.
@@ -1009,7 +1009,7 @@ Der Server verwaltet Client-Sessions:
 
 ## Betrieb & Support
 
-- **Server starten:** `python python_server.py [--port 8081]`
+- **Server starten:** `python -m server.main [--port 8081] [--websocket-port 8082]`
 - **Batch-Start (Windows):** `start_server.bat` (mit Auto-Restart bei Exit-Code 42)
 - **Web-UI:** `http://localhost:8081`
 - **WebSocket:** Port 8082 (konfigurierbar)
@@ -1018,7 +1018,6 @@ Der Server verwaltet Client-Sessions:
 
 **Weitere Dokumentation:**
 - `GS232B_Befehle.md` - Vollständige GS-232B Befehlsreferenz
-- `Plan.md` - Projekt-Roadmap
 - `README.md` - Projekt-Übersicht
 
 ---

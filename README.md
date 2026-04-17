@@ -72,10 +72,8 @@ Das Frontend steuert den Rotor nicht direkt per Web Serial, sondern immer über 
 
 ### Im Repository zusätzlich enthalten
 
-- Interaktive API-Testseite: `api-test-page.html`
 - Arduino-Testaufbau/Emulation: `hardware_test/`
 - Architekturdiagramme: `diagrams/`
-- Migrationsskript für alte Routenablage: `migrate_routes.py`
 
 ---
 
@@ -121,7 +119,6 @@ Alternativen:
 
 ```bash
 python -m server
-python python_server.py --port 8081
 ```
 
 ### Windows-Startskript
@@ -210,18 +207,6 @@ Zentrale Konfigurationsquelle (vom Server geladen/geschrieben). Beispiele:
 ### 6.2 `routes.json`
 
 Persistente Routenablage (serverseitig). CRUD erfolgt über `/api/routes...`.
-
-### 6.3 Migration alter Routen
-
-Falls alte Routen in `web-settings.json` unter `savedRoutes` liegen:
-
-```bash
-python migrate_routes.py
-```
-
-Das Skript migriert nach `routes.json`.
-
----
 
 ## 7. REST-API komplett
 
@@ -417,7 +402,6 @@ src/renderer/
 
 - `server/main.py` (CLI)
 - `server/__main__.py` (`python -m server`)
-- `python_server.py` (Kompatibilitäts-Wrapper)
 
 ### 11.3 Frontend-Architektur
 
@@ -561,7 +545,6 @@ ws.onmessage = (evt) => {
 ## 16. Aktuelle Einschränkungen
 
 - Kein aktiver Browser-Web-Serial-Modus im aktuellen Frontend
-- `PositionManager` und `HistoryLog` existieren als Module, sind im aktuellen Haupt-UI-Flow aber nicht eingebunden
 - Cross-Origin-Preflight ist aktuell auf `GET, POST, OPTIONS` begrenzt (relevant für browserbasierte Fremd-Clients bei `PUT/DELETE`)
 
 ---
@@ -572,7 +555,6 @@ ws.onmessage = (evt) => {
 - [GS232B_Befehle.md](GS232B_Befehle.md)
 - [hardware_test/README.md](hardware_test/README.md)
 - [diagrams/](diagrams/)
-- [api-test-page.html](api-test-page.html)
 
 ---
 
