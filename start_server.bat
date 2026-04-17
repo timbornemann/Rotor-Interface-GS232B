@@ -45,6 +45,14 @@ echo.
 echo Server wird initialisiert...
 echo   HTTP-Port: %HTTP_PORT%
 echo   WebSocket-Port: %WS_PORT%
+echo.
+echo API-Dokumentation:
+echo   GET /api/openapi.json - OpenAPI 3.1 Spezifikation
+echo     http://localhost:%HTTP_PORT%/api/openapi.json
+echo   GET /api/docs - Swagger UI (interaktiv, inkl. "Try it out")
+echo     http://localhost:%HTTP_PORT%/api/docs
+echo   GET /api/redoc - ReDoc-Ansicht
+echo     http://localhost:%HTTP_PORT%/api/redoc
 echo ========================================
 echo.
 
