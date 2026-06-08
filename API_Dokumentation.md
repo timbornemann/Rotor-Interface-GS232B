@@ -1,14 +1,15 @@
 # Rotor Interface GS232B - API Dokumentation
 
-Diese Datei beschreibt den aktuellen REST-API-Stand der Anwendung.
+Diese Datei beschreibt den aktuellen REST- und WebSocket-API-Stand der Anwendung.
 
-Stand: 2026-04-17
+Stand: 2026-06-08
 API-Version: v2.0.0
 HTTP-Server Header: RotorHTTP/2.0
 
 ## 1. Uebersicht
 
-- Base URL: `http://<host>:<http-port>` (Standard lokal: `http://localhost:8081`)
+- REST Base URL: `http://<host>:<http-port>` (Standard lokal: `http://localhost:8081`)
+- WebSocket URL: `ws://<host>:<websocket-port>` (Standard lokal: `ws://localhost:8082`)
 - Content-Type bei JSON-Requests: `application/json`
 - JSON-Responses enthalten CORS Header `Access-Control-Allow-Origin: *`
 - Session-Header (falls genutzt): `X-Session-ID: <session-id>`
@@ -19,6 +20,7 @@ Wichtige Quellen fuer den API-Stand:
 2. Swagger UI: `GET /api/docs`
 3. ReDoc UI: `GET /api/redoc`
 4. Server-Handler Code in `server/api/handler.py` und `server/api/routes.py`
+5. WebSocket-Code in `server/api/websocket.py`
 
 ## 2. Vollstaendige Endpunkt-Matrix
 
@@ -88,6 +90,9 @@ Wichtige Quellen fuer den API-Stand:
 | GET | `/api/openapi.json` | OpenAPI 3.1 Spezifikation |
 | GET | `/api/docs` | Swagger UI (Try it out) |
 | GET | `/api/redoc` | ReDoc Ansicht |
+| GET | `/api/docs/assets/{asset}` | Lokale Swagger/ReDoc Assets |
+
+Verfuegbare Assets: `swagger-ui.css`, `swagger-ui-bundle.js`, `redoc.standalone.js`
 
 ## 3. Session, Zugriff, Security
 
@@ -96,6 +101,8 @@ Wichtige Quellen fuer den API-Stand:
 - Session-ID wird ueber `GET /api/session` erzeugt oder geladen.
 - Session kann per Header `X-Session-ID` oder per Cookie `session_id` uebermittelt werden.
 - Session-Status ist `active` oder `suspended`.
+- Bei WebSocket-Disconnect wird die zugehoerige Session entfernt (sofern registriert).
+- Periodischer Session-Cleanup laeuft im Hintergrund (Intervall 60 s, Timeout konfigurierbar).
 
 ### GET /api/session
 
@@ -110,6 +117,18 @@ Response `200`:
 }
 ```
 
+Fehler:
+
+- `500`: Maximalanzahl aktiver Clients erreicht (`serverMaxClients`)
+
+```json
+{
+  "error": "Could not create session"
+}
+```
+
+Hinweis: Der Server setzt bei neuer Session kein Cookie automatisch in der Response. Clients muessen die `sessionId` selbst speichern und als Header oder Cookie mitsenden. Cookie-Format bei manuellem Setzen: `session_id=<id>; Path=/; HttpOnly; SameSite=Lax`.
+
 ### 3.2 `serverRequireSession`
 
 Wenn `serverRequireSession=true` gesetzt ist:
@@ -122,6 +141,24 @@ Wenn `serverRequireSession=false`:
 - Session ist optional.
 - Gesperrte Sessions bleiben weiterhin blockiert (`403`).
 
+Response `401` (fehlende/ungueltige Session):
+
+```json
+{
+  "error": "Session required",
+  "message": "Missing or invalid session ID."
+}
+```
+
+Response `403` (suspendierte Session):
+
+```json
+{
+  "error": "Session suspended",
+  "message": "Your session has been suspended. Please reload the page to reconnect."
+}
+```
+
 ### 3.3 Oeffentliche API-Endpunkte (ohne Session-Pruefung)
 
 - `GET /api/session`
@@ -133,6 +170,7 @@ Wenn `serverRequireSession=false`:
 ### 3.4 CORS-Hinweis
 
 - Preflight (`OPTIONS`) liefert aktuell `Access-Control-Allow-Methods: GET, POST, OPTIONS`.
+- Erlaubte Header: `Content-Type`, `X-Session-ID`.
 - Browser-Cross-Origin fuer `PUT`/`DELETE` kann dadurch blockiert sein.
 
 ## 4. API-Doku Endpunkte
@@ -149,7 +187,23 @@ Liefert lokale Swagger UI (ohne externes CDN).
 
 Liefert lokale ReDoc Seite.
 
+### GET /api/docs/assets/{asset}
+
+Liefert lokale Swagger-/ReDoc-Assets mit Cache-Control (`max-age=86400`).
+
+Fehler:
+
+- `404`: `{"error": "Asset not found"}` oder `{"error": "Asset unavailable"}`
+
 ## 5. Rotor API im Detail
+
+### Positionswerte in Status/Position
+
+Die Felder `rph`, `correctedRaw` und `calibrated` werden serverseitig aus Hardware-Feedback und Konfiguration berechnet:
+
+- `rph`: Rohwerte vom Controller (`azimuthRaw`/`elevationRaw`)
+- `correctedRaw`: `rph` optional mit Feedback-Faktoren (`feedbackCorrectionEnabled`, `azimuthFeedbackFactor`, `elevationFeedbackFactor`)
+- `calibrated`: `(correctedRaw + offset) / scaleFactor` (Offset/Scale aus Settings)
 
 ### GET /api/rotor/ports
 
@@ -170,6 +224,8 @@ Response `200`:
 }
 ```
 
+Hinweis: Ohne installiertes `pyserial` ist die Liste leer.
+
 ### POST /api/rotor/connect
 
 Beschreibung: Verbindung zum seriellen Port aufbauen.
@@ -186,7 +242,7 @@ Request Body:
 Validierung:
 
 - `port` muss non-empty string sein.
-- `baudRate` muss positive Integer sein.
+- `baudRate` muss positive Integer sein (Default: `9600`).
 
 Response `200`:
 
@@ -207,13 +263,20 @@ Alternative `200` bei bereits verbundenem gleichen Port:
 
 Typische Fehler:
 
-- `400`: bereits mit anderem Port verbunden
-- `400`: ungueltige Parameter
-- `500`: Verbindungsfehler
+- `400`: `{"error": "Already connected to another port"}`
+- `400`: `{"error": "port must be a non-empty string"}`
+- `400`: `{"error": "baudRate must be an integer"}` oder `{"error": "baudRate must be a positive integer"}`
+- `500`: Verbindungsfehler (Exception-Text in `error`)
+
+Side-Effect: Bei erfolgreichem Connect wird `connection_state_changed` per WebSocket broadcastet (`reason: "manual_connect"`).
 
 ### POST /api/rotor/disconnect
 
 Beschreibung: Aktive Verbindung trennen.
+
+Side-Effect vor dem Trennen:
+
+- Wenn `autoParkOnDisconnect=true` und `parkPositionsEnabled=true`, wird zuerst das Park-Preset angefahren.
 
 Response `200` (verbunden):
 
@@ -232,6 +295,8 @@ Response `200` (nicht verbunden):
   "message": "Not connected"
 }
 ```
+
+Side-Effect: WebSocket-Broadcast `connection_state_changed` mit `reason: "manual_disconnect"`.
 
 ### GET /api/rotor/status
 
@@ -301,7 +366,7 @@ Response `200` (verbunden):
       "elevation": 45.0
     },
     "calibrated": {
-      "azimuth": 182.0,
+      "azimuth": 184.0,
       "elevation": 46.5
     },
     "calibration": {
@@ -318,6 +383,8 @@ Response `200` (verbunden):
   "clientCount": 1
 }
 ```
+
+Hinweis: `cone.angle`/`cone.length` kommen aus den Query-Parametern, nicht aus den persistierten Settings.
 
 ### POST /api/rotor/command
 
@@ -341,9 +408,9 @@ Response `200`:
 
 Typische Fehler:
 
-- `400`: ungueltiger `command`
+- `400`: `{"error": "command must be a non-empty string"}`
 - `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
-- `500`: Sendefehler
+- `500`: `{"error": "Failed to send command", "message": "..."}`
 
 ### POST /api/rotor/manual
 
@@ -370,9 +437,16 @@ Response `200`:
 }
 ```
 
+Typische Fehler:
+
+- `400`: `{"error": "direction must be one of: left, right, up, down, L, R, U, D"}`
+- `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
+
 ### POST /api/rotor/stop
 
 Beschreibung: Bewegung stoppen.
+
+Voraussetzung: Rotor muss verbunden sein.
 
 Response `200`:
 
@@ -381,6 +455,11 @@ Response `200`:
   "status": "ok"
 }
 ```
+
+Typische Fehler:
+
+- `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
+- `500`: `{"error": "Failed to stop motion", "message": "..."}`
 
 ### POST /api/rotor/set_target
 
@@ -405,9 +484,9 @@ Response `200`:
 
 Typische Fehler:
 
-- `400`: `az` oder `el` fehlt/ungueltig
+- `400`: `{"error": "az and el must be numeric values"}`
 - `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
-- `500`: interne Ausfuehrungsfehler
+- `500`: `{"error": "Failed to set target", "message": "..."}`
 
 ### POST /api/rotor/set_target_raw
 
@@ -434,7 +513,7 @@ Response `200`:
 
 Typische Fehler:
 
-- `400`: weder `az` noch `el` gueltig gesetzt
+- `400`: `{"error": "At least one of 'az' or 'el' must be provided as a numeric value"}`
 - `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
 
 ### POST /api/rotor/home
@@ -456,8 +535,8 @@ Response `200`:
 
 Typische Fehler:
 
-- `400`: Presets deaktiviert
-- `400`: Home konnte nicht gestartet werden
+- `400`: `{"error": "Preset positions disabled"}`
+- `400`: `{"error": "Failed to move to home preset"}`
 - `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
 
 ### POST /api/rotor/park
@@ -465,6 +544,10 @@ Typische Fehler:
 Beschreibung: Park-Preset anfahren.
 
 Voraussetzungen und Fehler analog zu `/api/rotor/home`.
+
+Typische Fehler zusaetzlich:
+
+- `400`: `{"error": "Failed to move to park preset"}`
 
 ## 6. Einstellungen API
 
@@ -488,7 +571,7 @@ Response `200`:
 }
 ```
 
-Hinweis: Das Objekt enthaelt viele weitere Felder (Map, Ramp, Limits, Presets, Server etc.).
+Hinweis: Das Objekt enthaelt alle Felder aus `server/config/defaults.py` (Map, Ramp, Limits, Presets, Server etc.).
 
 ### POST /api/settings
 
@@ -513,11 +596,19 @@ Response `200`:
 {
   "status": "ok",
   "settings": {
+    "baudRate": 9600,
+    "pollingIntervalMs": 1000,
     "azimuthOffset": 4.0,
-    "elevationOffset": 1.5
+    "elevationOffset": 1.5,
+    "feedbackCorrectionEnabled": true,
+    "azimuthFeedbackFactor": 1.02
   }
 }
 ```
+
+Hinweis: `settings` enthaelt die **gesamte** aktuelle Konfiguration nach dem Update, nicht nur die geaenderten Felder. Das Beispiel oben ist gekuerzt.
+
+Side-Effect: WebSocket-Broadcast `settings_updated` mit vollstaendigem Settings-Objekt.
 
 ## 7. Server API
 
@@ -539,6 +630,8 @@ Response `200`:
 }
 ```
 
+Hinweis: `pollingIntervalMs` reflektiert den aktuell aktiven Polling-Intervall der Rotor-Verbindung.
+
 ### POST /api/server/settings
 
 Beschreibung: Validiert und speichert Serverparameter.
@@ -551,7 +644,11 @@ Request Body Felder:
 - `serverSessionTimeoutS` (60..3600)
 - `serverMaxClients` (1..100)
 - `serverLoggingLevel` (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
-- `serverRequireSession` (`true`/`false`)
+- `serverRequireSession` (`true`/`false`, muss Boolean sein)
+
+Zusaetzliche Validierung:
+
+- HTTP- und WebSocket-Port duerfen nicht identisch sein.
 
 Beispiel:
 
@@ -564,7 +661,7 @@ Beispiel:
 }
 ```
 
-Response `200`:
+Response `200` (mit Port-Aenderung):
 
 ```json
 {
@@ -573,6 +670,18 @@ Response `200`:
   "restartRequired": true
 }
 ```
+
+Response `200` (ohne Port-Aenderung):
+
+```json
+{
+  "status": "ok",
+  "message": "Server settings saved.",
+  "restartRequired": false
+}
+```
+
+Hinweis: `serverPollingIntervalMs`, `serverSessionTimeoutS`, `serverMaxClients` und `serverLoggingLevel` werden sofort angewendet. Port-Aenderungen erfordern Neustart.
 
 Validierungsfehler `400`:
 
@@ -584,6 +693,19 @@ Validierungsfehler `400`:
   ]
 }
 ```
+
+Moegliche `details`-Eintraege:
+
+- `"HTTP port must be between 1024 and 65535"`
+- `"WebSocket port must be between 1024 and 65535"`
+- `"HTTP and WebSocket ports must be different"`
+- `"Polling interval must be between 250 and 2000 ms"`
+- `"Session timeout must be between 60 and 3600 seconds"`
+- `"Max clients must be between 1 and 100"`
+- `"Logging level must be one of: DEBUG, INFO, WARNING, ERROR"`
+- `"serverRequireSession must be a boolean"`
+
+Side-Effect: WebSocket-Broadcast `settings_updated`.
 
 ### POST /api/server/restart
 
@@ -613,8 +735,8 @@ Response `200`:
       "id": "3b9f1c2a-...",
       "ip": "192.168.1.20",
       "userAgent": "Chrome/136",
-      "connectedAt": "2026-04-17T14:30:12.123456",
-      "lastSeen": "2026-04-17T14:35:08.654321",
+      "connectedAt": "2026-06-08T14:30:12.123456",
+      "lastSeen": "2026-06-08T14:35:08.654321",
       "status": "active"
     }
   ]
@@ -636,7 +758,10 @@ Response `200`:
 
 Fehler:
 
-- `404`: Client nicht gefunden
+- `404`: `{"error": "Client not found"}`
+- `500`: `{"error": "Session manager not available"}`
+
+Side-Effect: WebSocket `client_suspended` an den betroffenen Client.
 
 ### POST /api/clients/{id}/resume
 
@@ -653,7 +778,8 @@ Response `200`:
 
 Fehler:
 
-- `404`: Client nicht gefunden
+- `404`: `{"error": "Client not found"}`
+- `500`: `{"error": "Session manager not available"}`
 
 ## 9. Routen API
 
@@ -693,13 +819,13 @@ Eine Route ist ein JSON-Objekt, typischerweise:
 
 ### 9.2 Schritt-Typen
 
-- `position`: faehrt RAW auf `azimuth`/`elevation`
-- `wait`: 
+- `position`: sendet RAW-Ziel via `set_target_raw(azimuth, elevation)` und wartet auf Ankunft
+- `wait`:
   - `duration` in ms (>0) = zeitbasiert
-  - `duration` `0` oder `null` = manueller Wait
+  - `duration` `0` oder `null` = manueller Wait (Fortsetzung via `POST /api/routes/continue`)
 - `loop`:
   - `iterations` > 0 = feste Wiederholungen
-  - `iterations` `0`, `null` oder unendlich = Endlosschleife (mit Sicherheitslimit)
+  - `iterations` `0`, `null` = Endlosschleife (mit Sicherheitslimit 100000 Iterationen)
 
 ### GET /api/routes
 
@@ -710,6 +836,10 @@ Response `200`:
   "routes": []
 }
 ```
+
+Fehler:
+
+- `500`: `{"error": "Route manager not initialized"}`
 
 ### POST /api/routes
 
@@ -735,7 +865,10 @@ Response `200`:
 
 Fehler:
 
-- `400`: fehlende/duplizierte Route-ID
+- `400`: `{"error": "Route must have an 'id' field"}`
+- `400`: `{"error": "Route with ID 'route_1' already exists"}`
+
+Side-Effect: WebSocket-Broadcast `route_list_updated`.
 
 ### PUT /api/routes/{id}
 
@@ -760,7 +893,9 @@ Response `200`:
 
 Fehler:
 
-- `404`: Route nicht gefunden
+- `404`: `{"error": "Route not found"}`
+
+Side-Effect: WebSocket-Broadcast `route_list_updated`.
 
 ### DELETE /api/routes/{id}
 
@@ -774,7 +909,9 @@ Response `200`:
 
 Fehler:
 
-- `404`: Route nicht gefunden
+- `404`: `{"error": "Route not found"}`
+
+Side-Effect: WebSocket-Broadcast `route_list_updated`.
 
 ### POST /api/routes/{id}/start
 
@@ -796,8 +933,10 @@ Response `200`:
 
 Fehler:
 
-- `400`: nicht startbar (nicht gefunden / bereits aktiv)
+- `400`: `{"error": "Failed to start route (already executing or not found)"}`
 - `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
+
+Side-Effect: WebSocket-Broadcast `route_execution_started`.
 
 ### POST /api/routes/stop
 
@@ -810,6 +949,8 @@ Response `200`:
   "status": "ok"
 }
 ```
+
+Side-Effect: WebSocket-Broadcast `route_execution_stopped`.
 
 ### POST /api/routes/continue
 
@@ -825,13 +966,13 @@ Response `200`:
 
 Fehler:
 
-- `400`: kein manueller Wait aktiv
+- `400`: `{"error": "No manual wait is active"}`
 
 ### GET /api/routes/execution
 
 Beschreibung: Aktueller Laufzustand.
 
-Response `200`:
+Response `200` (Route laeuft):
 
 ```json
 {
@@ -843,16 +984,192 @@ Response `200`:
 }
 ```
 
+Response `200` (idle):
+
+```json
+{
+  "executing": false,
+  "routeId": null,
+  "routeName": null,
+  "currentStepIndex": 0,
+  "totalSteps": 0
+}
+```
+
 ### 9.3 Laufzeitregeln der Ausfuehrung
 
 - Positionstoleranz: `2.0` Grad
-- Timeout pro Positionsschritt: `60` Sekunden
+- Timeout pro Positionsschritt: `60` Sekunden (danach wird der Schritt mit Warning fortgesetzt, Route bricht nicht ab)
 - Positionscheck-Intervall: `0.2` Sekunden
 - Endlosschleifen-Sicherheitsgrenze: `100000` Iterationen
+- Ankunftserkennung vergleicht RAW-Zielwerte mit **korrigierten Raw-Feedback-Werten** (`get_effective_raw_status`), nicht mit kalibrierten Werten
 
-## 10. Einheitliches Fehlerverhalten
+Fortschritt waehrend der Ausfuehrung wird per WebSocket als `route_execution_progress` gesendet (siehe Abschnitt 10).
 
-### 10.1 Typische Statuscodes
+## 10. WebSocket-Schnittstelle
+
+### 10.1 Verbindung
+
+- Standard: `ws://<host>:8082`
+- Port konfigurierbar ueber `serverWebSocketPort`
+- Separater Server-Thread (unabhaengig vom HTTP-Port)
+- Keine Session-Pflicht beim Connect; Session-Registrierung empfohlen
+
+### 10.2 Nachrichtenformat
+
+Alle Nachrichten sind JSON-Objekte mit:
+
+```json
+{
+  "type": "<event-type>",
+  "data": { }
+}
+```
+
+### 10.3 Client → Server
+
+Session registrieren (nach `GET /api/session`):
+
+```json
+{
+  "type": "register_session",
+  "sessionId": "3b9f1c2a-..."
+}
+```
+
+Keepalive:
+
+```json
+{ "type": "ping" }
+```
+
+Antwort:
+
+```json
+{ "type": "pong" }
+```
+
+### 10.4 Server → Client (Lifecycle-Events)
+
+| Event | Beschreibung |
+|---|---|
+| `connection_state_changed` | Rotor-Verbindungsstatus geaendert |
+| `client_list_updated` | Session-Liste aktualisiert |
+| `client_suspended` | Eigene Session wurde gesperrt |
+| `settings_updated` | Konfiguration geaendert |
+| `route_list_updated` | Routenliste geaendert |
+| `route_execution_started` | Routenausfuehrung gestartet |
+| `route_execution_progress` | Fortschritt waehrend Ausfuehrung |
+| `route_execution_stopped` | Route manuell gestoppt |
+| `route_execution_completed` | Route beendet (Erfolg/Fehler) |
+
+Beispiel `connection_state_changed`:
+
+```json
+{
+  "type": "connection_state_changed",
+  "data": {
+    "connected": true,
+    "port": "COM3",
+    "baudRate": 9600,
+    "reason": "manual_connect"
+  }
+}
+```
+
+Moegliche `reason`-Werte: `manual_connect`, `manual_disconnect`, `auto_reconnect_success`, `unexpected_disconnect`.
+
+Beispiel `client_list_updated`:
+
+```json
+{
+  "type": "client_list_updated",
+  "data": {
+    "clients": []
+  }
+}
+```
+
+Beispiel `settings_updated`:
+
+```json
+{
+  "type": "settings_updated",
+  "data": {
+    "baudRate": 9600
+  }
+}
+```
+
+(`data` enthaelt das vollstaendige Settings-Objekt.)
+
+Beispiel `route_execution_started`:
+
+```json
+{
+  "type": "route_execution_started",
+  "data": {
+    "routeId": "route_1",
+    "routeName": "Demo"
+  }
+}
+```
+
+Beispiel `route_execution_completed`:
+
+```json
+{
+  "type": "route_execution_completed",
+  "data": {
+    "success": true,
+    "routeId": "route_1",
+    "error": null
+  }
+}
+```
+
+Beispiel `client_suspended`:
+
+```json
+{
+  "type": "client_suspended",
+  "data": {
+    "clientId": "3b9f1c2a-...",
+    "message": "Your session has been suspended"
+  }
+}
+```
+
+### 10.5 Server → Client (`route_execution_progress`)
+
+Das `data`-Objekt enthaelt ein inneres `type`-Feld:
+
+| Inneres `data.type` | Bedeutung |
+|---|---|
+| `step_started` | Schritt beginnt (`stepType`, `step`, `stepIndex`) |
+| `step_completed` | Schritt abgeschlossen |
+| `position_moving` | Positionsschritt gestartet (`target`) |
+| `position_reached` | Position erreicht |
+| `wait_manual` | Manueller Wait aktiv (`message`) |
+| `wait_progress` | Zeitbasierter Wait (`elapsed`, `remaining`, `total` in ms) |
+| `loop_iteration` | Loop-Iteration (`iteration`, `total`) |
+
+Beispiel:
+
+```json
+{
+  "type": "route_execution_progress",
+  "data": {
+    "type": "position_moving",
+    "step": { "id": "step_1", "type": "position", "azimuth": 180, "elevation": 0 },
+    "target": { "azimuth": 180, "elevation": 0 }
+  }
+}
+```
+
+## 11. Einheitliches Fehlerverhalten
+
+### 11.1 Typische Statuscodes
 
 - `200` OK
 - `400` Bad Request
@@ -861,7 +1178,7 @@ Response `200`:
 - `404` Not Found
 - `500` Internal Server Error
 
-### 10.2 Standard-Fehlerobjekt
+### 11.2 Standard-Fehlerobjekt
 
 ```json
 {
@@ -870,7 +1187,35 @@ Response `200`:
 }
 ```
 
-### 10.3 Rotor-Disconnected Spezialfall
+Ungueltiger JSON-Body:
+
+```json
+{
+  "error": "Invalid JSON",
+  "message": "Request body contains invalid JSON."
+}
+```
+
+Weitere Varianten: `"JSON request body must be an object."`, `"Request body is not valid UTF-8 JSON."`
+
+Nicht gefundene REST-Routen (POST/PUT/DELETE):
+
+```json
+{
+  "error": "Not Found"
+}
+```
+
+Interner Serverfehler (POST/PUT/DELETE Handler):
+
+```json
+{
+  "error": "Internal server error",
+  "message": "..."
+}
+```
+
+### 11.3 Rotor-Disconnected Spezialfall
 
 Mehrere Rotor-Steuerendpunkte liefern bei fehlender Verbindung:
 
@@ -881,7 +1226,9 @@ Mehrere Rotor-Steuerendpunkte liefern bei fehlender Verbindung:
 }
 ```
 
-## 11. Kurze cURL Beispiele
+Betroffene Endpunkte: `/api/rotor/command`, `/api/rotor/manual`, `/api/rotor/stop`, `/api/rotor/set_target`, `/api/rotor/set_target_raw`, `/api/rotor/home`, `/api/rotor/park`, `/api/routes/{id}/start`.
+
+## 12. Kurze cURL Beispiele
 
 Session holen:
 
@@ -923,8 +1270,9 @@ OpenAPI abrufen:
 curl -s http://localhost:8081/api/openapi.json
 ```
 
-## 12. Hinweise zur Pflege
+## 13. Hinweise zur Pflege
 
-- Bei API-Aenderungen immer zuerst `server/api/routes.py`, `server/api/handler.py` und `server/api/openapi.py` pruefen.
-- Diese Datei soll mit `GET /api/openapi.json` konsistent bleiben.
+- Bei API-Aenderungen immer zuerst `server/api/routes.py`, `server/api/handler.py`, `server/api/openapi.py` und `server/api/websocket.py` pruefen.
+- Diese Datei soll mit `GET /api/openapi.json` konsistent bleiben (REST-Teil).
 - Die Detailbeispiele hier sind exemplarisch; zusaetzliche Felder in `settings` oder Route-Schritten sind moeglich.
+- WebSocket-Events sind absichtlich nur in dieser Markdown-Doku detailliert, nicht in der OpenAPI-Spec.
