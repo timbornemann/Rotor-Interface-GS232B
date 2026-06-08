@@ -9,7 +9,7 @@ except ImportError:
 
 
 def main() -> None:
-    client = RotorApiClient(host="localhost", http_port=8081, auto_update=True)
+    client = RotorApiClient(host="localhost", http_port=8081)
 
     try:
         print("Session:", client.ensure_session())
@@ -22,7 +22,7 @@ def main() -> None:
 
         # Beispiel fuer echte Steuerung:
         # client.connect("COM3", baud_rate=9600)
-        # client.set_target(az=180, el=45)
+        # client.set_target_async(az=180, el=45)
         # client.stop()
     except RotorDisconnectedError as exc:
         print("Rotor ist nicht verbunden:", exc)

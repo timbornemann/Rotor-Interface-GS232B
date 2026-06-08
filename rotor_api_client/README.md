@@ -4,6 +4,20 @@ Plug-and-play Python-Client fuer die REST-API aus `API_Dokumentation.md`.
 Die Datei `rotor_client.py` nutzt fuer REST nur die Python-Standardbibliothek
 und kann deshalb direkt in andere Projekte kopiert werden.
 
+## Test-GUI
+
+Mit `start_client_gui.bat` im Projektwurzelordner startet eine einfache
+Tkinter-GUI zum Testen der Clientklasse.
+
+Die GUI verwendet keine eigenen API-Verbindungen. Sie erstellt nur ein
+`RotorApiClient`-Objekt und ruft dessen Funktionen auf. Sichtbar sind:
+
+- Live-Status und Position aus dem autonomen Client-Cache
+- Rotor-Verbindung, manuelle Bewegung, Stop, Zielpositionen, Home/Park
+- App-Settings und Server-Settings laden und bearbeiten
+- Routen laden, erstellen, aktualisieren, loeschen, starten und stoppen
+- Debug-Snapshot mit Cache, Session, Events und letzten Fehlern
+
 ## Schnellstart
 
 ```python
@@ -13,6 +27,7 @@ client = RotorApiClient(host="localhost", http_port=8081)
 
 connected = False
 try:
+    # Auto-Update laeuft ab hier bereits im Hintergrund.
     client.ensure_session()
     client.connect("COM3", baud_rate=9600)
     connected = True
@@ -26,11 +41,13 @@ finally:
 ## Wichtige Methoden
 
 - `ensure_session()`: Session holen und fuer Folge-Requests speichern.
-- `start_auto_update()` / `stop_auto_update()`: Cache im Hintergrund aktuell halten.
+- `start_auto_update()` / `stop_auto_update()`: Cache im Hintergrund starten/stoppen.
 - `list_ports()`: serielle Ports listen.
 - `connect(port, baud_rate=9600)` / `disconnect()`: Rotor verbinden/trennen.
 - `get_status()` / `get_position()`: Status und Position lesen.
 - `set_target(az, el)`: kalibriertes Ziel setzen.
+- `set_target_async(az, el)` und weitere `*_async()`-Methoden:
+  Steuerung ohne Blockieren des Hauptthreads.
 - `set_target_raw(az=None, el=None)`: RAW-Ziel setzen.
 - `manual_move(direction)` und `stop()`: manuell bewegen und stoppen.
 - `home()` / `park()`: Presets anfahren.
@@ -40,6 +57,10 @@ finally:
 - `websocket_events()`: optionale async WebSocket-Events, benoetigt `websockets`.
 
 ## Automatisch aktuelle Daten
+
+`RotorApiClient()` startet standardmaessig autonom. Das bedeutet: Die Klasse
+holt Session, Status, Position und Events in Hintergrundthreads, sobald ein
+Objekt erzeugt wurde. Der Hauptthread der Anwendung wird dafuer nicht blockiert.
 
 Der Server pusht per WebSocket Verbindungs-, Settings-, Client- und Routen-Events,
 aber keine fortlaufenden Positionsdaten. Die Klasse kombiniert deshalb:
@@ -51,7 +72,7 @@ aber keine fortlaufenden Positionsdaten. Die Klasse kombiniert deshalb:
 import time
 from rotor_api_client import RotorApiClient
 
-client = RotorApiClient(auto_update=True, auto_update_interval=0.5)
+client = RotorApiClient(auto_update_interval=1.0)
 
 try:
     time.sleep(1.0)  # ersten Poll abwarten
@@ -65,7 +86,7 @@ finally:
 Alternativ kann der Hintergrunddienst explizit gestartet werden:
 
 ```python
-client = RotorApiClient()
+client = RotorApiClient(auto_update=False)
 client.start_auto_update(poll_interval=0.25)
 
 position = client.current_position
@@ -73,6 +94,17 @@ status = client.current_status
 events = client.get_recent_events(clear=True)
 
 client.stop_auto_update()
+```
+
+Direkte REST-Methoden wie `set_target()` sind bewusst synchron und liefern das
+API-Ergebnis direkt zurueck. Fuer GUI- oder Hauptthread-schonende Steuerung gibt
+es nicht-blockierende Varianten:
+
+```python
+future = client.set_target_async(180, 45)
+
+# spaeter, falls das Ergebnis gebraucht wird:
+result = future.result(timeout=5)
 ```
 
 ## Fehlerbehandlung

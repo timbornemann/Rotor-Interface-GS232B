@@ -13,6 +13,7 @@ import socket
 import threading
 import time
 from collections import deque
+from concurrent.futures import Future
 from copy import deepcopy
 from typing import Any, AsyncIterator, Dict, Mapping, Optional
 from urllib.error import HTTPError, URLError
@@ -122,6 +123,11 @@ class RotorApiClient:
         auto_session: Holt automatisch eine Session, sobald ein geschuetzter
             Endpunkt ohne Session-ID aufgerufen wird.
         default_headers: Zusaetzliche Header fuer alle Requests.
+        auto_update: Startet Hintergrund-Updates direkt beim Erzeugen des Clients.
+        auto_update_interval: Schonendes Polling-Intervall in Sekunden.
+        auto_update_websocket: Liest WebSocket-Events im Hintergrund mit.
+        command_workers: Maximale Anzahl paralleler Hintergrundbefehle fuer
+            `call_async()` und die `*_async()`-Convenience-Methoden.
     """
 
     DEFAULT_HTTP_PORT = 8081
@@ -153,9 +159,10 @@ class RotorApiClient:
         session_id: Optional[str] = None,
         auto_session: bool = True,
         default_headers: Optional[Mapping[str, str]] = None,
-        auto_update: bool = False,
-        auto_update_interval: float = 0.5,
+        auto_update: bool = True,
+        auto_update_interval: float = 1.0,
         auto_update_websocket: bool = True,
+        command_workers: int = 4,
     ) -> None:
         if base_url is None and "://" in host:
             base_url = host
@@ -175,6 +182,7 @@ class RotorApiClient:
         )
         self.timeout = self._require_positive_number(timeout, "timeout")
         self.auto_session = bool(auto_session)
+        self.command_workers = self._require_positive_int(command_workers, "command_workers")
         self.session_id: Optional[str] = None
         self.default_headers = {
             "Accept": "application/json",
@@ -190,6 +198,7 @@ class RotorApiClient:
         self._auto_update_stop = threading.Event()
         self._poll_thread: Optional[threading.Thread] = None
         self._websocket_thread: Optional[threading.Thread] = None
+        self._command_semaphore = threading.BoundedSemaphore(self.command_workers)
         self._event_history: deque[JsonObject] = deque(maxlen=100)
         self._current_status: Optional[JsonObject] = None
         self._current_position: Optional[JsonObject] = None
@@ -220,6 +229,52 @@ class RotorApiClient:
     def close(self) -> None:
         """Stoppt Hintergrund-Updates. Netzwerkverbindungen des Servers bleiben bestehen."""
         self.stop_auto_update()
+
+    def call_async(self, method_name: str, *args: Any, **kwargs: Any) -> Future:
+        """Fuehrt eine Client-Methode in einem Daemon-Hintergrundthread aus.
+
+        So kann eine GUI oder Hauptanwendung Steuerbefehle ausloesen, ohne den
+        eigenen Hauptthread auf den HTTP-Request warten zu lassen.
+
+        Beispiel:
+            future = client.call_async("set_target", 180, 45)
+        """
+        method_name = self._require_non_empty_string(method_name, "method_name")
+        if method_name.startswith("_"):
+            raise RotorApiValidationError("method_name must refer to a public method.")
+        method = getattr(self, method_name, None)
+        if not callable(method):
+            raise RotorApiValidationError(f"Unknown client method: {method_name}")
+
+        future: Future = Future()
+
+        def worker() -> None:
+            acquired = self._command_semaphore.acquire(blocking=False)
+            if not acquired:
+                future.set_exception(
+                    RotorApiError(
+                        "Too many background commands are already running. "
+                        f"Limit: {self.command_workers}"
+                    )
+                )
+                return
+            try:
+                if not future.set_running_or_notify_cancel():
+                    return
+                result = method(*args, **kwargs)
+            except Exception as exc:
+                future.set_exception(exc)
+            else:
+                future.set_result(result)
+            finally:
+                self._command_semaphore.release()
+
+        threading.Thread(
+            target=worker,
+            name=f"RotorApiClientCall-{method_name}",
+            daemon=True,
+        ).start()
+        return future
 
     # ------------------------------------------------------------------
     # Session
@@ -485,6 +540,10 @@ class RotorApiClient:
         }
         return self._request("POST", "/api/rotor/connect", payload)
 
+    def connect_async(self, port: str, baud_rate: int = 9600) -> Future:
+        """Nicht-blockierende Variante von `connect()`."""
+        return self.call_async("connect", port, baud_rate)
+
     def connect_first_available(self, baud_rate: int = 9600) -> JsonObject:
         """Verbindet mit dem ersten gefundenen Port.
 
@@ -503,6 +562,10 @@ class RotorApiClient:
     def disconnect(self) -> JsonObject:
         """Trennt die aktive Rotor-Verbindung."""
         return self._request("POST", "/api/rotor/disconnect")
+
+    def disconnect_async(self) -> Future:
+        """Nicht-blockierende Variante von `disconnect()`."""
+        return self.call_async("disconnect")
 
     def get_status(self) -> JsonObject:
         """Liest den aktuellen Verbindungs- und Positionsstatus."""
@@ -525,6 +588,10 @@ class RotorApiClient:
         payload = {"command": self._require_non_empty_string(command, "command")}
         return self._request("POST", "/api/rotor/command", payload)
 
+    def send_command_async(self, command: str) -> Future:
+        """Nicht-blockierende Variante von `send_command()`."""
+        return self.call_async("send_command", command)
+
     def manual_move(self, direction: str) -> JsonObject:
         """Startet eine manuelle Dauerbewegung.
 
@@ -536,6 +603,10 @@ class RotorApiClient:
             valid = ", ".join(sorted(self.VALID_DIRECTIONS))
             raise RotorApiValidationError(f"direction must be one of: {valid}")
         return self._request("POST", "/api/rotor/manual", {"direction": direction})
+
+    def manual_move_async(self, direction: str) -> Future:
+        """Nicht-blockierende Variante von `manual_move()`."""
+        return self.call_async("manual_move", direction)
 
     def move_left(self) -> JsonObject:
         """Startet eine manuelle Bewegung nach links."""
@@ -557,6 +628,10 @@ class RotorApiClient:
         """Stoppt die aktuelle Rotor-Bewegung."""
         return self._request("POST", "/api/rotor/stop")
 
+    def stop_async(self) -> Future:
+        """Nicht-blockierende Variante von `stop()`."""
+        return self.call_async("stop")
+
     def set_target(self, az: float, el: float) -> JsonObject:
         """Setzt eine Zielposition in kalibrierten Werten."""
         payload = {
@@ -564,6 +639,10 @@ class RotorApiClient:
             "el": self._coerce_number(el, "el"),
         }
         return self._request("POST", "/api/rotor/set_target", payload)
+
+    def set_target_async(self, az: float, el: float) -> Future:
+        """Nicht-blockierende Variante von `set_target()`."""
+        return self.call_async("set_target", az, el)
 
     def set_target_raw(self, az: Optional[float] = None, el: Optional[float] = None) -> JsonObject:
         """Setzt eine Zielposition in RAW-Werten.
@@ -580,13 +659,25 @@ class RotorApiClient:
             raise RotorApiValidationError("At least one of az or el must be provided.")
         return self._request("POST", "/api/rotor/set_target_raw", payload)
 
+    def set_target_raw_async(self, az: Optional[float] = None, el: Optional[float] = None) -> Future:
+        """Nicht-blockierende Variante von `set_target_raw()`."""
+        return self.call_async("set_target_raw", az=az, el=el)
+
     def home(self) -> JsonObject:
         """Faehrt das konfigurierte Home-Preset an."""
         return self._request("POST", "/api/rotor/home")
 
+    def home_async(self) -> Future:
+        """Nicht-blockierende Variante von `home()`."""
+        return self.call_async("home")
+
     def park(self) -> JsonObject:
         """Faehrt das konfigurierte Park-Preset an."""
         return self._request("POST", "/api/rotor/park")
+
+    def park_async(self) -> Future:
+        """Nicht-blockierende Variante von `park()`."""
+        return self.call_async("park")
 
     def wait_for_connection_state(
         self,
@@ -630,6 +721,14 @@ class RotorApiClient:
         payload = self._merge_payload(settings, kwargs, "settings")
         return self._request("POST", "/api/settings", payload)
 
+    def update_settings_async(
+        self,
+        settings: Optional[Mapping[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Future:
+        """Nicht-blockierende Variante von `update_settings()`."""
+        return self.call_async("update_settings", settings, **kwargs)
+
     def get_server_settings(self) -> JsonObject:
         """Liest aktive Serverparameter."""
         return self._request("GET", "/api/server/settings")
@@ -648,9 +747,21 @@ class RotorApiClient:
         payload = self._validate_server_settings(payload)
         return self._request("POST", "/api/server/settings", payload)
 
+    def update_server_settings_async(
+        self,
+        settings: Optional[Mapping[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Future:
+        """Nicht-blockierende Variante von `update_server_settings()`."""
+        return self.call_async("update_server_settings", settings, **kwargs)
+
     def restart_server(self) -> JsonObject:
         """Fordert einen geordneten Server-Neustart an."""
         return self._request("POST", "/api/server/restart")
+
+    def restart_server_async(self) -> Future:
+        """Nicht-blockierende Variante von `restart_server()`."""
+        return self.call_async("restart_server")
 
     # ------------------------------------------------------------------
     # Clients
@@ -693,29 +804,53 @@ class RotorApiClient:
         self._require_non_empty_string(route_id, "route['id']")
         return self._request("POST", "/api/routes", payload)
 
+    def create_route_async(self, route: Mapping[str, Any]) -> Future:
+        """Nicht-blockierende Variante von `create_route()`."""
+        return self.call_async("create_route", route)
+
     def update_route(self, route_id: str, route: Mapping[str, Any]) -> JsonObject:
         """Aktualisiert eine bestehende Route."""
         clean_id = quote(self._require_non_empty_string(route_id, "route_id"), safe="")
         payload = self._ensure_json_object(route, "route")
         return self._request("PUT", f"/api/routes/{clean_id}", payload)
 
+    def update_route_async(self, route_id: str, route: Mapping[str, Any]) -> Future:
+        """Nicht-blockierende Variante von `update_route()`."""
+        return self.call_async("update_route", route_id, route)
+
     def delete_route(self, route_id: str) -> JsonObject:
         """Loescht eine Route."""
         clean_id = quote(self._require_non_empty_string(route_id, "route_id"), safe="")
         return self._request("DELETE", f"/api/routes/{clean_id}")
+
+    def delete_route_async(self, route_id: str) -> Future:
+        """Nicht-blockierende Variante von `delete_route()`."""
+        return self.call_async("delete_route", route_id)
 
     def start_route(self, route_id: str) -> JsonObject:
         """Startet die Ausfuehrung einer Route."""
         clean_id = quote(self._require_non_empty_string(route_id, "route_id"), safe="")
         return self._request("POST", f"/api/routes/{clean_id}/start")
 
+    def start_route_async(self, route_id: str) -> Future:
+        """Nicht-blockierende Variante von `start_route()`."""
+        return self.call_async("start_route", route_id)
+
     def stop_route(self) -> JsonObject:
         """Stoppt eine laufende Routenausfuehrung."""
         return self._request("POST", "/api/routes/stop")
 
+    def stop_route_async(self) -> Future:
+        """Nicht-blockierende Variante von `stop_route()`."""
+        return self.call_async("stop_route")
+
     def continue_route(self) -> JsonObject:
         """Setzt einen manuellen Wait-Schritt fort."""
         return self._request("POST", "/api/routes/continue")
+
+    def continue_route_async(self) -> Future:
+        """Nicht-blockierende Variante von `continue_route()`."""
+        return self.call_async("continue_route")
 
     def get_route_execution(self) -> JsonObject:
         """Liest den aktuellen Routenausfuehrungsstatus."""
@@ -777,9 +912,18 @@ class RotorApiClient:
     def _poll_loop(self, *, poll_interval: float, poll_status: bool, poll_position: bool) -> None:
         """Background worker fuer REST-Status- und Positionspolling."""
         while not self._auto_update_stop.is_set():
+            wait_time = poll_interval
             try:
                 status = self.get_status() if poll_status else None
-                position = self.get_position() if poll_position else None
+                position = None
+                if poll_position:
+                    if status is not None and status.get("connected") is False:
+                        position = {
+                            "connected": False,
+                            "clientCount": status.get("clientCount"),
+                        }
+                    else:
+                        position = self.get_position()
 
                 with self._cache_lock:
                     if status is not None:
@@ -790,21 +934,36 @@ class RotorApiClient:
                     self._last_error = None
             except Exception as exc:
                 self._set_last_error(exc)
+                wait_time = min(max(poll_interval * 2.0, 1.0), 5.0)
 
-            self._auto_update_stop.wait(poll_interval)
+            self._auto_update_stop.wait(wait_time)
 
     def _websocket_loop(self, *, ping_interval: float) -> None:
         """Background worker fuer WebSocket-Events mit Reconnect-Schleife."""
+        try:
+            import websockets  # noqa: F401
+        except ImportError as exc:
+            self._set_last_error(
+                RotorApiError(
+                    "WebSocket auto-update disabled because the optional package "
+                    "'websockets' is not installed. REST polling remains active."
+                )
+            )
+            return
+
+        reconnect_delay = 1.0
         while not self._auto_update_stop.is_set():
             try:
                 import asyncio
 
                 asyncio.run(self._consume_websocket_events(ping_interval=ping_interval))
+                reconnect_delay = 1.0
             except Exception as exc:
                 self._set_last_error(exc)
 
             if not self._auto_update_stop.is_set():
-                self._auto_update_stop.wait(1.0)
+                self._auto_update_stop.wait(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 2.0, 30.0)
 
     async def _consume_websocket_events(self, *, ping_interval: float) -> None:
         async for event in self.websocket_events(register_session=True, ping_interval=ping_interval):
