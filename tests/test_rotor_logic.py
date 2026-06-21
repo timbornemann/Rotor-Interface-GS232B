@@ -122,12 +122,14 @@ class TestRotorLogic:
     def test_update_config(self, logic):
         """update_config should update configuration values."""
         logic.update_config({
+            "softLimitsEnabled": True,
             "azimuthMinLimit": 10,
             "azimuthMaxLimit": 350,
             "azimuthMode": 450,
             "rampEnabled": True
         })
         
+        assert logic.config["softLimitsEnabled"] is True
         assert logic.config["azimuthMin"] == 10
         assert logic.config["azimuthMax"] == 350
         assert logic.config["azimuthMode"] == 450
@@ -184,6 +186,126 @@ class TestRotorLogic:
         # AZ: hardware raw = 90 (unchanged, not multiplied by feedback)
         # EL: calibrated=30, hardware_raw = ((30*1)-0)/2 = 15
         mock_connection.send_command.assert_called_with("W090 015")
+
+    def test_set_target_clamps_to_active_soft_limits(self, logic, mock_connection):
+        """Calibrated targets outside active limits should be clamped before sending."""
+        logic.update_config({
+            "softLimitsEnabled": True,
+            "azimuthMinLimit": 10,
+            "azimuthMaxLimit": 300,
+            "elevationMinLimit": 5,
+            "elevationMaxLimit": 80,
+            "azimuthMode": 450
+        })
+
+        logic.set_target(5, 95)
+
+        assert logic.target_az == 10
+        assert logic.target_el == 80
+        mock_connection.send_command.assert_called_with("W010 080")
+
+    def test_set_target_450_candidate_clamps_to_correct_boundary(self, logic, mock_connection):
+        """Ambiguous 450-degree requests should choose a candidate before min/max clamping."""
+        mock_connection.get_status.return_value = {
+            "azimuthRaw": 400,
+            "elevationRaw": 45
+        }
+        logic.update_config({
+            "softLimitsEnabled": True,
+            "azimuthMinLimit": 100,
+            "azimuthMaxLimit": 300,
+            "azimuthMode": 450
+        })
+
+        logic.set_target(10, None)
+
+        assert logic.target_az == 300
+        mock_connection.send_command.assert_called_with("M300")
+
+    def test_set_target_raw_clamps_to_active_soft_limits(self, logic, mock_connection):
+        """Raw targets should also respect active software limits."""
+        logic.update_config({
+            "softLimitsEnabled": True,
+            "azimuthMinLimit": 100,
+            "azimuthMaxLimit": 300,
+            "azimuthMode": 450
+        })
+
+        applied = logic.set_target_raw(20, None)
+
+        assert applied["azimuth"] == 100
+        mock_connection.send_command.assert_called_with("M100")
+
+    def test_direct_position_command_is_sanitized_when_limits_active(self, logic):
+        """Direct M/W commands should be rewritten to bounded hardware targets."""
+        logic.update_config({
+            "softLimitsEnabled": True,
+            "azimuthMinLimit": 100,
+            "azimuthMaxLimit": 300,
+            "elevationMinLimit": 10,
+            "elevationMaxLimit": 80,
+            "azimuthMode": 450
+        })
+
+        assert logic.sanitize_direct_command("M020") == "M100"
+        assert logic.sanitize_direct_command("W450 090") == "W300 080"
+        assert logic.sanitize_direct_command("C2") == "C2"
+
+    def test_direct_manual_command_is_sanitized_when_limits_active(self, logic, mock_connection):
+        """Direct L/R/U/D commands should become bounded target commands."""
+        mock_connection.get_status.return_value = {
+            "azimuthRaw": 200,
+            "elevationRaw": 45
+        }
+        logic.update_config({
+            "softLimitsEnabled": True,
+            "azimuthMinLimit": 100,
+            "azimuthMaxLimit": 300,
+            "elevationMinLimit": 10,
+            "elevationMaxLimit": 80,
+            "azimuthMode": 450
+        })
+
+        assert logic.sanitize_direct_command("R") == "M300"
+        assert logic.sanitize_direct_command("L") == "M100"
+        assert logic.sanitize_direct_command("U") == "W200 080"
+        assert logic.sanitize_direct_command("D") == "W200 010"
+
+    def test_manual_move_uses_limit_target_when_ramp_disabled(self, logic, mock_connection):
+        """Continuous manual movement should become a bounded target when limits are active."""
+        logic.update_config({
+            "softLimitsEnabled": True,
+            "azimuthMinLimit": 100,
+            "azimuthMaxLimit": 300,
+            "azimuthMode": 450,
+            "rampEnabled": False
+        })
+
+        logic.manual_move("right")
+
+        assert logic.target_az == 300
+        assert logic.manual_direction is None
+        mock_connection.send_command.assert_called_with("M300")
+
+    def test_update_config_resends_clamped_target_when_limits_enabled(self, logic, mock_connection):
+        """Enabling limits should correct an already queued direct target."""
+        logic.update_config({
+            "azimuthMode": 450,
+            "rampEnabled": False
+        })
+        logic.set_target(350, None)
+        mock_connection.send_command.reset_mock()
+
+        logic.update_config({
+            "softLimitsEnabled": True,
+            "azimuthMinLimit": 100,
+            "azimuthMaxLimit": 300,
+            "azimuthMode": 450,
+            "rampEnabled": False
+        })
+
+        assert logic.target_az == 300
+        mock_connection.send_command.assert_called_with("M300")
 
     def test_handle_target_ramp_does_not_clear_newer_target(self, logic):
         """Stale control-loop snapshots must not clear a newer target."""

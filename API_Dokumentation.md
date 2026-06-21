@@ -390,6 +390,8 @@ Hinweis: `cone.angle`/`cone.length` kommen aus den Query-Parametern, nicht aus d
 
 Beschreibung: Direkten GS-232B Befehl senden.
 
+Hinweis: Bewegungsbefehle werden bei aktiven Soft-Limits vor dem Senden begrenzt. Das gilt fuer Positionsbefehle (`M...`, `W...`) und kontinuierliche Richtungsbefehle (`L`, `R`, `U`, `D`).
+
 Request Body:
 
 ```json
@@ -463,9 +465,9 @@ Typische Fehler:
 
 ### POST /api/rotor/set_target
 
-Beschreibung: Zielposition in kalibrierten Werten setzen.
+Beschreibung: Zielposition in kalibrierten Werten setzen. Aktive Soft-Limits werden serverseitig angewendet.
 
-Request Body (`az` und `el` sind beide Pflicht und numerisch):
+Request Body (`az` oder `el` oder beide):
 
 ```json
 {
@@ -478,19 +480,23 @@ Response `200`:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "appliedTarget": {
+    "azimuth": 180.5,
+    "elevation": 45.0
+  }
 }
 ```
 
 Typische Fehler:
 
-- `400`: `{"error": "az and el must be numeric values"}`
+- `400`: `{"error": "At least one of 'az' or 'el' must be provided as a numeric value"}`
 - `400`: Rotor nicht verbunden (`code: ROTOR_DISCONNECTED`)
 - `500`: `{"error": "Failed to set target", "message": "..."}`
 
 ### POST /api/rotor/set_target_raw
 
-Beschreibung: Zielposition mit RAW-Werten setzen.
+Beschreibung: Zielposition mit RAW-Werten setzen. Aktive Soft-Limits werden serverseitig auf die entsprechende RAW-Position angewendet.
 
 Request Body (`az` oder `el` oder beide):
 
@@ -507,7 +513,11 @@ Response `200`:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "appliedTarget": {
+    "azimuth": 180,
+    "elevation": 45
+  }
 }
 ```
 

@@ -53,6 +53,7 @@ class SettingsManager:
                     cleaned_config = self._clean_config(json_config)
                     self.cache.update(cleaned_config)
                     self.cache.update(self._sanitize_overlay_settings(self.cache))
+                    self.cache.update(self._sanitize_limit_settings(self.cache))
                     log(f"[Settings] Loaded settings from {self.json_file}")
                 except Exception as e:
                     log(f"[Settings] Error loading JSON: {e}")
@@ -167,6 +168,63 @@ class SettingsManager:
             ),
         }
 
+    def _coerce_number(self, value: Any, fallback: float) -> float:
+        """Coerce a config value to float with fallback."""
+        if isinstance(value, bool):
+            return fallback
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    def _sanitize_limit_settings(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize soft-limit settings to numeric hardware-safe ranges."""
+        azimuth_mode = int(
+            self._coerce_number(
+                config.get("azimuthMode", DEFAULT_CONFIG["azimuthMode"]),
+                DEFAULT_CONFIG["azimuthMode"],
+            )
+        )
+        azimuth_mode = 450 if azimuth_mode == 450 else 360
+
+        az_min = self._coerce_number(
+            config.get("azimuthMinLimit", DEFAULT_CONFIG["azimuthMinLimit"]),
+            DEFAULT_CONFIG["azimuthMinLimit"],
+        )
+        az_max = self._coerce_number(
+            config.get("azimuthMaxLimit", azimuth_mode),
+            azimuth_mode,
+        )
+        el_min = self._coerce_number(
+            config.get("elevationMinLimit", DEFAULT_CONFIG["elevationMinLimit"]),
+            DEFAULT_CONFIG["elevationMinLimit"],
+        )
+        el_max = self._coerce_number(
+            config.get("elevationMaxLimit", DEFAULT_CONFIG["elevationMaxLimit"]),
+            DEFAULT_CONFIG["elevationMaxLimit"],
+        )
+
+        az_min = max(0, min(azimuth_mode, az_min))
+        az_max = max(0, min(azimuth_mode, az_max))
+        el_min = max(0, min(90, el_min))
+        el_max = max(0, min(90, el_max))
+
+        if az_max < az_min:
+            az_max = az_min
+        if el_max < el_min:
+            el_max = el_min
+
+        return {
+            "softLimitsEnabled": self._coerce_bool(
+                config.get("softLimitsEnabled", DEFAULT_CONFIG.get("softLimitsEnabled", False)),
+                bool(DEFAULT_CONFIG.get("softLimitsEnabled", False)),
+            ),
+            "azimuthMinLimit": az_min,
+            "azimuthMaxLimit": az_max,
+            "elevationMinLimit": el_min,
+            "elevationMaxLimit": el_max,
+        }
+
     def _save_to_file(self) -> None:
         """Save current cache to JSON file."""
         try:
@@ -207,6 +265,7 @@ class SettingsManager:
             cleaned_settings = self._clean_config(new_settings or {})
             self.cache.update(cleaned_settings)
             self.cache.update(self._sanitize_overlay_settings(self.cache))
+            self.cache.update(self._sanitize_limit_settings(self.cache))
             self._save_to_file()
 
     def reload(self) -> None:

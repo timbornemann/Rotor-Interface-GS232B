@@ -212,7 +212,7 @@ Zentrale Konfigurationsquelle (vom Server geladen/geschrieben). Beispiele:
 - Kartenansicht: `mapLatitude`, `mapLongitude`, `mapSource`, `mapType`, Zoom
 - Darstellung: `coneAngle`, `coneLength`, `azimuthDisplayOffset`
 - Bewegung: `azimuthMode`, Speed-Werte, Ramp-Werte
-- Limits: `azimuthMinLimit`, `azimuthMaxLimit`, `elevationMinLimit`, `elevationMaxLimit`
+- Limits: `softLimitsEnabled`, `azimuthMinLimit`, `azimuthMaxLimit`, `elevationMinLimit`, `elevationMaxLimit`
 - Kalibrierung:
   - `azimuthOffset`, `elevationOffset`
   - `azimuthScaleFactor`, `elevationScaleFactor`
@@ -239,8 +239,8 @@ Base URL: `http://<host>:<http-port>`
 | GET | `/api/rotor/position` | Positionsdaten + Cone-Parameter |
 | POST | `/api/rotor/manual` | Manuelle Bewegung (`direction`) |
 | POST | `/api/rotor/stop` | Alles stoppen |
-| POST | `/api/rotor/set_target` | Zielposition kalibriert (`az`, `el`) |
-| POST | `/api/rotor/set_target_raw` | Zielposition raw (`az`, `el`) |
+| POST | `/api/rotor/set_target` | Zielposition kalibriert (`az` und/oder `el`, Antwort enthaelt `appliedTarget`) |
+| POST | `/api/rotor/set_target_raw` | Zielposition raw (`az` und/oder `el`, Antwort enthaelt `appliedTarget`) |
 | POST | `/api/rotor/command` | Direktes GS-232B-Kommando |
 | POST | `/api/rotor/home` | Home-Preset anfahren |
 | POST | `/api/rotor/park` | Park-Preset anfahren |
@@ -338,7 +338,7 @@ Eine Route ist ein Objekt mit `id`, `name`, optional `description`, `steps`, opt
 
 ### Ausführungslogik (Backend)
 
-- Position wird als Raw-Ziel gesendet (`set_target_raw`)
+- Position wird als Raw-Ziel gesendet (`set_target_raw`) und wartet auf das tatsaechlich angewendete Ziel
 - Ankunft gilt bei Toleranz von 2° (Az/El)
 - Timeout pro Positionsschritt: 60 s, danach Weiterlauf
 - Bei manuellen Waits wird auf `/api/routes/continue` gewartet

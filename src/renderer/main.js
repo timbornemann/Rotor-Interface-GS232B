@@ -94,22 +94,12 @@ mapView.setOnClick(async (azimuth, elevation) => {
     return;
   }
 
-  const rawAzimuth = calibratedAzimuthToHardwareRaw(azimuth);
-  if (rawAzimuth === null) {
-    showLimitWarning(`Keine gültige Raw-Position für ${azimuth.toFixed(1)}° (kalibriert) gefunden.`);
-    logAction('Klick auf Karte verworfen, keine gültige Raw-Position', { calibrated: azimuth });
-    return;
-  }
-
-  const currentRaw = rotor.currentStatus?.azimuthRaw ?? 0;
   logAction('Klick auf Karte - Rotor wird bewegt (nur Azimut)', {
-    calibrated: azimuth.toFixed(1),
-    raw: rawAzimuth.toFixed(1),
-    currentRaw: Number(currentRaw).toFixed(1)
+    calibrated: azimuth.toFixed(1)
   });
   try {
     await rotor.stopRoute().catch(() => {});
-    await rotor.setAzimuthRaw(rawAzimuth);
+    await rotor.setAzimuth(azimuth);
   } catch (error) {
     reportError(error);
   }
@@ -257,12 +247,12 @@ function updateRampInputsFromConfig() {
 
 function syncGotoInputBounds() {
   if (gotoAzInput) {
-      gotoAzInput.min = config.azimuthMinLimit;
-      gotoAzInput.max = config.azimuthMaxLimit;
+      gotoAzInput.min = 0;
+      gotoAzInput.max = Number(config.azimuthMode) === 450 ? 450 : 360;
   }
   if (gotoElInput) {
-      gotoElInput.min = config.elevationMinLimit;
-      gotoElInput.max = config.elevationMaxLimit;
+      gotoElInput.min = 0;
+      gotoElInput.max = 90;
   }
 }
 
@@ -342,46 +332,17 @@ const controls = new Controls(document.querySelector('.controls-card'), {
       controls.showRouteHint(null);
       return;
     }
-    // Goto: gleiche Bedeutung wie Karte/Status (kalibrierte °), Umrechnung → Hardware-Raw fürs Protokoll
-    const maxAz = config.azimuthMode === 450 ? 450 : 360;
-    let validationError = null;
-
-    if (azimuth < 0 || azimuth > maxAz) {
-      validationError = `Ziel-Azimut ${azimuth}° (kalibriert) liegt außerhalb des gültigen Bereichs (0…${maxAz}°).`;
-    }
-    if (elevation < 0 || elevation > 90) {
-      validationError = validationError
-        ? `${validationError} Ziel-Elevation ${elevation}° (kalibriert) liegt außerhalb (0…90°).`
-        : `Ziel-Elevation ${elevation}° (kalibriert) liegt außerhalb des gültigen Bereichs (0…90°).`;
-    }
-    if (!validationError && !validateTargets({ az: azimuth, el: elevation })) {
-      controls.showRouteHint(null);
-      return;
-    }
-    if (validationError) {
-      showLimitWarning(validationError);
-      logAction('Azimut/Elevation-Befehl verworfen, Ziel ausserhalb Bereich', { calibrated: { az: azimuth, el: elevation } });
+    if (!validateTargets({ az: azimuth, el: elevation })) {
       controls.showRouteHint(null);
       return;
     }
 
-    const rawAz = calibratedAzimuthToHardwareRaw(azimuth);
-    if (rawAz === null) {
-      showLimitWarning(`Keine gültige Hardware-Position für Azimut ${azimuth}° (kalibriert).`);
-      logAction('Goto verworfen, keine gültige Raw-Az-Position', { calibrated: azimuth });
-      controls.showRouteHint(null);
-      return;
-    }
-    const rawElUncapped = calibratedElevationToHardwareRaw(elevation);
-    const rawEl = Math.max(0, Math.min(90, rawElUncapped));
-
-    logAction('Goto Az/El (kalibriert → Hardware-Raw)', {
-      calibrated: { az: azimuth, el: elevation },
-      raw: { az: rawAz, el: rawEl }
+    logAction('Goto Az/El', {
+      calibrated: { az: azimuth, el: elevation }
     });
     try {
       await rotor.stopRoute().catch(() => {});
-      await rotor.setAzElRaw({ az: rawAz, el: rawEl });
+      await rotor.setAzEl({ az: azimuth, el: elevation });
     } catch (error) {
       reportError(error);
     }
@@ -1014,17 +975,15 @@ function isWithinElLimit(value) {
 }
 
 function validateTargets({ az, el }) {
-  if (typeof az === 'number' && !Number.isNaN(az) && !isWithinAzLimit(az)) {
-    showLimitWarning(`Ziel-Azimut ${az}° liegt ausserhalb der Limits (${config.azimuthMinLimit}…${config.azimuthMaxLimit}°).`);
+  if (typeof az !== 'number' || Number.isNaN(az) || typeof el !== 'number' || Number.isNaN(el)) {
+    showLimitWarning('Bitte gueltige numerische Zielwerte eingeben.');
     return false;
   }
-  if (typeof el === 'number' && !Number.isNaN(el) && !isWithinElLimit(el)) {
-    showLimitWarning(
-      `Ziel-Elevation ${el}° liegt ausserhalb der Limits (${config.elevationMinLimit}…${config.elevationMaxLimit}°).`
-    );
-    return false;
+  if (config.softLimitsEnabled && (!isWithinAzLimit(az) || !isWithinElLimit(el))) {
+    showLimitWarning('Ziel liegt ausserhalb der aktiven Soft-Limits und wird auf die Grenze korrigiert.');
+  } else {
+    showLimitWarning('');
   }
-  showLimitWarning('');
   return true;
 }
 
@@ -1235,6 +1194,16 @@ function updateConeSettings() {
   const coneLength = config.coneLength || 1000;
   const azimuthDisplayOffset = config.azimuthDisplayOffset || 0;
   mapView.setConeSettings(coneAngle, coneLength, azimuthDisplayOffset);
+  if (typeof mapView.setLimitSettings === 'function') {
+    mapView.setLimitSettings({
+      softLimitsEnabled: config.softLimitsEnabled,
+      azimuthMinLimit: config.azimuthMinLimit,
+      azimuthMaxLimit: config.azimuthMaxLimit,
+      elevationMinLimit: config.elevationMinLimit,
+      elevationMaxLimit: config.elevationMaxLimit,
+      azimuthMode: config.azimuthMode
+    });
+  }
   if (typeof mapView.setOverlaySettings === 'function') {
     mapView.setOverlaySettings({
       mapOverlayEnabled: config.mapOverlayEnabled,

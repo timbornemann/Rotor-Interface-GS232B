@@ -73,6 +73,7 @@ const defaultConfig = {
   rampToleranceDegMax: 10,
   
   // Limits
+  softLimitsEnabled: false,
   azimuthMinLimit: 0,
   azimuthMaxLimit: 450,
   elevationMinLimit: 0,
@@ -167,6 +168,7 @@ class ConfigStore {
     sanitized.azimuthMinLimit = this.sanitizeNumber(
       config.azimuthMinLimit, 0, azimuthMode, defaultConfig.azimuthMinLimit
     );
+    sanitized.softLimitsEnabled = Boolean(config.softLimitsEnabled);
     sanitized.azimuthMaxLimit = this.sanitizeNumber(
       config.azimuthMaxLimit, 0, azimuthMode, defaultConfig.azimuthMaxLimit
     );

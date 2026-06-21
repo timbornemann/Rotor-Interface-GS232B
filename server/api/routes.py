@@ -380,13 +380,13 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
         payload = _read_request_payload(handler)
         if payload is None:
             return
-        az = _parse_number(payload.get("az"))
-        el = _parse_number(payload.get("el"))
+        az = _parse_number(payload.get("az")) if "az" in payload else None
+        el = _parse_number(payload.get("el")) if "el" in payload else None
 
-        if az is None or el is None:
+        if az is None and el is None:
             send_json(
                 handler,
-                {"error": "az and el must be numeric values"},
+                {"error": "At least one of 'az' or 'el' must be provided as a numeric value"},
                 HTTPStatus.BAD_REQUEST
             )
             return
@@ -399,8 +399,8 @@ def handle_set_target(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             _send_rotor_disconnected(handler)
             return
         
-        state.rotor_logic.set_target(az, el)
-        send_json(handler, {"status": "ok"})
+        applied_target = state.rotor_logic.set_target(az, el)
+        send_json(handler, {"status": "ok", "appliedTarget": applied_target})
     except RuntimeError as e:
         if _is_rotor_disconnected_exception(e):
             _send_rotor_disconnected(handler, str(e))
@@ -571,8 +571,8 @@ def handle_set_target_raw(handler: BaseHTTPRequestHandler, state: "ServerState")
             _send_rotor_disconnected(handler)
             return
         
-        state.rotor_logic.set_target_raw(az, el)
-        send_json(handler, {"status": "ok"})
+        applied_target = state.rotor_logic.set_target_raw(az, el)
+        send_json(handler, {"status": "ok", "appliedTarget": applied_target})
     except RuntimeError as e:
         if _is_rotor_disconnected_exception(e):
             _send_rotor_disconnected(handler, str(e))
@@ -649,7 +649,10 @@ def handle_send_command(handler: BaseHTTPRequestHandler, state: "ServerState") -
             _send_rotor_disconnected(handler)
             return
         
-        state.rotor_connection.send_command(command)
+        command_to_send = command
+        if state.rotor_logic:
+            command_to_send = state.rotor_logic.sanitize_direct_command(command)
+        state.rotor_connection.send_command(command_to_send)
         send_json(handler, {"status": "ok"})
     except RuntimeError as e:
         if _is_rotor_disconnected_exception(e):

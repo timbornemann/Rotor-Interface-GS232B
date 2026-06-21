@@ -63,6 +63,16 @@ test('setAzElRaw throws on non-ok backend response', async () => {
   assert.strictEqual(rotor.isConnected, true);
 });
 
+test('setAzElRaw returns backend payload', async () => {
+  const rotor = new RotorService();
+  const payload = { status: 'ok', appliedTarget: { azimuth: 100, elevation: 45 } };
+  global.fetch = async () => createJsonResponse(200, payload);
+
+  const result = await rotor.setAzElRaw({ az: 20, el: 45 });
+
+  assert.deepStrictEqual(result, payload);
+});
+
 test('setAzElRaw marks disconnected on ROTOR_DISCONNECTED response', async () => {
   const rotor = new RotorService();
   rotor.isConnected = true;

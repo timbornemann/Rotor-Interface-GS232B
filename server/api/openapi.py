@@ -139,7 +139,12 @@ def build_openapi_spec(handler: Any, state: Any) -> Dict[str, Any]:
                     "required": True,
                     "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SetTargetRequest"}}},
                 },
-                "responses": {"200": {"description": "Target accepted"}},
+                "responses": {
+                    "200": {
+                        "description": "Target accepted",
+                        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TargetResponse"}}},
+                    }
+                },
             }
         },
         "/api/rotor/set_target_raw": {
@@ -151,7 +156,12 @@ def build_openapi_spec(handler: Any, state: Any) -> Dict[str, Any]:
                     "required": True,
                     "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SetTargetRawRequest"}}},
                 },
-                "responses": {"200": {"description": "Target accepted"}},
+                "responses": {
+                    "200": {
+                        "description": "Target accepted",
+                        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TargetResponse"}}},
+                    }
+                },
             }
         },
         "/api/rotor/home": {
@@ -368,12 +378,26 @@ def build_openapi_spec(handler: Any, state: Any) -> Dict[str, Any]:
                 "SetTargetRequest": {
                     "type": "object",
                     "properties": {"az": {"type": "number"}, "el": {"type": "number"}},
-                    "required": ["az", "el"],
+                    "description": "At least one of az or el must be provided. Values are calibrated degrees.",
                 },
                 "SetTargetRawRequest": {
                     "type": "object",
                     "properties": {"az": {"type": "number"}, "el": {"type": "number"}},
-                    "description": "At least one of az or el must be provided.",
+                    "description": "At least one of az or el must be provided. Values are raw hardware degrees.",
+                },
+                "TargetResponse": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string"},
+                        "appliedTarget": {
+                            "type": "object",
+                            "properties": {
+                                "azimuth": {"type": ["number", "null"]},
+                                "elevation": {"type": ["number", "null"]},
+                            },
+                        },
+                    },
+                    "required": ["status", "appliedTarget"],
                 },
                 "ServerSettingsResponse": {
                     "type": "object",

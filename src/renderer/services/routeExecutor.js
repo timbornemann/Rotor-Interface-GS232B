@@ -163,18 +163,25 @@ class RouteExecutor {
     });
 
     // Send movement command
+    let appliedTarget = null;
     try {
-      await this.rotorService.setAzElRaw({ 
+      const response = await this.rotorService.setAzElRaw({
         az: step.azimuth, 
         el: step.elevation 
       });
+      appliedTarget = response && response.appliedTarget ? response.appliedTarget : null;
     } catch (error) {
       console.error('[RouteExecutor] Failed to send position command:', error);
       throw error;
     }
 
+    const appliedAz = Number(appliedTarget?.azimuth);
+    const appliedEl = Number(appliedTarget?.elevation);
+    const waitAzimuth = Number.isFinite(appliedAz) ? appliedAz : step.azimuth;
+    const waitElevation = Number.isFinite(appliedEl) ? appliedEl : step.elevation;
+
     // Wait for rotor to reach position
-    await this.waitForArrival(step.azimuth, step.elevation);
+    await this.waitForArrival(waitAzimuth, waitElevation);
 
     console.log('[RouteExecutor] Position reached');
     this.emitProgress({

@@ -52,3 +52,25 @@ test('waitForArrival tolerates invalid status values until timeout', async () =>
 
   await executor.waitForArrival(90, 45);
 });
+
+test('position step waits for applied target when backend clamps command', async () => {
+  const RouteExecutor = loadRouteExecutor();
+  const calls = [];
+  const executor = new RouteExecutor({
+    setAzElRaw: async (target) => {
+      calls.push(target);
+      return { appliedTarget: { azimuth: 100, elevation: 45 } };
+    }
+  });
+  let waitedFor = null;
+  executor.waitForArrival = async (azimuth, elevation) => {
+    waitedFor = { azimuth, elevation };
+  };
+
+  await executor.executePositionStep({ type: 'position', azimuth: 20, elevation: 45 });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].az, 20);
+  assert.equal(calls[0].el, 45);
+  assert.deepEqual(waitedFor, { azimuth: 100, elevation: 45 });
+});

@@ -68,6 +68,7 @@ DEFAULT_CONFIG = {
     "azimuthMode": 450,
     
     # Limits
+    "softLimitsEnabled": False,
     "azimuthMinLimit": 0,
     "azimuthMaxLimit": 450,
     "elevationMinLimit": 0,

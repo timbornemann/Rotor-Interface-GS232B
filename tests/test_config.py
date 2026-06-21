@@ -34,10 +34,12 @@ class TestDefaults:
     
     def test_default_config_has_limits(self):
         """Default config should have limit settings."""
+        assert "softLimitsEnabled" in DEFAULT_CONFIG
         assert "azimuthMinLimit" in DEFAULT_CONFIG
         assert "azimuthMaxLimit" in DEFAULT_CONFIG
         assert "elevationMinLimit" in DEFAULT_CONFIG
         assert "elevationMaxLimit" in DEFAULT_CONFIG
+        assert DEFAULT_CONFIG["softLimitsEnabled"] is False
 
     def test_default_config_has_overlay_settings(self):
         """Default config should include map overlay settings."""
@@ -144,4 +146,22 @@ class TestSettingsManager:
         assert "customSetting" not in config
         assert "mapsource" not in config
         assert config["mapSource"] == "google"
+
+    def test_update_sanitizes_soft_limits(self, settings):
+        """Soft-limit settings should stay numeric and within hardware bounds."""
+        settings.update({
+            "azimuthMode": 360,
+            "softLimitsEnabled": "true",
+            "azimuthMinLimit": -20,
+            "azimuthMaxLimit": 500,
+            "elevationMinLimit": -5,
+            "elevationMaxLimit": 120,
+        })
+
+        config = settings.get_all()
+        assert config["softLimitsEnabled"] is True
+        assert config["azimuthMinLimit"] == 0
+        assert config["azimuthMaxLimit"] == 360
+        assert config["elevationMinLimit"] == 0
+        assert config["elevationMaxLimit"] == 90
 

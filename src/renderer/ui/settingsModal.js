@@ -77,6 +77,7 @@ class SettingsModal {
       elevationFeedbackFactor: { id: 'settingsElFeedbackFactorInput', type: 'number' },
       
       // Limits
+      softLimitsEnabled: { id: 'settingsSoftLimitsEnabled', type: 'checkbox' },
       azimuthMinLimit: { id: 'settingsAzMinLimit', type: 'number' },
       azimuthMaxLimit: { id: 'settingsAzMaxLimit', type: 'number' },
       elevationMinLimit: { id: 'settingsElMinLimit', type: 'number' },
@@ -157,6 +158,7 @@ class SettingsModal {
     this.setupCoordinateSync();
     this.setupPresetToggle();
     this.setupMapSourceTypeSync();
+    this.setupLimitModeSync();
     this.setupOverlayRingControls();
 
     // Port refresh button
@@ -284,6 +286,29 @@ class SettingsModal {
     mapSourceSelect.addEventListener('change', updateMapTypeAvailability);
     // Initial update
     updateMapTypeAvailability();
+  }
+
+  setupLimitModeSync() {
+    const modeSelect = document.getElementById('settingsModeSelect');
+    if (!modeSelect) {
+      return;
+    }
+    modeSelect.addEventListener('change', () => this.updateLimitInputBounds());
+    this.updateLimitInputBounds();
+  }
+
+  updateLimitInputBounds() {
+    const modeSelect = document.getElementById('settingsModeSelect');
+    const maxAz = Number(modeSelect && modeSelect.value) === 450 ? 450 : 360;
+    const azMin = document.getElementById('settingsAzMinLimit');
+    const azMax = document.getElementById('settingsAzMaxLimit');
+    [azMin, azMax].forEach((input) => {
+      if (!input) {
+        return;
+      }
+      input.min = '0';
+      input.max = String(maxAz);
+    });
   }
 
   getDefaultOverlayRings() {
@@ -780,6 +805,7 @@ class SettingsModal {
 
     this.renderOverlayRingRows(config.mapOverlayRingRadiiMeters);
     this.clearOverlayRingValidationErrors();
+    this.updateLimitInputBounds();
 
     // Ensure preset fields enable/disable state is synced
     const presetToggle = document.getElementById('settingsParkPositionsEnabled');
@@ -1061,6 +1087,13 @@ class SettingsModal {
     }
 
     // Validate limits
+    const azimuthMode = Number(config.azimuthMode) === 450 ? 450 : 360;
+    if (config.azimuthMinLimit < 0 || config.azimuthMaxLimit > azimuthMode) {
+      errors.push(`Azimut-Limits muessen zwischen 0 und ${azimuthMode} Grad liegen`);
+    }
+    if (config.elevationMinLimit < 0 || config.elevationMaxLimit > 90) {
+      errors.push('Elevation-Limits muessen zwischen 0 und 90 Grad liegen');
+    }
     if (config.azimuthMinLimit > config.azimuthMaxLimit) {
       errors.push('Azimut-Minimum darf nicht größer als Maximum sein');
     }

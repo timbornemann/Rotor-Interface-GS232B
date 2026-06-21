@@ -253,7 +253,7 @@ class RotorService {
    * @param {number|null} el - Target elevation in degrees
    */
   async setAzEl({ az, el }) {
-      await this._request('/api/rotor/set_target', {
+      return this._request('/api/rotor/set_target', {
         method: 'POST',
         body: JSON.stringify({ az, el })
       });
@@ -273,7 +273,7 @@ class RotorService {
    * @param {number|null} el - Target elevation in raw degrees (hardware position)
    */
   async setAzElRaw({ az, el }) {
-      await this._request('/api/rotor/set_target_raw', {
+      return this._request('/api/rotor/set_target_raw', {
         method: 'POST',
         body: JSON.stringify({ az, el })
       });

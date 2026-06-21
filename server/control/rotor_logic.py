@@ -7,6 +7,7 @@ Translates abstract direction commands to GS-232B protocol commands.
 import time
 import threading
 import logging
+import re
 from typing import Optional, Dict, Any
 
 from server.control.math_utils import clamp, shortest_angular_delta
@@ -75,12 +76,14 @@ class RotorLogic:
             "azimuthMax": 360,
             "elevationMin": 0,
             "elevationMax": 90,
+            "softLimitsEnabled": False,
             "azimuthMode": 360,
             "azimuthSpeedDegPerSec": 4.0,
             "elevationSpeedDegPerSec": 2.0,
             "rampEnabled": False,
             "rampKp": 0.4,
             "rampSampleTimeMs": 400,
+            "azimuthDisplayOffset": 0.0,
             "azimuthOffset": 0.0,
             "elevationOffset": 0.0,
             "azimuthScaleFactor": 1.0,
@@ -151,17 +154,28 @@ class RotorLogic:
                 return default
 
         with self.config_lock:
-            self.config["azimuthMin"] = safe_float("azimuthMinLimit", 0)
-            self.config["azimuthMax"] = safe_float("azimuthMaxLimit", 360)
-            self.config["elevationMin"] = safe_float("elevationMinLimit", 0)
-            self.config["elevationMax"] = safe_float("elevationMaxLimit", 90)
             self.config["azimuthMode"] = 450 if safe_int("azimuthMode", 360) == 450 else 360
+            az_mode = self.config["azimuthMode"]
+            az_min = clamp(safe_float("azimuthMinLimit", 0), 0, az_mode)
+            az_max = clamp(safe_float("azimuthMaxLimit", az_mode), 0, az_mode)
+            if az_max < az_min:
+                az_max = az_min
+            el_min = clamp(safe_float("elevationMinLimit", 0), 0, 90)
+            el_max = clamp(safe_float("elevationMaxLimit", 90), 0, 90)
+            if el_max < el_min:
+                el_max = el_min
+            self.config["azimuthMin"] = az_min
+            self.config["azimuthMax"] = az_max
+            self.config["elevationMin"] = el_min
+            self.config["elevationMax"] = el_max
+            self.config["softLimitsEnabled"] = new_config.get("softLimitsEnabled", False) in [True, "true", "True", 1]
             self.config["azimuthSpeedDegPerSec"] = safe_float("azimuthSpeedDegPerSec", 4.0)
             self.config["elevationSpeedDegPerSec"] = safe_float("elevationSpeedDegPerSec", 2.0)
             self.config["rampEnabled"] = new_config.get("rampEnabled", False) in [True, "true", "True", 1]
             self.config["rampSampleTimeMs"] = safe_float("rampSampleTimeMs", 400)
 
             # Calibration
+            self.config["azimuthDisplayOffset"] = safe_float("azimuthDisplayOffset", 0.0)
             self.config["azimuthOffset"] = safe_float("azimuthOffset", 0.0)
             self.config["elevationOffset"] = safe_float("elevationOffset", 0.0)
             self.config["azimuthScaleFactor"] = safe_float("azimuthScaleFactor", 1.0)
@@ -198,6 +212,202 @@ class RotorLogic:
             self.config["parkElevation"] = safe_float("parkElevation", 0.0)
 
         logger.info("Config updated: %s", self.config)
+        clamped_target = self._clamp_active_motion_targets()
+        if clamped_target and not self.config["rampEnabled"] and self.connection.is_connected():
+            self._send_direct_target(clamped_target["azimuth"], clamped_target["elevation"])
+
+    def _get_limit_config(self) -> Dict[str, Any]:
+        """Return sanitized hardware and optional software limit settings."""
+        with self.config_lock:
+            az_mode = 450 if self.config.get("azimuthMode", 360) == 450 else 360
+            az_min = clamp(float(self.config.get("azimuthMin", 0)), 0, az_mode)
+            az_max = clamp(float(self.config.get("azimuthMax", az_mode)), 0, az_mode)
+            el_min = clamp(float(self.config.get("elevationMin", 0)), 0, 90)
+            el_max = clamp(float(self.config.get("elevationMax", 90)), 0, 90)
+            enabled = bool(self.config.get("softLimitsEnabled", False))
+
+        if az_max < az_min:
+            az_max = az_min
+        if el_max < el_min:
+            el_max = el_min
+        return {
+            "enabled": enabled,
+            "azimuthMode": az_mode,
+            "azimuthMin": az_min,
+            "azimuthMax": az_max,
+            "elevationMin": el_min,
+            "elevationMax": el_max,
+        }
+
+    def _get_feedback_factor(self, axis: str) -> float:
+        """Return the effective feedback factor for azimuth or elevation commands."""
+        with self.config_lock:
+            feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
+            factor_raw = self.config.get(f"{axis}FeedbackFactor", 1.0)
+        if not feedback_enabled:
+            return 1.0
+        try:
+            factor = float(factor_raw)
+        except (TypeError, ValueError):
+            factor = 1.0
+        return factor if factor > 0 else 1.0
+
+    def _get_axis_scale_offset(self, axis: str) -> tuple[float, float]:
+        """Return sanitized scale and offset for one axis."""
+        with self.config_lock:
+            scale_raw = self.config.get(f"{axis}ScaleFactor", 1.0)
+            offset_raw = self.config.get(f"{axis}Offset", 0.0)
+        try:
+            scale = float(scale_raw)
+        except (TypeError, ValueError):
+            scale = 1.0
+        if scale <= 0:
+            scale = 1.0
+        try:
+            offset = float(offset_raw)
+        except (TypeError, ValueError):
+            offset = 0.0
+        return scale, offset
+
+    def _raw_to_calibrated(self, raw_value: float, axis: str) -> float:
+        """Convert a hardware raw command value into calibrated degrees."""
+        scale, offset = self._get_axis_scale_offset(axis)
+        feedback = self._get_feedback_factor(axis)
+        return ((float(raw_value) * feedback) + offset) / scale
+
+    def _calibrated_to_raw(self, calibrated_value: float, axis: str) -> float:
+        """Convert calibrated degrees into a hardware raw command value."""
+        scale, offset = self._get_axis_scale_offset(axis)
+        feedback = self._get_feedback_factor(axis)
+        return ((float(calibrated_value) * scale) - offset) / feedback
+
+    def _current_calibrated_azimuth(self) -> Optional[float]:
+        """Return the current calibrated azimuth if status is available."""
+        status = self._get_calibrated_status()
+        if not status:
+            return None
+        value = status.get("azimuth")
+        return float(value) if value is not None else None
+
+    def _azimuth_candidates(self, az: float, az_mode: float) -> list[float]:
+        """Return possible linear positions for one 0-360 style azimuth request."""
+        candidates: list[float] = []
+        for candidate in (float(az), float(az) + 360.0, float(az) - 360.0):
+            if 0 <= candidate <= az_mode and not any(abs(candidate - seen) < 1e-9 for seen in candidates):
+                candidates.append(candidate)
+        return candidates or [float(az)]
+
+    def _select_azimuth_candidate(self, az: float, choose_equivalent: bool) -> float:
+        """Resolve a possibly ambiguous 450-degree azimuth before clamping."""
+        limits = self._get_limit_config()
+        az_mode = limits["azimuthMode"]
+        if not choose_equivalent or az_mode <= 360:
+            return float(az)
+
+        candidates = self._azimuth_candidates(float(az), az_mode)
+        current_az = self._current_calibrated_azimuth()
+        if current_az is None:
+            return candidates[0]
+        selected = min(candidates, key=lambda candidate: abs(candidate - current_az))
+        logger.info(
+            "Smart Azimuth candidate: input=%s current=%s candidates=%s selected=%s",
+            az,
+            current_az,
+            candidates,
+            selected,
+        )
+        return selected
+
+    def _clamp_calibrated_target(
+        self,
+        az: Optional[float],
+        el: Optional[float],
+        *,
+        choose_equivalent_azimuth: bool = True,
+    ) -> Dict[str, Optional[float]]:
+        """Apply hardware bounds and optional software limits to calibrated target values."""
+        limits = self._get_limit_config()
+        az_result = None
+        el_result = None
+
+        if az is not None:
+            selected_az = self._select_azimuth_candidate(float(az), choose_equivalent_azimuth)
+            az_low = limits["azimuthMin"] if limits["enabled"] else 0
+            az_high = limits["azimuthMax"] if limits["enabled"] else limits["azimuthMode"]
+            az_result = clamp(selected_az, az_low, az_high)
+
+        if el is not None:
+            el_low = limits["elevationMin"] if limits["enabled"] else 0
+            el_high = limits["elevationMax"] if limits["enabled"] else 90
+            el_result = clamp(float(el), el_low, el_high)
+
+        return {"azimuth": az_result, "elevation": el_result}
+
+    def _plan_raw_target(
+        self,
+        az: Optional[float],
+        el: Optional[float],
+        *,
+        choose_equivalent_azimuth: bool = False,
+    ) -> Dict[str, Optional[float]]:
+        """Return raw hardware values after calibration, soft limits, and hardware bounds."""
+        limits = self._get_limit_config()
+        planned_az = None
+        planned_el = None
+
+        if az is not None:
+            raw_az = float(az)
+            if limits["enabled"]:
+                calibrated_az = self._raw_to_calibrated(raw_az, "azimuth")
+                clamped = self._clamp_calibrated_target(
+                    calibrated_az,
+                    None,
+                    choose_equivalent_azimuth=choose_equivalent_azimuth,
+                )
+                raw_az = self._calibrated_to_raw(clamped["azimuth"], "azimuth")
+            az_raw_max = limits["azimuthMode"] / self._get_feedback_factor("azimuth")
+            planned_az = clamp(raw_az, 0, az_raw_max)
+
+        if el is not None:
+            raw_el = float(el)
+            if limits["enabled"]:
+                calibrated_el = self._raw_to_calibrated(raw_el, "elevation")
+                clamped = self._clamp_calibrated_target(None, calibrated_el)
+                raw_el = self._calibrated_to_raw(clamped["elevation"], "elevation")
+            planned_el = clamp(raw_el, 0, 90 / self._get_feedback_factor("elevation"))
+
+        return {"azimuth": planned_az, "elevation": planned_el}
+
+    def plan_raw_target(
+        self,
+        az: Optional[float],
+        el: Optional[float],
+    ) -> Dict[str, Optional[float]]:
+        """Public helper for callers that need the applied raw target before waiting."""
+        return self._plan_raw_target(az, el)
+
+    def _clamp_active_motion_targets(self) -> Optional[Dict[str, Optional[float]]]:
+        """Keep already queued target movement inside newly updated limits."""
+        with self.state_lock:
+            target_az = self.target_az
+            target_el = self.target_el
+        if target_az is None and target_el is None:
+            return None
+
+        clamped = self._clamp_calibrated_target(
+            target_az,
+            target_el,
+            choose_equivalent_azimuth=False,
+        )
+        changed = False
+        with self.state_lock:
+            if target_az is not None:
+                self.target_az = clamped["azimuth"]
+                changed = changed or clamped["azimuth"] != target_az
+            if target_el is not None:
+                self.target_el = clamped["elevation"]
+                changed = changed or clamped["elevation"] != target_el
+        return clamped if changed else None
 
     def _move_to_preset(self, preset: str) -> bool:
         """Move rotor to a preset position (home or park).
@@ -243,64 +453,16 @@ class RotorLogic:
         """Move rotor to the Park preset."""
         return self._move_to_preset("park")
 
-    def set_target(self, az: Optional[float], el: Optional[float]) -> None:
+    def set_target(self, az: Optional[float], el: Optional[float]) -> Dict[str, Optional[float]]:
         """Set a target position (Move Command).
         
         Args:
             az: Target azimuth in degrees (or None to keep current).
             el: Target elevation in degrees (or None to keep current).
         """
-        # Smart target selection for overlapping azimuth modes (e.g., 450 degrees)
-        # If we are in 450 mode, a request for "10 degrees" could mean 10 or 370.
-        # We should choose the one closest to our current position to avoid unnecessary rotation.
-        if az is not None and self.config["azimuthMode"] > 360:
-            status = self._get_calibrated_status()
-            if status and status.get("azimuth") is not None:
-                current_az = status["azimuth"]
-                # Candidates: The requested azimuth (normalized 0-360) and the overlapped version
-                # e.g., if az=10, mode=450: candidates are 10 and 370 (10+360)
-                candidates = [az]
-                if az + 360 <= self.config["azimuthMode"]:
-                    candidates.append(az + 360)
-                
-                # Also check if input might be > 360 (unlikely from map, but possible via API)
-                if az > 360 and az - 360 >= 0:
-                     candidates.append(az - 360)
-
-                # Filter out candidates whose raw command value would exceed
-                # the physical motor range (relevant when feedbackFactor != 1).
-                with self.config_lock:
-                    az_scale = self.config.get("azimuthScaleFactor", 1.0) or 1.0
-                    az_offset = self.config.get("azimuthOffset", 0.0)
-                    feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
-                    az_feedback_raw = self.config.get("azimuthFeedbackFactor", 1.0)
-                    az_mode = self.config.get("azimuthMode", 360)
-
-                try:
-                    az_fb = float(az_feedback_raw)
-                except (TypeError, ValueError):
-                    az_fb = 1.0
-                if not feedback_enabled or az_fb <= 0:
-                    az_fb = 1.0
-                az_raw_max = az_mode / az_fb
-
-                reachable = []
-                for c in candidates:
-                    raw_c = ((c * az_scale) - az_offset) / az_fb
-                    if 0 <= raw_c <= az_raw_max:
-                        reachable.append(c)
-
-                if reachable:
-                    candidates = reachable
-
-                # Select candidate with shortest linear distance to current position
-                # We use simple abs difference because we can't "wrap" physically across the stop.
-                best_az = min(candidates, key=lambda x: abs(x - current_az))
-                logger.info(f"Smart Azimuth: Input={az}, Current={current_az}, Candidates={candidates} -> Selected={best_az}")
-                az = best_az
-
-        target_az = float(az) if az is not None else None
-        target_el = float(el) if el is not None else None
+        clamped = self._clamp_calibrated_target(az, el, choose_equivalent_azimuth=True)
+        target_az = clamped["azimuth"]
+        target_el = clamped["elevation"]
         ramp_start_time = time.time()
         with self.state_lock:
             self.target_az = target_az
@@ -313,6 +475,7 @@ class RotorLogic:
         # Immediate kickoff if ramp disabled
         if not self.config["rampEnabled"]:
             self._send_direct_target(target_az, target_el)
+        return {"azimuth": target_az, "elevation": target_el}
 
     def manual_move(self, direction: str) -> None:
         """Start manual movement.
@@ -339,7 +502,32 @@ class RotorLogic:
         logger.info(f"Manual move started: {direction} -> {protocol_cmd}")
         
         if not self.config["rampEnabled"]:
+            if self._get_limit_config()["enabled"]:
+                self._send_manual_limit_target(protocol_cmd)
+                return
             self.connection.send_command(protocol_cmd)
+
+    def _send_manual_limit_target(self, protocol_cmd: str) -> None:
+        """Convert a continuous manual command into a bounded target command."""
+        limits = self._get_limit_config()
+        target_az = None
+        target_el = None
+        if protocol_cmd == "R":
+            target_az = limits["azimuthMax"]
+        elif protocol_cmd == "L":
+            target_az = limits["azimuthMin"]
+        elif protocol_cmd == "U":
+            target_el = limits["elevationMax"]
+        elif protocol_cmd == "D":
+            target_el = limits["elevationMin"]
+
+        with self.state_lock:
+            self.manual_direction = None
+            self.target_az = target_az
+            self.target_el = target_el
+
+        if target_az is not None or target_el is not None:
+            self._send_direct_target(target_az, target_el)
 
     def stop_motion(self) -> None:
         """Stop all motion."""
@@ -458,51 +646,35 @@ class RotorLogic:
             az: Target azimuth in calibrated degrees (from frontend).
             el: Target elevation in calibrated degrees (from frontend).
         """
-        # Convert Target Degrees (Calibrated) -> Raw Hardware Command Values
-        # Forward:  calibrated = (hardware_raw * feedbackFactor + offset) / scale
-        # Inverse:  hardware_raw = ((calibrated * scale) - offset) / feedbackFactor
-        
-        with self.config_lock:
-            az_scale = self.config.get("azimuthScaleFactor", 1.0)
-            az_offset = self.config.get("azimuthOffset", 0.0)
-            el_scale = self.config.get("elevationScaleFactor", 1.0)
-            el_offset = self.config.get("elevationOffset", 0.0)
-            az_mode = self.config.get("azimuthMode", 360)
-            feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
-            az_feedback_raw = self.config.get("azimuthFeedbackFactor", 1.0)
-            el_feedback_raw = self.config.get("elevationFeedbackFactor", 1.0)
-
-        try:
-            az_feedback = float(az_feedback_raw)
-        except (TypeError, ValueError):
-            az_feedback = 1.0
-        try:
-            el_feedback = float(el_feedback_raw)
-        except (TypeError, ValueError):
-            el_feedback = 1.0
-        if not feedback_enabled or az_feedback <= 0:
-            az_feedback = 1.0
-        if not feedback_enabled or el_feedback <= 0:
-            el_feedback = 1.0
-
-        # Physical position = raw * feedbackFactor. Clamp to the raw value
-        # that corresponds to the physical limit (az_mode / feedbackFactor).
-        az_raw_max = int(round(az_mode / az_feedback))
+        clamped = self._clamp_calibrated_target(
+            az,
+            el,
+            choose_equivalent_azimuth=False,
+        )
+        az = clamped["azimuth"]
+        el = clamped["elevation"]
+        limits = self._get_limit_config()
 
         vals = []
         if az is not None:
-            raw_az = ((az * az_scale) - az_offset) / az_feedback
-            raw_az_int = max(0, min(int(round(raw_az)), az_raw_max))
+            raw_az = self._calibrated_to_raw(az, "azimuth")
+            raw_az_max = limits["azimuthMode"] / self._get_feedback_factor("azimuth")
+            raw_az_int = int(round(clamp(raw_az, 0, raw_az_max)))
             vals.append(f"{raw_az_int:03d}")
 
         if el is not None:
-            raw_el = ((el * el_scale) - el_offset) / el_feedback
-            raw_el_int = max(0, min(int(round(raw_el)), 90))
+            raw_el = self._calibrated_to_raw(el, "elevation")
+            raw_el_max = 90 / self._get_feedback_factor("elevation")
+            raw_el_int = int(round(clamp(raw_el, 0, raw_el_max)))
             if len(vals) == 0:
                 # If only EL provided, we need current hardware AZ for the W command
                 raw_status = self.connection.get_status()
                 curr_az_hw = float(raw_status.get("azimuthRaw", 0)) if raw_status else 0.0
-                curr_az_hw = clamp(curr_az_hw, 0, az_mode)
+                curr_az_hw = clamp(curr_az_hw, 0, limits["azimuthMode"])
+                if limits["enabled"]:
+                    planned_current = self._plan_raw_target(curr_az_hw, None)
+                    if planned_current["azimuth"] is not None:
+                        curr_az_hw = planned_current["azimuth"]
                 vals.append(f"{int(round(curr_az_hw)):03d}")
 
             vals.append(f"{raw_el_int:03d}")
@@ -512,51 +684,83 @@ class RotorLogic:
         elif len(vals) == 2:
             self.connection.send_command(f"W{vals[0]} {vals[1]}")
     
-    def set_target_raw(self, az: Optional[float], el: Optional[float]) -> None:
+    def set_target_raw(self, az: Optional[float], el: Optional[float]) -> Dict[str, Optional[float]]:
         """Set a target position using raw hardware values (no calibration).
         
         Args:
             az: Target azimuth in raw degrees (hardware position, 0-360/450).
             el: Target elevation in raw degrees (hardware position, 0-90).
         """
-        # Send raw values directly to motor without any calibration conversion
-        with self.config_lock:
-            az_mode = self.config.get("azimuthMode", 360)
-            feedback_enabled = self.config.get("feedbackCorrectionEnabled", False)
-            az_feedback_raw = self.config.get("azimuthFeedbackFactor", 1.0)
-
-        try:
-            az_feedback = float(az_feedback_raw)
-        except (TypeError, ValueError):
-            az_feedback = 1.0
-        if not feedback_enabled or az_feedback <= 0:
-            az_feedback = 1.0
-
-        # Physical position = raw * feedbackFactor. Clamp to the raw value
-        # that corresponds to the physical limit (az_mode / feedbackFactor).
-        az_raw_max = az_mode / az_feedback
+        planned = self._plan_raw_target(az, el)
+        limits = self._get_limit_config()
 
         vals = []
-        if az is not None:
-            az_clamped = max(0, min(az, az_raw_max))
-            vals.append(f"{int(round(az_clamped)):03d}")
+        if planned["azimuth"] is not None:
+            vals.append(f"{int(round(planned['azimuth'])):03d}")
 
-        if el is not None:
-            # Clamp to valid range
-            el_clamped = max(0, min(el, 90))
+        if planned["elevation"] is not None:
             if len(vals) == 0:
                 # If only EL provided, we need current hardware AZ for the W command
                 raw_status = self.connection.get_status()
                 curr_az_hw = float(raw_status.get("azimuthRaw", 0)) if raw_status else 0.0
-                curr_az_hw = clamp(curr_az_hw, 0, az_mode)
+                curr_az_hw = clamp(curr_az_hw, 0, limits["azimuthMode"])
+                if limits["enabled"]:
+                    planned_current = self._plan_raw_target(curr_az_hw, None)
+                    if planned_current["azimuth"] is not None:
+                        curr_az_hw = planned_current["azimuth"]
                 vals.append(f"{int(round(curr_az_hw)):03d}")
             
-            vals.append(f"{int(round(el_clamped)):03d}")
+            vals.append(f"{int(round(planned['elevation'])):03d}")
 
         if len(vals) == 1:
             self.connection.send_command(f"M{vals[0]}")
         elif len(vals) == 2:
             self.connection.send_command(f"W{vals[0]} {vals[1]}")
+        return planned
+
+    def sanitize_direct_command(self, command: str) -> str:
+        """Clamp movement-bearing GS-232B commands while preserving other commands."""
+        cleaned = command.strip()
+        limits = self._get_limit_config()
+
+        manual_match = re.fullmatch(r"[RrLlUuDd]", cleaned)
+        if manual_match and limits["enabled"]:
+            direction = cleaned.upper()
+            if direction in ("R", "L"):
+                target_az = limits["azimuthMax"] if direction == "R" else limits["azimuthMin"]
+                raw_az = self._calibrated_to_raw(target_az, "azimuth")
+                raw_az_max = limits["azimuthMode"] / self._get_feedback_factor("azimuth")
+                return f"M{int(round(clamp(raw_az, 0, raw_az_max))):03d}"
+
+            target_el = limits["elevationMax"] if direction == "U" else limits["elevationMin"]
+            raw_el = self._calibrated_to_raw(target_el, "elevation")
+            raw_el_max = 90 / self._get_feedback_factor("elevation")
+            raw_status = self.connection.get_status()
+            curr_az_hw = float(raw_status.get("azimuthRaw", 0)) if raw_status else 0.0
+            curr_az_hw = clamp(curr_az_hw, 0, limits["azimuthMode"])
+            planned_current = self._plan_raw_target(curr_az_hw, None)
+            if planned_current["azimuth"] is not None:
+                curr_az_hw = planned_current["azimuth"]
+            return f"W{int(round(curr_az_hw)):03d} {int(round(clamp(raw_el, 0, raw_el_max))):03d}"
+
+        az_match = re.fullmatch(r"[Mm]\s*(\d{1,3})", cleaned)
+        if az_match:
+            planned = self._plan_raw_target(float(az_match.group(1)), None)
+            if planned["azimuth"] is None:
+                return command
+            return f"M{int(round(planned['azimuth'])):03d}"
+
+        az_el_match = re.fullmatch(r"[Ww]\s*(\d{1,3})\s+(\d{1,3})", cleaned)
+        if az_el_match:
+            planned = self._plan_raw_target(
+                float(az_el_match.group(1)),
+                float(az_el_match.group(2)),
+            )
+            if planned["azimuth"] is None or planned["elevation"] is None:
+                return command
+            return f"W{int(round(planned['azimuth'])):03d} {int(round(planned['elevation'])):03d}"
+
+        return command
 
     def _control_loop(self) -> None:
         """Main control loop running in background thread."""
@@ -624,10 +828,11 @@ class RotorLogic:
         with self.config_lock:
             az_speed = self.config["azimuthSpeedDegPerSec"]
             el_speed = self.config["elevationSpeedDegPerSec"]
-            az_min = self.config["azimuthMin"]
-            az_max = self.config["azimuthMax"]
-            el_min = self.config["elevationMin"]
-            el_max = self.config["elevationMax"]
+        limits = self._get_limit_config()
+        az_min = limits["azimuthMin"] if limits["enabled"] else 0
+        az_max = limits["azimuthMax"] if limits["enabled"] else limits["azimuthMode"]
+        el_min = limits["elevationMin"] if limits["enabled"] else 0
+        el_max = limits["elevationMax"] if limits["enabled"] else 90
 
         # Calculate speed factor based on time (soft start)
         elapsed = time.time() - ramp_start_time
@@ -694,7 +899,7 @@ class RotorLogic:
             el_speed = self.config["elevationSpeedDegPerSec"]
 
         if target_az is not None:
-            delta = shortest_angular_delta(target_az, current_az, az_mode)
+            delta = target_az - current_az if az_mode > 360 else shortest_angular_delta(target_az, current_az, az_mode)
             if abs(delta) < 0.5:
                 clear_az = True
             else:

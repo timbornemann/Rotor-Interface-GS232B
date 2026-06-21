@@ -94,6 +94,8 @@ class TestApiDocumentation:
         assert "/api/rotor/status" in data["paths"]
         assert "get" in data["paths"]["/api/routes"]
         assert "post" in data["paths"]["/api/routes"]
+        assert "required" not in data["components"]["schemas"]["SetTargetRequest"]
+        assert data["paths"]["/api/rotor/set_target"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/TargetResponse"
 
     def test_get_api_docs_html(self, test_server):
         """GET /api/docs should return Swagger UI HTML."""
@@ -440,6 +442,29 @@ class TestRotorControlAPI:
         assert "error" in error_data
         assert "Not connected" in error_data["error"]
         assert error_data["code"] == "ROTOR_DISCONNECTED"
+
+    def test_set_target_allows_single_axis_and_returns_applied_target(self, test_server):
+        """POST /api/rotor/set_target should accept az or el and return the applied target."""
+        base_url, state = test_server
+        from unittest.mock import MagicMock
+
+        state.rotor_connection.is_connected = MagicMock(return_value=True)
+        state.rotor_logic.set_target = MagicMock(return_value={"azimuth": 100.0, "elevation": None})
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/rotor/set_target"),
+            data=json.dumps({"az": 20}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+            data = json.load(response)
+
+        assert data["status"] == "ok"
+        assert data["appliedTarget"] == {"azimuth": 100.0, "elevation": None}
+        state.rotor_logic.set_target.assert_called_once_with(20.0, None)
     
     def test_manual_move_requires_connection(self, test_server):
         """POST /api/rotor/manual should require connection."""
@@ -479,6 +504,29 @@ class TestRotorControlAPI:
         assert exc_info.value.code == 400
         error_data = json.loads(exc_info.value.read().decode("utf-8"))
         assert error_data["code"] == "ROTOR_DISCONNECTED"
+
+    def test_set_target_raw_returns_applied_target(self, test_server):
+        """POST /api/rotor/set_target_raw should report the target after clamping."""
+        base_url, state = test_server
+        from unittest.mock import MagicMock
+
+        state.rotor_connection.is_connected = MagicMock(return_value=True)
+        state.rotor_logic.set_target_raw = MagicMock(return_value={"azimuth": 100.0, "elevation": None})
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/rotor/set_target_raw"),
+            data=json.dumps({"az": 20}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+            data = json.load(response)
+
+        assert data["status"] == "ok"
+        assert data["appliedTarget"] == {"azimuth": 100.0, "elevation": None}
+        state.rotor_logic.set_target_raw.assert_called_once_with(20.0, None)
     
     def test_stop(self, test_server):
         """POST /api/rotor/stop should fail with disconnected error when not connected."""

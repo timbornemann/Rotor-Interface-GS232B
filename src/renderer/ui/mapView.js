@@ -113,6 +113,12 @@ class MapView {
     this.coneLength = 1000; // Kegel-Länge in Metern
     this.azimuthDisplayOffset = 0; // Azimut-Korrektur für Anzeige (Grad)
     this.onClickCallback = null; // Callback für Klick-Events
+    this.softLimitsEnabled = false;
+    this.azimuthMinLimit = 0;
+    this.azimuthMaxLimit = 450;
+    this.elevationMinLimit = 0;
+    this.elevationMaxLimit = 90;
+    this.azimuthMode = 450;
     this.mapOverlayEnabled = true;
     this.mapOverlayLabelMode = mapOverlayUtils.OVERLAY_LABEL_MODE_BOTH || 'both';
     this.mapOverlayAutoContrast = true;
@@ -159,6 +165,46 @@ class MapView {
     this.azimuthDisplayOffset = Number(azimuthOffset) || 0; // Azimut-Korrektur
     // Aktualisiere die Anzeige
     this.update(this.lastAzimuth, this.lastElevation);
+  }
+
+  setLimitSettings(settings = {}) {
+    const azimuthMode = Number(settings.azimuthMode) === 450 ? 450 : 360;
+    const clampNumber = (value, min, max, fallback) => {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) {
+        return fallback;
+      }
+      return Math.max(min, Math.min(max, parsed));
+    };
+
+    let azMin = clampNumber(settings.azimuthMinLimit, 0, azimuthMode, 0);
+    let azMax = clampNumber(settings.azimuthMaxLimit, 0, azimuthMode, azimuthMode);
+    let elMin = clampNumber(settings.elevationMinLimit, 0, 90, 0);
+    let elMax = clampNumber(settings.elevationMaxLimit, 0, 90, 90);
+    if (azMax < azMin) {
+      azMax = azMin;
+    }
+    if (elMax < elMin) {
+      elMax = elMin;
+    }
+
+    const changed = this.softLimitsEnabled !== Boolean(settings.softLimitsEnabled)
+      || this.azimuthMode !== azimuthMode
+      || this.azimuthMinLimit !== azMin
+      || this.azimuthMaxLimit !== azMax
+      || this.elevationMinLimit !== elMin
+      || this.elevationMaxLimit !== elMax;
+
+    this.softLimitsEnabled = Boolean(settings.softLimitsEnabled);
+    this.azimuthMode = azimuthMode;
+    this.azimuthMinLimit = azMin;
+    this.azimuthMaxLimit = azMax;
+    this.elevationMinLimit = elMin;
+    this.elevationMaxLimit = elMax;
+
+    if (changed) {
+      this.update(this.lastAzimuth, this.lastElevation);
+    }
   }
 
   // Berechne Meter pro Pixel basierend auf Zoom-Level und Breitengrad
@@ -967,7 +1013,73 @@ class MapView {
     });
 
     this.drawLabels(labels, labelRadius, stylePack.labelStyles || []);
+    this.drawSoftLimitOverlay(radialExtent);
     ctx.restore();
+  }
+
+  drawSoftLimitOverlay(radialExtent) {
+    if (!this.softLimitsEnabled) {
+      return;
+    }
+
+    const { ctx } = this;
+    const extent = Math.max(20, radialExtent);
+    const drawAzimuthBoundary = (value, color, label) => {
+      const displayAngle = value + this.azimuthDisplayOffset;
+      const rad = ((displayAngle - 90) * Math.PI) / 180;
+      const x = Math.cos(rad) * extent;
+      const y = Math.sin(rad) * extent;
+
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.72)';
+      ctx.lineWidth = 5;
+      ctx.setLineDash([10, 7]);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = color;
+      ctx.font = "bold 12px 'Segoe UI', Roboto, sans-serif";
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const labelRadius = Math.min(extent + 18, this.radius + 28);
+      ctx.fillText(label, Math.cos(rad) * labelRadius, Math.sin(rad) * labelRadius);
+      ctx.restore();
+    };
+
+    drawAzimuthBoundary(this.azimuthMinLimit, 'rgba(255, 201, 74, 0.98)', 'Min');
+    drawAzimuthBoundary(this.azimuthMaxLimit, 'rgba(255, 94, 94, 0.98)', 'Max');
+
+    const drawElevationRing = (value, color) => {
+      const normalized = Math.max(0, Math.min(90, value));
+      const ringRadius = Math.max(5, extent * (1 - normalized / 90));
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.62)';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([7, 6]);
+      ctx.beginPath();
+      ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    drawElevationRing(this.elevationMinLimit, 'rgba(255, 201, 74, 0.78)');
+    drawElevationRing(this.elevationMaxLimit, 'rgba(255, 94, 94, 0.78)');
   }
 
   drawOverlayCircle(radius, style) {

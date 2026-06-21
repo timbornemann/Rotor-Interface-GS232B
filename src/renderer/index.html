@@ -735,6 +735,13 @@
             <div class="settings-card">
               <h4 class="card-title">Soft-Limits</h4>
               <p class="help-text">Begrenzt den Bewegungsbereich des Rotors zum Schutz der Hardware.</p>
+              <div class="form-row">
+                <label class="toggle-label">
+                  <input id="settingsSoftLimitsEnabled" type="checkbox" class="toggle-input" />
+                  <span class="toggle-switch"></span>
+                  <span class="toggle-text">Soft-Limits aktivieren</span>
+                </label>
+              </div>
               <div class="limits-grid">
                 <div class="limit-column">
                   <h5>Azimut</h5>
@@ -742,14 +749,14 @@
                     <div class="form-group">
                       <label for="settingsAzMinLimit">Min</label>
                       <div class="input-unit">
-                        <input id="settingsAzMinLimit" type="number" step="1" value="0" />
+                        <input id="settingsAzMinLimit" type="number" min="0" max="450" step="1" value="0" />
                         <span class="unit">°</span>
                       </div>
                     </div>
                     <div class="form-group">
                       <label for="settingsAzMaxLimit">Max</label>
                       <div class="input-unit">
-                        <input id="settingsAzMaxLimit" type="number" step="1" value="450" />
+                        <input id="settingsAzMaxLimit" type="number" min="0" max="450" step="1" value="450" />
                         <span class="unit">°</span>
                       </div>
                     </div>
@@ -761,14 +768,14 @@
                     <div class="form-group">
                       <label for="settingsElMinLimit">Min</label>
                       <div class="input-unit">
-                        <input id="settingsElMinLimit" type="number" step="1" value="0" />
+                        <input id="settingsElMinLimit" type="number" min="0" max="90" step="1" value="0" />
                         <span class="unit">°</span>
                       </div>
                     </div>
                     <div class="form-group">
                       <label for="settingsElMaxLimit">Max</label>
                       <div class="input-unit">
-                        <input id="settingsElMaxLimit" type="number" step="1" value="90" />
+                        <input id="settingsElMaxLimit" type="number" min="0" max="90" step="1" value="90" />
                         <span class="unit">°</span>
                       </div>
                     </div>

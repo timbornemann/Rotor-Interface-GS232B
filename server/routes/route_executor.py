@@ -271,13 +271,16 @@ class RouteExecutor:
         
         # Send movement command
         try:
-            self.rotor_logic.set_target_raw(azimuth, elevation)
+            applied_target = self.rotor_logic.set_target_raw(azimuth, elevation)
         except Exception as e:
             log(f"[RouteExecutor] Failed to send position command: {e}", level="ERROR")
             raise
+
+        wait_azimuth = applied_target.get("azimuth") if applied_target else azimuth
+        wait_elevation = applied_target.get("elevation") if applied_target else elevation
         
         # Wait for arrival
-        self._wait_for_arrival(azimuth, elevation)
+        self._wait_for_arrival(wait_azimuth, wait_elevation)
         
         if not self._should_stop:
             log(f"[RouteExecutor] Position reached: {name}")
