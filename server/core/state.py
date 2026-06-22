@@ -9,6 +9,8 @@ import threading
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Any, Dict
 
+from server.paths import DEFAULT_CONFIG_DIR, DEFAULT_SERVER_ROOT, ensure_data_dir
+
 if TYPE_CHECKING:
     from server.config.settings import SettingsManager
     from server.connection.serial_connection import RotorConnection
@@ -52,8 +54,8 @@ class ServerState:
         self._initialized = True
         
         # Configuration
-        self.config_dir: Path = Path(__file__).parent.parent.parent
-        self.server_root: Path = self.config_dir / "src" / "renderer"
+        self.config_dir: Path = DEFAULT_CONFIG_DIR
+        self.server_root: Path = DEFAULT_SERVER_ROOT
         
         # Components (initialized lazily or by server)
         self.settings: Optional["SettingsManager"] = None
@@ -107,6 +109,9 @@ class ServerState:
         
         if config_dir:
             self.config_dir = Path(config_dir)
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            self.config_dir = ensure_data_dir()
         if server_root:
             self.server_root = Path(server_root)
         

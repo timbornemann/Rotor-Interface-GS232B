@@ -30,17 +30,17 @@ if not exist "server" (
 
 REM Auto-Restart-Loop: Startet Server neu, wenn Exit-Code 42 zurueckgegeben wird
 :restart_loop
-REM Lese Ports aus web-settings.json (wenn vorhanden)
+REM Lese Ports aus data/web-settings.json (wenn vorhanden)
 set HTTP_PORT=8081
 set WS_PORT=8082
 
 REM Beende haengende alte Rotor-Server-Prozesse (python -m server.main)
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match 'server.main' } | ForEach-Object { Write-Host ('Beende alten Server-Prozess (PID {0})...' -f $_.ProcessId); Stop-Process -Id $_.ProcessId -Force }"
 
-if exist "web-settings.json" (
-    echo Lade Ports aus web-settings.json...
-    for /f "tokens=*" %%a in ('powershell -Command "try { $config = Get-Content -Raw web-settings.json | ConvertFrom-Json; Write-Host $config.serverHttpPort } catch { Write-Host 8081 }"') do set HTTP_PORT=%%a
-    for /f "tokens=*" %%b in ('powershell -Command "try { $config = Get-Content -Raw web-settings.json | ConvertFrom-Json; Write-Host $config.serverWebSocketPort } catch { Write-Host 8082 }"') do set WS_PORT=%%b
+if exist "data\web-settings.json" (
+    echo Lade Ports aus data\web-settings.json...
+    for /f "tokens=*" %%a in ('powershell -Command "try { $config = Get-Content -Raw data\web-settings.json | ConvertFrom-Json; Write-Host $config.serverHttpPort } catch { Write-Host 8081 }"') do set HTTP_PORT=%%a
+    for /f "tokens=*" %%b in ('powershell -Command "try { $config = Get-Content -Raw data\web-settings.json | ConvertFrom-Json; Write-Host $config.serverWebSocketPort } catch { Write-Host 8082 }"') do set WS_PORT=%%b
 )
 
 echo.

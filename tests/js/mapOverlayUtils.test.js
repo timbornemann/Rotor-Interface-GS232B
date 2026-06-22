@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const overlayUtils = require('../src/renderer/services/mapOverlayUtils.js');
+const overlayUtils = require('../../src/renderer/services/mapOverlayUtils.js');
 
 test('sanitizeOverlayRingRadii sorts, deduplicates and clamps values', () => {
   const result = overlayUtils.sanitizeOverlayRingRadii([5000, 1000, 5000, -1, '10000', 0, 20000.4]);

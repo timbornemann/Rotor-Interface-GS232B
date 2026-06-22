@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from server.paths import ensure_data_dir
 from server.utils.logging import log
 
 
@@ -31,7 +32,7 @@ class RouteManager:
         Args:
             routes_file: Path to routes.json file. If None, uses default location.
         """
-        self.routes_file = routes_file or Path(__file__).parent.parent.parent / "routes.json"
+        self.routes_file = routes_file or ensure_data_dir() / "routes.json"
         self._lock = threading.Lock()
         self._routes: List[Dict[str, Any]] = []
         

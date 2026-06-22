@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 function loadRouteExecutor() {
   const source = fs.readFileSync(
-    path.join(__dirname, '../src/renderer/services/routeExecutor.js'),
+    path.join(__dirname, '../../src/renderer/services/routeExecutor.js'),
     'utf8'
   ) + '\nmodule.exports = RouteExecutor;';
 

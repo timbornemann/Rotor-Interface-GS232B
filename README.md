@@ -74,8 +74,10 @@ Das Frontend steuert den Rotor nicht direkt per Web Serial, sondern immer über 
 
 ### Im Repository zusätzlich enthalten
 
-- Arduino-Testaufbau/Emulation: `hardware_test/`
-- Architekturdiagramme: `diagrams/`
+- Arduino-Testaufbau/Emulation: `dev/hardware_test/`
+- Software-Rotor-Simulator: `dev/software_test/`
+- API-Nutzungsbeispiele: `example_api_usecase/`
+- Architekturdiagramme: `docs/diagrams/`
 
 ---
 
@@ -126,12 +128,12 @@ python -m server
 ### Windows-Startskript
 
 ```bat
-start_server.bat
+scripts\start_server.bat
 ```
 
 Das Skript:
 
-- liest HTTP/WS-Ports aus `web-settings.json`
+- liest HTTP/WS-Ports aus `data/web-settings.json`
 - beendet alte `python -m server.main`-Prozesse
 - startet den Server neu
 - führt bei Exit-Code `42` automatisch einen Restart aus (wird von `/api/server/restart` genutzt)
@@ -151,7 +153,7 @@ Die UI-Dateien für Swagger/ReDoc werden lokal vom Server ausgeliefert (`/api/do
 
 ### Wichtiger Port-Hinweis
 
-In der aktuellen Implementierung haben Werte aus `web-settings.json` Vorrang. CLI-Parameter sind effektiv Fallback.
+In der aktuellen Implementierung haben Werte aus `data/web-settings.json` Vorrang. CLI-Parameter sind effektiv Fallback.
 
 ---
 
@@ -196,7 +198,7 @@ Falls der Video-Player in deinem Markdown-Viewer nicht sichtbar ist:
 
 ### 5.4 Einstellungen
 
-Der Modal-Dialog schreibt in `web-settings.json` (über API). Server-Settings (Ports, Polling, Logging etc.) werden separat über `/api/server/settings` gespeichert.
+Der Modal-Dialog schreibt in `data/web-settings.json` (über API). Server-Settings (Ports, Polling, Logging etc.) werden separat über `/api/server/settings` gespeichert.
 
 Bei Portänderungen zeigt das UI korrekt an, dass ein Serverneustart notwendig ist.
 
@@ -204,7 +206,9 @@ Bei Portänderungen zeigt das UI korrekt an, dass ein Serverneustart notwendig i
 
 ## 6. Konfiguration und Persistenz
 
-### 6.1 `web-settings.json`
+Laufzeitdaten liegen im Ordner `data/` (nicht versioniert). Beim ersten Start werden vorhandene `web-settings.json` und `routes.json` aus dem Projektroot automatisch dorthin verschoben.
+
+### 6.1 `data/web-settings.json`
 
 Zentrale Konfigurationsquelle (vom Server geladen/geschrieben). Beispiele:
 
@@ -220,7 +224,7 @@ Zentrale Konfigurationsquelle (vom Server geladen/geschrieben). Beispiele:
 - Presets: `parkPositionsEnabled`, `homeAzimuth`, `homeElevation`, `parkAzimuth`, `parkElevation`, `autoParkOnDisconnect`
 - Server: `serverHttpPort`, `serverWebSocketPort`, `serverPollingIntervalMs`, `serverSessionTimeoutS`, `serverMaxClients`, `serverLoggingLevel`, `serverRequireSession`
 
-### 6.2 `routes.json`
+### 6.2 `data/routes.json`
 
 Persistente Routenablage (serverseitig). CRUD erfolgt über `/api/routes...`.
 
@@ -540,7 +544,7 @@ ws.onmessage = (evt) => {
 
 ### Portwechsel greift nicht
 
-- Nach Änderung von `serverHttpPort`/`serverWebSocketPort` Neustart ausführen (`/api/server/restart` oder `start_server.bat`)
+- Nach Änderung von `serverHttpPort`/`serverWebSocketPort` Neustart ausführen (`/api/server/restart` oder `scripts\start_server.bat`)
 
 ### Session-Probleme
 
@@ -567,10 +571,12 @@ ws.onmessage = (evt) => {
 
 ## 17. Weiterführende Dokumentation
 
-- [API_Dokumentation.md](API_Dokumentation.md)
-- [GS232B_Befehle.md](GS232B_Befehle.md)
-- [hardware_test/README.md](hardware_test/README.md)
-- [diagrams/](diagrams/)
+- [docs/API_Dokumentation.md](docs/API_Dokumentation.md)
+- [docs/GS232B_Befehle.md](docs/GS232B_Befehle.md)
+- [dev/hardware_test/README.md](dev/hardware_test/README.md)
+- [dev/software_test/README.md](dev/software_test/README.md)
+- [example_api_usecase/README.md](example_api_usecase/README.md)
+- [docs/diagrams/](docs/diagrams/)
 
 ---
 

@@ -104,7 +104,7 @@ const defaultConfig = {
   elevationFeedbackFactorMin: 0.1,
   elevationFeedbackFactorMax: 10.0,
   
-  // NOTE: Routes are now stored separately in routes.json on the server
+  // NOTE: Routes are stored separately in data/routes.json on the server
   // and managed via the Route API endpoints. They are no longer part of
   // the configuration stored in web-settings.json.
 };

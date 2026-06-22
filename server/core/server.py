@@ -75,7 +75,7 @@ def run_server(
     Args:
         http_port: The HTTP port to listen on (default: 8081).
         websocket_port: The port for WebSocket server (default: 8082).
-        config_dir: Directory for configuration files (default: project root).
+        config_dir: Directory for configuration files (default: data/).
         server_root: Directory for static files (default: src/renderer).
     """
     # Get state singleton

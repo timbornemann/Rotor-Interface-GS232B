@@ -27,13 +27,13 @@ Danach sieht die Rotor-Software `COM11` wie einen echten Controller.
 Im Projektwurzelordner:
 
 ```bat
-start_software_rotor_simulator.bat
+scripts\start_software_rotor_simulator.bat
 ```
 
 Oder direkt:
 
 ```bash
-python software_test/gs232b_rotor_simulator.py
+python dev/software_test/gs232b_rotor_simulator.py
 ```
 
 ## Unterstuetzte Befehle

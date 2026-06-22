@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 function loadConfigStore() {
   const source = fs.readFileSync(
-    path.join(__dirname, '../src/renderer/services/configStore.js'),
+    path.join(__dirname, '../../src/renderer/services/configStore.js'),
     'utf8'
   ) + '\nmodule.exports = { ConfigStore, defaultConfig };';
 

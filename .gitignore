@@ -1,9 +1,10 @@
 .idea/
 .vscode/
 __pycache__/
+.pytest_cache/
 node_modules/
 .tmp/
 *.pdf
-web-settings.json
 temp/
-routes.json
+data/*
+!data/.gitkeep

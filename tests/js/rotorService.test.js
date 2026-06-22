@@ -22,7 +22,7 @@ global.navigator = {};
 global.TextEncoder = global.TextEncoder || require('util').TextEncoder;
 global.TextDecoder = global.TextDecoder || require('util').TextDecoder;
 
-const { RotorService } = require('../src/renderer/services/rotorService.js');
+const { RotorService } = require('../../src/renderer/services/rotorService.js');
 
 beforeEach(() => {
   window.localStorage.clear();
