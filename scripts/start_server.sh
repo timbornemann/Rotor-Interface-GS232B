@@ -7,29 +7,42 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
+MIN_PYTHON_MAJOR=3
+MIN_PYTHON_MINOR=10
+
 echo "========================================"
 echo "Rotor Interface GS232B - Server"
 echo "========================================"
 echo
 
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON=python3
-elif command -v python >/dev/null 2>&1; then
-    PYTHON=python
-else
-    echo "FEHLER: Python ist nicht installiert oder nicht im PATH!"
-    echo "Bitte installieren Sie Python 3.10 oder hoeher."
+resolve_python() {
+    local candidate version_ok
+    for candidate in python3 python; do
+        if ! command -v "$candidate" >/dev/null 2>&1; then
+            continue
+        fi
+        if "$candidate" -c "import sys; raise SystemExit(0 if sys.version_info >= (${MIN_PYTHON_MAJOR}, ${MIN_PYTHON_MINOR}) else 1)" 2>/dev/null; then
+            PYTHON=$candidate
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! resolve_python; then
+    echo "FEHLER: Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR} oder hoeher ist erforderlich!"
+    echo
+    echo "Gefundene Versionen:"
+    command -v python3 >/dev/null 2>&1 && python3 --version 2>&1 | sed 's/^/  /' || true
+    command -v python >/dev/null 2>&1 && python --version 2>&1 | sed 's/^/  /' || true
     echo
     read -r -p "Druecke Enter zum Beenden..."
     exit 1
 fi
 
-if ! "$PYTHON" --version >/dev/null 2>&1; then
-    echo "FEHLER: Python ist nicht ausfuehrbar."
-    echo
-    read -r -p "Druecke Enter zum Beenden..."
-    exit 1
-fi
+PY_VERSION="$("$PYTHON" -c "import sys; print(sys.version.split()[0])")"
+echo "Verwende Python ${PY_VERSION} (${PYTHON})"
+echo
 
 if [ ! -d "server" ]; then
     echo "FEHLER: server/ Verzeichnis wurde nicht gefunden!"
@@ -87,9 +100,6 @@ stop_old_server_processes() {
         kill -9 "$pid" 2>/dev/null || true
     done <<< "$pids"
 }
-
-HTTP_PORT=8081
-WS_PORT=8082
 
 while true; do
     HTTP_PORT=8081
