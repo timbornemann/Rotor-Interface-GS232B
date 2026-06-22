@@ -158,10 +158,12 @@ chmod +x scripts/start_server.sh   # einmalig
 
 Die Startskripte:
 
-- liest HTTP/WS-Ports aus `data/web-settings.json`
-- beendet alte `python -m server.main`-Prozesse
-- startet den Server neu
-- führt bei Exit-Code `42` automatisch einen Restart aus (wird von `/api/server/restart` genutzt)
+- wählen unter Windows bevorzugt `py -3` (Python Launcher), sonst `python3`/`python`
+- erfordern **Python 3.10+** und zeigen die verwendete Version an
+- lesen HTTP/WS-Ports aus `data/web-settings.json`
+- beenden alte `python -m server.main`-Prozesse
+- starten den Server neu
+- führen bei Exit-Code `42` automatisch einen Restart aus (wird von `/api/server/restart` genutzt)
 
 ### Aufruf im Browser
 
