@@ -87,16 +87,26 @@ class WebSocketManager:
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
-            with self._lock:
-                if websocket in self.clients:
-                    client = self.clients.pop(websocket)
-                    # Remove session from manager if it exists
-                    if client.session_id and self.session_manager:
-                        self.session_manager.remove_session(client.session_id)
-                        # Broadcast updated client list
-                        self._schedule_broadcast_client_list()
+            session_to_remove = self._detach_client(websocket)
+            if session_to_remove and self.session_manager:
+                self.session_manager.remove_session(session_to_remove)
                         
             log(f"[WebSocket] Client disconnected. Total clients: {len(self.clients)}")
+
+    def _detach_client(self, websocket: WebSocketServerProtocol) -> Optional[str]:
+        """Detach a websocket and return its session ID only when no peer still uses it."""
+        with self._lock:
+            if websocket not in self.clients:
+                return None
+
+            client = self.clients.pop(websocket)
+            # Multiple browser tabs may share one session ID via localStorage.
+            # Keep the session alive until the last websocket for it closes.
+            if client.session_id and not any(
+                other.session_id == client.session_id for other in self.clients.values()
+            ):
+                return client.session_id
+            return None
     
     async def _send_initial_state(self, websocket: WebSocketServerProtocol) -> None:
         """Send initial state to a newly connected client.

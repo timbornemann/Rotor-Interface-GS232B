@@ -134,26 +134,6 @@ function logAction(message, details = {}) {
 const SPEED_MIN_DEFAULT = 0.5;
 const SPEED_MAX_DEFAULT = 20;
 
-function getSoftLimitConfigFromState() {
-  return {
-    azimuthMin: Number(config.azimuthMinLimit),
-    azimuthMax: Number(config.azimuthMaxLimit),
-    elevationMin: Number(config.elevationMinLimit),
-    elevationMax: Number(config.elevationMaxLimit)
-  };
-}
-
-function getOffsetConfigFromState() {
-  return {
-    azimuthOffset: Number(config.azimuthOffset || 0),
-    elevationOffset: Number(config.elevationOffset || 0)
-  };
-}
-
-function getSpeedConfigFromState() {
-  return sanitizeSpeedSettings(config).sanitized;
-}
-
 function getSpeedLimits() {
   const min = Number(config.speedMinDegPerSec ?? SPEED_MIN_DEFAULT);
   const max = Number(config.speedMaxDegPerSec ?? SPEED_MAX_DEFAULT);
@@ -209,17 +189,6 @@ function sanitizeSpeedSettings(speedSettings = {}) {
   return { sanitized, corrections };
 }
 
-function getRampConfigFromState() {
-  return {
-    rampEnabled: Boolean(config.rampEnabled),
-    rampKp: Number(config.rampKp || 0),
-    rampKi: Number(config.rampKi || 0),
-    rampSampleTimeMs: Number(config.rampSampleTimeMs || 0),
-    rampMaxStepDeg: Number(config.rampMaxStepDeg || 0),
-    rampToleranceDeg: Number(config.rampToleranceDeg || 0)
-  };
-}
-
 function updateLimitInputsFromConfig() {
     if(azLimitMinInput) azLimitMinInput.value = config.azimuthMinLimit.toString();
     if(azLimitMaxInput) azLimitMaxInput.value = config.azimuthMaxLimit.toString();
@@ -254,21 +223,6 @@ function syncGotoInputBounds() {
       gotoElInput.min = 0;
       gotoElInput.max = 90;
   }
-}
-
-function applyLimitsToRotor() {
-  rotor.setSoftLimits(getSoftLimitConfigFromState());
-}
-
-function applyOffsetsToRotor() {
-  rotor.setCalibrationOffsets(getOffsetConfigFromState());
-}
-
-function applyScaleFactorsToRotor() {
-  rotor.setScaleFactors({
-    azimuthScaleFactor: config.azimuthScaleFactor ?? 1.0,
-    elevationScaleFactor: config.elevationScaleFactor ?? 1.0
-  });
 }
 
 function showLimitWarning(message) {
@@ -422,7 +376,9 @@ const routeManager = new RouteManager(document.getElementById('routeManagerRoot'
 // Route execution is now handled server-side via WebSocket events
 // (WebSocket handlers will be set up in setupWebSocket() below)
 
-const configStore = new ConfigStore();
+const configStore = new ConfigStore({
+  getHeaders: () => rotor.getSessionHeaders()
+});
 window.configStore = configStore; // Make available globally for settings modal
 let config = configStore.loadSync();
 let connected = false;
@@ -446,20 +402,6 @@ configStore.onServerLoaded((loadedConfig) => {
   updateUIFromConfig();
   updateConeSettings();
   console.log('[main] Config updated from server (retry)');
-});
-
-// Load config asynchronously
-configStore.load().then(loadedConfig => {
-  if (loadedConfig) {
-    config = loadedConfig;
-    updateUIFromConfig();
-    updateConeSettings();
-  }
-  
-  // Load routes from server (not from config anymore)
-  loadRoutesFromServer();
-}).catch(err => {
-  console.warn('[main] Could not load config', err);
 });
 
 // Load routes from server
@@ -525,13 +467,6 @@ async function setupWebSocket() {
       
       // Update UI with new settings
       updateUIFromConfig();
-      applyLimitsToRotor();
-      applyOffsetsToRotor();
-      applyScaleFactorsToRotor();
-      rotor.setRampSettings(getRampConfigFromState());
-      rotor.setSpeed(getSpeedConfigFromState()).catch(err => {
-        console.error('[main] Error updating speed after settings sync:', err);
-      });
       updateConeSettings();
     }
   });
@@ -686,6 +621,17 @@ async function init() {
 
   // Initialize session with server
   await rotor.initSession();
+
+  try {
+    const loadedConfig = await configStore.load();
+    if (loadedConfig) {
+      config = loadedConfig;
+      updateUIFromConfig();
+      updateConeSettings();
+    }
+  } catch (err) {
+    console.warn('[main] Could not load config', err);
+  }
   
   // Set up WebSocket service
   await setupWebSocket();
@@ -693,11 +639,7 @@ async function init() {
   // Set up suspension overlay
   setupSuspensionOverlay();
 
-  applyLimitsToRotor();
-  applyOffsetsToRotor();
-  applyScaleFactorsToRotor();
-  rotor.setRampSettings(getRampConfigFromState());
-  await rotor.setSpeed(getSpeedConfigFromState());
+  await loadRoutesFromServer();
 
   if (refreshPortsBtn) {
     refreshPortsBtn.addEventListener('click', () => void refreshPorts());
@@ -807,19 +749,8 @@ async function init() {
           config = { ...config, ...serverSettings };
           
           updateUIFromConfig();
-          applyLimitsToRotor();
-          applyOffsetsToRotor();
-          applyScaleFactorsToRotor();
-          rotor.setRampSettings(getRampConfigFromState());
-          await rotor.setSpeed(getSpeedConfigFromState());
           updateConeSettings();
 
-          const newMode = Number(newConfig.azimuthMode) === 450 ? 450 : 360;
-          if (connected) {
-              // Mode update on server handled by config save
-              // But explicit setMode call might be useful for immediate feedback or legacy
-              await rotor.setMode(newMode);
-          }
           logAction('Einstellungen gespeichert', newConfig);
         });
       }
@@ -914,9 +845,6 @@ async function handleConnect() {
 
   try {
     logAction('Verbindung wird aufgebaut', { path });
-    applyLimitsToRotor();
-    applyOffsetsToRotor();
-    applyScaleFactorsToRotor();
     updateConeSettings(); // Ensure mapView has latest config
     
     config = await configStore.save({
@@ -927,7 +855,6 @@ async function handleConnect() {
     });
 
     await rotor.connect({ path, baudRate, azimuthMode });
-    await rotor.setMode(azimuthMode);
     rotor.startPolling();
     connected = true;
     
@@ -998,7 +925,6 @@ async function handleApplyLimits() {
     return;
   }
   config = await configStore.save(limits);
-  applyLimitsToRotor();
   updateConeSettings(); // Ensure mapView has latest config
   showLimitWarning('Limits wurden angewendet.');
   logAction('Software-Limits aktualisiert', limits);
@@ -1016,7 +942,6 @@ async function handleSetAzReference(value) {
   const offset = (value * scale) - rawAz;
   
   config = await configStore.save({ azimuthOffset: offset });
-  applyOffsetsToRotor();
   updateOffsetInputsFromConfig();
   updateConeSettings(); // Ensure mapView has latest config
   showLimitWarning(`Azimut auf ${value}° referenziert (Offset: ${offset.toFixed(1)}).`);
@@ -1025,7 +950,6 @@ async function handleSetAzReference(value) {
 
 async function handleResetOffsets() {
   config = await configStore.save({ azimuthOffset: 0, elevationOffset: 0 });
-  applyOffsetsToRotor();
   updateOffsetInputsFromConfig();
   updateConeSettings(); // Ensure mapView has latest config
   showLimitWarning('Offsets wurden auf 0° zurueckgesetzt.');
@@ -1042,20 +966,6 @@ async function handleSpeedChange(speedSettings) {
   config = await configStore.save(sanitized);
   updateSpeedInputsFromConfig();
   logAction('Geschwindigkeit angepasst', sanitized);
-  await rotor.setSpeed(sanitized);
-}
-
-function readRampInputs() {
-  // Not directly used by UI anymore (managed in modal), but kept for legacy calls?
-  // We can return from config
-  return getRampConfigFromState();
-}
-
-async function handleRampSettingsChange() {
-  const rampSettings = readRampInputs();
-  config = await configStore.save(rampSettings);
-  rotor.setRampSettings(getRampConfigFromState());
-  logAction('Rampen-PI-Regler aktualisiert', getRampConfigFromState());
 }
 
 let lastStatusReceivedTime = null;

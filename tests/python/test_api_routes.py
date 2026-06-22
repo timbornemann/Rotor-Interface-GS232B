@@ -568,3 +568,26 @@ class TestRotorControlAPI:
         error_data = json.loads(exc_info.value.read().decode("utf-8"))
         assert error_data["code"] == "ROTOR_DISCONNECTED"
 
+
+class TestServerSettingsAPI:
+    """Tests for server settings updates."""
+
+    def test_polling_interval_applies_when_rotor_is_disconnected(self, test_server):
+        """serverPollingIntervalMs should update the connection object even offline."""
+        base_url, state = test_server
+        assert int(state.rotor_connection.polling_interval_s * 1000) == 500
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/server/settings"),
+            data=json.dumps({"serverPollingIntervalMs": 250}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+            data = json.load(response)
+
+        assert data["status"] == "ok"
+        assert int(state.rotor_connection.polling_interval_s * 1000) == 250
+

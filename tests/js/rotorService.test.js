@@ -38,18 +38,6 @@ const createJsonResponse = (status, payload) => ({
   text: async () => JSON.stringify(payload)
 });
 
-// Note: planAzimuthTarget is now a stub - the actual planning logic
-// has been moved to the server-side (rotor_logic.py)
-test('planAzimuthTarget returns stub response', async () => {
-  const rotor = new RotorService();
-  
-  const plan = await rotor.planAzimuthTarget(180);
-  
-  // Should return simple stub format
-  assert.strictEqual(plan.commandValue, 180);
-  assert.strictEqual(plan.distance, 0);
-});
-
 test('setAzElRaw throws on non-ok backend response', async () => {
   const rotor = new RotorService();
   rotor.isConnected = true;

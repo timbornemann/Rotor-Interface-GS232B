@@ -603,31 +603,6 @@ class RotorService {
     }
   }
   
-  // Backwards compatibility wrappers called by main.js
-  setSoftLimits(limits) { 
-      // Handled via saveSettings in main 
-  } 
-  setCalibrationOffsets(offsets) { 
-      // Handled via saveSettings 
-  }
-  setScaleFactors(factors) {
-      // Handled via saveSettings
-  }
-  setRampSettings(settings) {
-      // Handled via saveSettings
-  }
-  async setSpeed(settings) {
-      // Handled via saveSettings
-  }
-  async setMode(mode) {
-      // Handled via saveSettings
-  }
-
-  async planAzimuthTarget(az) { 
-      // Mock return to satisfy UI calls if any left
-      return { commandValue: az, distance: 0 }; 
-  }
-
   // --- Polling ---
   
   startPolling() {

@@ -115,3 +115,23 @@ class TestServerIntegration:
         
         assert saved["mapSource"] == "google"
 
+
+def test_explicit_initialize_ports_override_persisted_defaults(tmp_path):
+    """Explicit server ports should win over default config values."""
+    ServerState.reset_instance()
+    state = ServerState.get_instance()
+
+    try:
+        state.initialize(
+            config_dir=tmp_path,
+            server_root=tmp_path,
+            http_port=9999,
+            websocket_port=9998
+        )
+
+        assert state.http_port == 9999
+        assert state.websocket_port == 9998
+    finally:
+        state.reset()
+        ServerState.reset_instance()
+

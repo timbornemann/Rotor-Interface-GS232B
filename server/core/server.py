@@ -63,8 +63,8 @@ def get_local_ip_addresses():
 
 
 def run_server(
-    http_port: int = DEFAULT_PORT,
-    websocket_port: int = DEFAULT_WEBSOCKET_PORT,
+    http_port: Optional[int] = None,
+    websocket_port: Optional[int] = None,
     config_dir: Optional[Path] = None,
     server_root: Optional[Path] = None
 ) -> None:
@@ -73,8 +73,8 @@ def run_server(
     Initializes all components and runs the server until interrupted.
     
     Args:
-        http_port: The HTTP port to listen on (default: 8081).
-        websocket_port: The port for WebSocket server (default: 8082).
+        http_port: Optional HTTP port override; config is used when omitted.
+        websocket_port: Optional WebSocket port override; config is used when omitted.
         config_dir: Directory for configuration files (default: data/).
         server_root: Directory for static files (default: src/renderer).
     """

@@ -279,34 +279,49 @@ class RouteExecutor:
         wait_azimuth = applied_target.get("azimuth") if applied_target else azimuth
         wait_elevation = applied_target.get("elevation") if applied_target else elevation
         
-        # Wait for arrival
-        self._wait_for_arrival(wait_azimuth, wait_elevation)
+        # Wait for arrival. Timeouts continue the route, but disconnects fail it.
+        position_reached = self._wait_for_arrival(wait_azimuth, wait_elevation)
         
-        if not self._should_stop:
+        if self._should_stop:
+            return
+
+        if position_reached:
             log(f"[RouteExecutor] Position reached: {name}")
             self._broadcast_progress({
                 "type": "position_reached",
                 "step": step
             })
+        else:
+            self._broadcast_progress({
+                "type": "position_timeout",
+                "step": step,
+                "target": {"azimuth": wait_azimuth, "elevation": wait_elevation}
+            })
     
-    def _wait_for_arrival(self, target_az: Optional[float], target_el: Optional[float]) -> None:
+    def _wait_for_arrival(self, target_az: Optional[float], target_el: Optional[float]) -> bool:
         """Wait for rotor to reach target position.
         
         Args:
             target_az: Target azimuth (or None).
             target_el: Target elevation (or None).
+
+        Returns:
+            True if the target was reached, False if the wait timed out or was stopped.
+
+        Raises:
+            RuntimeError: If the rotor disconnects while waiting.
         """
         start_time = time.time()
         
         while not self._should_stop:
+            if not self.rotor_logic.connection.is_connected():
+                log("[RouteExecutor] Rotor disconnected during position wait – aborting step", level="WARNING")
+                raise RuntimeError("Rotor disconnected during route execution")
+
             # Get current position using corrected feedback values
             current_status = self.rotor_logic.get_effective_raw_status()
             
             if not current_status:
-                # No status available – check whether rotor was disconnected
-                if not self.rotor_logic.connection.is_connected():
-                    log("[RouteExecutor] Rotor disconnected during position wait – aborting step", level="WARNING")
-                    return
                 time.sleep(self.position_check_interval)
                 continue
             
@@ -323,15 +338,17 @@ class RouteExecutor:
             
             if az_ok and el_ok:
                 log("[RouteExecutor] Position reached within tolerance")
-                return
+                return True
             
             # Check timeout
             if time.time() - start_time > self.position_timeout:
                 log("[RouteExecutor] Position arrival timeout - continuing anyway", level="WARNING")
-                return
+                return False
             
             # Wait before checking again
             time.sleep(self.position_check_interval)
+
+        return False
     
     def _execute_wait_step(self, step: Dict[str, Any]) -> None:
         """Execute a wait step - time-based or manual.

@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from server.api.websocket import WebSocketManager
+from server.api.websocket import WebSocketClient, WebSocketManager
 
 
 class TestWebSocketManager:
@@ -34,3 +34,25 @@ class TestWebSocketManager:
         error = OSError(111, "Connection refused")
 
         assert manager._is_address_in_use_error(error) is False
+
+    def test_detach_keeps_shared_session_until_last_socket_closes(self):
+        """A shared localStorage session should survive until its last tab disconnects."""
+        manager = WebSocketManager()
+        first_socket = object()
+        second_socket = object()
+
+        manager.clients[first_socket] = WebSocketClient(
+            websocket=first_socket,
+            session_id="shared-session"
+        )
+        manager.clients[second_socket] = WebSocketClient(
+            websocket=second_socket,
+            session_id="shared-session"
+        )
+
+        assert manager._detach_client(first_socket) is None
+        assert first_socket not in manager.clients
+        assert second_socket in manager.clients
+
+        assert manager._detach_client(second_socket) == "shared-session"
+        assert second_socket not in manager.clients

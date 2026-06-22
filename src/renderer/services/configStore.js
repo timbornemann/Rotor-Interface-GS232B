@@ -110,12 +110,29 @@ const defaultConfig = {
 };
 
 class ConfigStore {
-  constructor() {
-    this.apiBase = window.location.origin;
+  constructor(options = {}) {
+    this.apiBase = options.apiBase || window.location.origin;
+    this.getHeaders = typeof options.getHeaders === 'function' ? options.getHeaders : null;
     this.cache = null;
     this.saveTimeout = null;
     this.serverLoaded = false;
     this._retryTimer = null;
+  }
+
+  setHeadersProvider(getHeaders) {
+    this.getHeaders = typeof getHeaders === 'function' ? getHeaders : null;
+  }
+
+  buildHeaders(baseHeaders = {}) {
+    let dynamicHeaders = {};
+    if (this.getHeaders) {
+      try {
+        dynamicHeaders = this.getHeaders() || {};
+      } catch (e) {
+        console.warn('[ConfigStore] Header provider failed:', e.message);
+      }
+    }
+    return { ...dynamicHeaders, ...baseHeaders };
   }
 
   /**
@@ -291,7 +308,7 @@ class ConfigStore {
     try {
       const resp = await fetch(`${this.apiBase}/api/settings`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json' },
+        headers: this.buildHeaders({ 'Accept': 'application/json' }),
       });
 
       if (resp.ok) {
@@ -375,10 +392,10 @@ class ConfigStore {
       console.log('[ConfigStore] Saving settings to server...', Object.keys(toSend).length, 'keys');
       const resp = await fetch(`${this.apiBase}/api/settings`, {
         method: 'POST',
-        headers: {
+        headers: this.buildHeaders({
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-        },
+        }),
         body: JSON.stringify(toSend),
       });
       

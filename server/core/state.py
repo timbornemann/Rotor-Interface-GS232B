@@ -86,8 +86,8 @@ class ServerState:
         self,
         config_dir: Optional[Path] = None,
         server_root: Optional[Path] = None,
-        http_port: int = 8081,
-        websocket_port: int = 8082
+        http_port: Optional[int] = None,
+        websocket_port: Optional[int] = None
     ) -> None:
         """Initialize all server components.
         
@@ -126,9 +126,11 @@ class ServerState:
         except (TypeError, ValueError):
             self._last_connected_baud_rate = 9600
         
-        # Override ports from config if available
-        self.http_port = config.get("serverHttpPort", http_port)
-        self.websocket_port = config.get("serverWebSocketPort", websocket_port)
+        # Explicit CLI/API arguments take precedence over persisted defaults.
+        self.http_port = int(http_port if http_port is not None else config.get("serverHttpPort", 8081))
+        self.websocket_port = int(
+            websocket_port if websocket_port is not None else config.get("serverWebSocketPort", 8082)
+        )
         
         # Get server settings from config
         polling_interval_ms = config.get("serverPollingIntervalMs", 500)

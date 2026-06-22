@@ -924,17 +924,13 @@ def handle_post_server_settings(handler: BaseHTTPRequestHandler, state: "ServerS
             polling_ms = update_dict["serverPollingIntervalMs"]
             log(f"[API] Attempting to update polling interval to {polling_ms}ms")
             if state.rotor_connection:
-                if state.rotor_connection.is_connected():
-                    try:
-                        log(f"[API] Rotor is connected, calling set_polling_interval({polling_ms})")
-                        state.rotor_connection.set_polling_interval(polling_ms)
-                        log(f"[API] Polling interval successfully updated to {polling_ms}ms")
-                    except Exception as e:
-                        log(f"[API] Error updating polling interval: {e}", level="WARNING")
-                        import traceback
-                        log(f"[API] Traceback: {traceback.format_exc()}", level="WARNING")
-                else:
-                    log(f"[API] Rotor connection exists but is not connected. Interval saved to config ({polling_ms}ms) but not applied.")
+                try:
+                    state.rotor_connection.set_polling_interval(polling_ms)
+                    log(f"[API] Polling interval successfully updated to {polling_ms}ms")
+                except Exception as e:
+                    log(f"[API] Error updating polling interval: {e}", level="WARNING")
+                    import traceback
+                    log(f"[API] Traceback: {traceback.format_exc()}", level="WARNING")
             else:
                 log(f"[API] Rotor connection is None. Interval saved to config ({polling_ms}ms) but not applied.")
         

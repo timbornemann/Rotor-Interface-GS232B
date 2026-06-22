@@ -1266,7 +1266,9 @@ class SettingsModal {
     
     try {
       // Get the configStore from window
-      const configStore = window.configStore || new ConfigStore();
+      const configStore = window.configStore || new ConfigStore({
+        getHeaders: () => window.rotorService ? window.rotorService.getSessionHeaders() : {}
+      });
       
       // Reset to defaults
       console.log('[SettingsModal] Resetting settings to defaults...');

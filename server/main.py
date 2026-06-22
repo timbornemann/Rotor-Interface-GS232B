@@ -34,14 +34,14 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--port",
         type=int,
-        default=DEFAULT_PORT,
-        help=f"HTTP port to listen on (default: {DEFAULT_PORT})"
+        default=None,
+        help=f"HTTP port override (default: configured serverHttpPort, fallback {DEFAULT_PORT})"
     )
     parser.add_argument(
         "--websocket-port",
         type=int,
-        default=DEFAULT_WEBSOCKET_PORT,
-        help=f"WebSocket port (default: {DEFAULT_WEBSOCKET_PORT})"
+        default=None,
+        help=f"WebSocket port override (default: configured serverWebSocketPort, fallback {DEFAULT_WEBSOCKET_PORT})"
     )
     parser.add_argument(
         "--config-dir",
