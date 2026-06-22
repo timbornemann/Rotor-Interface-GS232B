@@ -14,7 +14,7 @@ $PyInstallerDist = Join-Path $BuildRoot "pyinstaller-dist"
 $PyInstallerWork = Join-Path $BuildRoot "pyinstaller-work"
 $InstallerOutput = Join-Path $RepoRoot "dist\installer"
 $IconPath = Join-Path $ArtifactRoot "rotor-interface.ico"
-$LogoPath = Join-Path $RepoRoot "src\renderer\assets\logo.png"
+$InstallerLogoPath = Join-Path $RepoRoot "src\renderer\assets\logo-installer.png"
 $PackageJsonPath = Join-Path $RepoRoot "package.json"
 $RequirementsPath = Join-Path $RepoRoot "requirements.txt"
 $InnoScript = Join-Path $RepoRoot "installer\rotor-server.iss"
@@ -82,8 +82,8 @@ function Invoke-Checked {
 if (-not (Test-Path $PackageJsonPath)) {
     throw "package.json not found at $PackageJsonPath"
 }
-if (-not (Test-Path $LogoPath)) {
-    throw "Logo not found at $LogoPath"
+if (-not (Test-Path $InstallerLogoPath)) {
+    throw "Installer logo not found at $InstallerLogoPath"
 }
 if (-not (Test-Path $InnoScript)) {
     throw "Inno Setup script not found at $InnoScript"
@@ -118,7 +118,7 @@ if (-not $SkipDependencyInstall) {
     Invoke-Checked $VenvPython @("-m", "pip", "install", "-r", $RequirementsPath)
 }
 
-Write-Step "Creating Windows icon from logo.png"
+Write-Step "Creating Windows icon from logo-installer.png"
 $IconScriptPath = Join-Path $BuildRoot "create_icon.py"
 $IconScript = @"
 from pathlib import Path
@@ -134,7 +134,7 @@ sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256
 image.save(target, format="ICO", sizes=sizes)
 "@
 Set-Content -Path $IconScriptPath -Value $IconScript -Encoding UTF8
-Invoke-Checked $VenvPython @($IconScriptPath, $LogoPath, $IconPath)
+Invoke-Checked $VenvPython @($IconScriptPath, $InstallerLogoPath, $IconPath)
 
 Write-Step "Building RotorServer.exe with PyInstaller"
 $DocsAssetSource = Join-Path $RepoRoot "server\api\static\docs"

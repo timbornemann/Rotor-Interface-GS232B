@@ -117,7 +117,7 @@ Für eine Installation ohne Python auf dem Zielrechner kann ein Server-Installer
 .\scripts\build_installer.ps1
 ```
 
-Das Skript erstellt eine lokale Build-Umgebung, wandelt `src/renderer/assets/logo.png` in ein Windows-Icon um, baut `RotorServer.exe` mit PyInstaller und erzeugt anschließend:
+Das Skript erstellt eine lokale Build-Umgebung, wandelt `src/renderer/assets/logo-installer.png` in ein Windows-Icon um, baut `RotorServer.exe` mit PyInstaller und erzeugt anschließend:
 
 ```text
 dist\installer\Rotor-Interface-GS232B.exe
