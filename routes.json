@@ -40,6 +40,47 @@
         }
       ],
       "order": 0
+    },
+    {
+      "id": "route_1782114716002_74twea5bd",
+      "name": "turn",
+      "description": "",
+      "steps": [
+        {
+          "id": "route_1782114723283_nth2zqd3e",
+          "type": "loop",
+          "iterations": null,
+          "steps": [
+            {
+              "id": "route_1782114726666_h84vnzuaf",
+              "type": "position",
+              "name": "Position",
+              "azimuth": 200,
+              "elevation": 0
+            },
+            {
+              "id": "route_1782114739645_jab7l7mw3",
+              "type": "wait",
+              "duration": 2000,
+              "message": ""
+            },
+            {
+              "id": "route_1782114748049_0v08ayuzq",
+              "type": "position",
+              "name": "Position",
+              "azimuth": 240,
+              "elevation": 0
+            },
+            {
+              "id": "route_1782114756131_ivxrhn685",
+              "type": "wait",
+              "duration": 2000,
+              "message": ""
+            }
+          ]
+        }
+      ],
+      "order": 1
     }
   ]
 }
