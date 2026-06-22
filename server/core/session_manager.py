@@ -372,10 +372,10 @@ class SessionManager:
         """Get the number of active sessions.
         
         Returns:
-            Number of sessions.
+            Number of active sessions.
         """
         with self._lock:
-            return len(self._sessions)
+            return sum(1 for session in self._sessions.values() if session.status == SessionStatus.ACTIVE)
     
     def _get_all_sessions_as_list_unlocked(self) -> List[dict]:
         """Return a serialized session snapshot while the caller holds the lock."""

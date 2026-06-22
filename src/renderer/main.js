@@ -515,11 +515,9 @@ async function setupWebSocket() {
   // Handle route execution progress
   wsService.on('route_execution_progress', (data) => {
     if (routeManager) {
-      // Extract route ID from current execution state
-      // The server doesn't send routeId in every progress update, so we need to track it
-      const executionState = routeManager.executingRouteId;
-      if (executionState) {
-        routeManager.setExecutionProgress(executionState, data);
+      const routeId = data.routeId || routeManager.executingRouteId;
+      if (routeId) {
+        routeManager.setExecutionProgress(routeId, data);
       }
     }
     
@@ -760,11 +758,18 @@ async function init() {
                   showLimitWarning('Server muss neu gestartet werden, damit Port-Änderungen wirksam werden.');
                 }
               } else {
-                const error = await resp.json();
-                reportError(new Error(`Fehler beim Speichern der Server-Einstellungen: ${error.error || resp.statusText}`));
+                let message = resp.statusText;
+                try {
+                  const error = await resp.json();
+                  message = error.error || error.message || message;
+                } catch (_) {
+                  // Keep the HTTP status text if the response is not JSON.
+                }
+                throw new Error(`Fehler beim Speichern der Server-Einstellungen: ${message}`);
               }
             } catch (error) {
-              reportError(new Error(`Fehler beim Speichern der Server-Einstellungen: ${error.message}`));
+              reportError(error);
+              throw error;
             }
           }
           

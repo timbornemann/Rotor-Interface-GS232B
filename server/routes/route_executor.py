@@ -63,6 +63,7 @@ class RouteExecutor:
         self.position_tolerance = 2.0  # degrees
         self.position_timeout = 60.0  # seconds
         self.position_check_interval = 0.2  # seconds
+        self.manual_wait_check_interval = 0.2  # seconds
     
     def start_route(self, route_id: str) -> bool:
         """Start executing a route.
@@ -365,23 +366,31 @@ class RouteExecutor:
         if duration is None or duration == 0:
             # Manual wait
             log(f"[RouteExecutor] Waiting for manual continue: {message}")
+
+            wait_event = threading.Event()
+            with self._lock:
+                if self._should_stop:
+                    log("[RouteExecutor] Manual wait skipped because route is stopping")
+                    return
+                self._manual_continue_event = wait_event
             
             self._broadcast_progress({
                 "type": "wait_manual",
                 "step": step,
                 "message": message
             })
-            
-            # Create event for manual continue
-            with self._lock:
-                self._manual_continue_event = threading.Event()
-            
-            # Wait for manual continue or stop
-            self._manual_continue_event.wait()
-            
-            with self._lock:
-                self._manual_continue_event = None
-            
+
+            # Use timed waits so a stop request cannot be missed by a race around
+            # manual wait setup.
+            try:
+                while not self._should_stop:
+                    if wait_event.wait(timeout=self.manual_wait_check_interval):
+                        break
+            finally:
+                with self._lock:
+                    if self._manual_continue_event is wait_event:
+                        self._manual_continue_event = None
+
             if self._should_stop:
                 log("[RouteExecutor] Manual wait aborted by stop")
         else:
@@ -434,17 +443,17 @@ class RouteExecutor:
         iterations = step.get("iterations")
         
         # Handle infinite loops
+        is_infinite = False
         if iterations is None or iterations == 0 or iterations == float('inf'):
-            iterations = float('inf')
+            is_infinite = True
             log("[RouteExecutor] Starting infinite loop")
         else:
             iterations = int(iterations)
             log(f"[RouteExecutor] Starting loop: {iterations} iterations")
         
         current_iteration = 0
-        max_iterations = 100000  # Safety limit for infinite loops
         
-        while current_iteration < iterations and current_iteration < max_iterations:
+        while not self._should_stop and (is_infinite or current_iteration < iterations):
             if self._should_stop:
                 break
             
@@ -452,17 +461,16 @@ class RouteExecutor:
                 "type": "loop_iteration",
                 "step": step,
                 "iteration": current_iteration + 1,
-                "total": iterations if iterations != float('inf') else None
+                "total": None if is_infinite else iterations
             })
             
             # Execute nested steps
             nested_steps = step.get("steps", [])
             self._execute_steps(nested_steps, route_level=False)
+            if is_infinite and not nested_steps:
+                time.sleep(self.position_check_interval)
             
             current_iteration += 1
-        
-        if current_iteration >= max_iterations:
-            log("[RouteExecutor] Infinite loop safety limit reached", level="WARNING")
         
         log(f"[RouteExecutor] Loop completed: {current_iteration} iterations")
     
@@ -525,4 +533,7 @@ class RouteExecutor:
         if not self.websocket_manager:
             return
         
-        self.websocket_manager.broadcast_route_execution_progress(progress_data)
+        payload = dict(progress_data)
+        payload.setdefault("routeId", self._current_route_id)
+        payload.setdefault("routeName", self._current_route_name)
+        self.websocket_manager.broadcast_route_execution_progress(payload)

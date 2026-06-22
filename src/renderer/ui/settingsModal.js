@@ -1286,7 +1286,7 @@ class SettingsModal {
       
       // Automatically save and close
       if (this.onSaveCallback) {
-        this.onSaveCallback(defaults);
+        await this.onSaveCallback(defaults);
       }
       this.close();
       
@@ -1309,9 +1309,14 @@ class SettingsModal {
     // Merge with current config to preserve any unedited values
     const mergedConfig = { ...this.currentConfig, ...config };
 
-    if (this.onSaveCallback) {
-      this.onSaveCallback(mergedConfig);
+    try {
+      if (this.onSaveCallback) {
+        await this.onSaveCallback(mergedConfig);
+      }
+      this.close();
+    } catch (error) {
+      console.error('[SettingsModal] Error saving settings:', error);
+      await this.showError('Fehler beim Speichern: ' + error.message);
     }
-    this.close();
   }
 }

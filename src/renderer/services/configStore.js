@@ -381,11 +381,11 @@ class ConfigStore {
       const loaded = await this._fetchFromServer();
       if (!loaded) {
         console.error('[ConfigStore] Cannot save: server unreachable');
-        return this.cache || { ...defaultConfig };
+        throw new Error('Cannot save settings: server unreachable');
       }
     }
 
-    const merged = { ...this.cache, ...partial };
+    const merged = { ...(this.cache || defaultConfig), ...partial };
     const toSend = this.sanitizeConfig(merged);
     
     try {
@@ -407,15 +407,21 @@ class ConfigStore {
           console.log('[ConfigStore] Settings saved successfully');
           return this.cache;
         }
+        throw new Error('Server response did not include saved settings');
       } else {
-        console.error('[ConfigStore] Server returned error:', resp.status);
+        let message = resp.statusText || `HTTP ${resp.status}`;
+        try {
+          const error = await resp.json();
+          message = error.error || error.message || message;
+        } catch (_) {
+          // Keep the HTTP status text if the response is not JSON.
+        }
+        throw new Error(`Server returned error ${resp.status}: ${message}`);
       }
     } catch (e) {
       console.error('[ConfigStore] Save failed:', e.message);
+      throw e;
     }
-    
-    this.cache = { ...this.cache, ...partial };
-    return this.cache;
   }
 
   /**
