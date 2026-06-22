@@ -418,6 +418,52 @@ class TestRotorDisconnectAPI:
         
         assert data["status"] == "ok"
 
+    def test_auto_park_waits_for_position_before_disconnect(self, test_server):
+        """Auto-park should wait for the park status before closing serial."""
+        base_url, state = test_server
+        from unittest.mock import MagicMock
+
+        state.settings.update({
+            "autoParkOnDisconnect": True,
+            "parkPositionsEnabled": True,
+            "parkAzimuth": 90,
+            "parkElevation": 45,
+        })
+        state.rotor_logic.update_config(state.settings.get_all())
+
+        events = []
+
+        def get_status():
+            events.append("status")
+            return {
+                "azimuthRaw": 90,
+                "elevationRaw": 45,
+            }
+
+        def disconnect():
+            events.append("disconnect")
+
+        state.rotor_connection.is_connected = MagicMock(return_value=True)
+        state.rotor_connection.get_status = MagicMock(side_effect=get_status)
+        state.rotor_connection.disconnect = MagicMock(side_effect=disconnect)
+        state.rotor_connection.send_command = MagicMock()
+
+        request = urllib.request.Request(
+            urljoin(base_url, "/api/rotor/disconnect"),
+            data=json.dumps({}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+            data = json.load(response)
+
+        assert data["status"] == "ok"
+        assert events == ["status", "disconnect"]
+        state.rotor_connection.send_command.assert_called_once_with("W090 045")
+        state.rotor_connection.disconnect.assert_called_once()
+
 
 class TestRotorControlAPI:
     """Tests for the rotor control API endpoints."""

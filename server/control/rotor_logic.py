@@ -386,6 +386,23 @@ class RotorLogic:
         """Public helper for callers that need the applied raw target before waiting."""
         return self._plan_raw_target(az, el)
 
+    def raw_target_to_effective_status(
+        self,
+        raw_target: Optional[Dict[str, Optional[Any]]],
+    ) -> Dict[str, Optional[float]]:
+        """Convert raw command targets to the coordinate system used by effective status."""
+        target = raw_target or {}
+        return {
+            "azimuth": self._apply_feedback_correction(
+                target.get("azimuth"),
+                "azimuthFeedbackFactor",
+            ),
+            "elevation": self._apply_feedback_correction(
+                target.get("elevation"),
+                "elevationFeedbackFactor",
+            ),
+        }
+
     def _clamp_active_motion_targets(self) -> Optional[Dict[str, Optional[float]]]:
         """Keep already queued target movement inside newly updated limits."""
         with self.state_lock:

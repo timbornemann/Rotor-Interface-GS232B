@@ -26,6 +26,9 @@ DOCS_ASSETS = {
     "redoc.standalone.js": ("application/javascript; charset=utf-8", DOCS_ASSET_DIR / "redoc.standalone.js"),
 }
 ROTOR_DISCONNECTED_CODE = "ROTOR_DISCONNECTED"
+AUTO_PARK_WAIT_TIMEOUT_S = 30.0
+AUTO_PARK_WAIT_INTERVAL_S = 0.2
+AUTO_PARK_POSITION_TOLERANCE_DEG = 2.0
 
 
 # --- Settings Routes ---
@@ -107,6 +110,58 @@ def _build_status_payload(status: Optional[Dict[str, Any]], config: Dict[str, An
         },
         "calibrated": calibrated
     }
+
+
+def _axis_reached(current: Optional[float], target: Optional[float], tolerance: float) -> bool:
+    """Return whether one optional axis is within tolerance."""
+    return target is None or (
+        current is not None and abs(float(current) - float(target)) <= tolerance
+    )
+
+
+def _wait_for_effective_raw_position(
+    rotor_logic: RotorLogic,
+    target: Dict[str, Optional[float]],
+    *,
+    timeout_s: float = AUTO_PARK_WAIT_TIMEOUT_S,
+    interval_s: float = AUTO_PARK_WAIT_INTERVAL_S,
+    tolerance: float = AUTO_PARK_POSITION_TOLERANCE_DEG,
+) -> bool:
+    """Wait until corrected raw status reaches the corrected raw target."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        if not rotor_logic.connection.is_connected():
+            return False
+
+        status = rotor_logic.get_effective_raw_status()
+        if status:
+            az_ok = _axis_reached(status.get("azimuth"), target.get("azimuth"), tolerance)
+            el_ok = _axis_reached(status.get("elevation"), target.get("elevation"), tolerance)
+            if az_ok and el_ok:
+                return True
+
+        time.sleep(interval_s)
+
+    return False
+
+
+def _auto_park_before_disconnect(state: "ServerState", settings: Dict[str, Any]) -> bool:
+    """Issue auto-park and wait briefly before closing the serial connection."""
+    if not state.rotor_logic:
+        return False
+
+    park_az = _parse_number(settings.get("parkAzimuth"))
+    park_el = _parse_number(settings.get("parkElevation"))
+    raw_target = state.rotor_logic.plan_raw_target(park_az, park_el)
+    wait_target = state.rotor_logic.raw_target_to_effective_status(raw_target)
+
+    if not state.rotor_logic.park():
+        return False
+
+    reached = _wait_for_effective_raw_position(state.rotor_logic, wait_target)
+    if not reached:
+        log("[Routes] Auto-park target not reached before disconnect timeout", level="WARNING")
+    return reached
 
 
 def _read_request_payload(handler: BaseHTTPRequestHandler) -> Optional[Dict[str, Any]]:
@@ -356,7 +411,7 @@ def handle_disconnect(handler: BaseHTTPRequestHandler, state: "ServerState") -> 
             auto_park = settings.get("autoParkOnDisconnect", False)
             presets_enabled = settings.get("parkPositionsEnabled", False)
             if auto_park and presets_enabled and state.rotor_logic:
-                if not state.rotor_logic.park():
+                if not _auto_park_before_disconnect(state, settings):
                     log("[Routes] Auto-park on disconnect failed")
             state.rotor_connection.disconnect()
             send_json(handler, {"status": "ok", "message": "Disconnected"})

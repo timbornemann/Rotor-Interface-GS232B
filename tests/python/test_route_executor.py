@@ -51,6 +51,50 @@ def test_wait_for_arrival_uses_feedback_corrected_raw_values():
     assert elapsed < 0.2
 
 
+def test_position_step_waits_for_feedback_corrected_applied_target():
+    """Position steps should compare corrected status to corrected applied targets."""
+    connection = MagicMock()
+    connection.is_connected.return_value = True
+    connection.get_status.return_value = {
+        "azimuthRaw": 90,
+        "elevationRaw": 45,
+    }
+
+    logic = RotorLogic(connection)
+    logic.update_config({
+        "feedbackCorrectionEnabled": True,
+        "azimuthFeedbackFactor": 2.0,
+        "elevationFeedbackFactor": 2.0,
+        "azimuthMode": 450,
+    })
+
+    websocket_manager = MagicMock()
+    executor = RouteExecutor(
+        route_manager=MagicMock(),
+        rotor_logic=logic,
+        websocket_manager=websocket_manager,
+    )
+    executor.position_tolerance = 1.0
+    executor.position_timeout = 0.1
+    executor.position_check_interval = 0.01
+
+    executor._execute_position_step({
+        "type": "position",
+        "name": "Corrected target",
+        "azimuth": 90,
+        "elevation": 45,
+    })
+
+    progress_events = [
+        call.args[0]
+        for call in websocket_manager.broadcast_route_execution_progress.call_args_list
+    ]
+
+    assert any(event["type"] == "position_reached" for event in progress_events)
+    assert not any(event["type"] == "position_timeout" for event in progress_events)
+    connection.send_command.assert_called_with("W090 045")
+
+
 def test_wait_for_arrival_raises_when_rotor_disconnects():
     """A lost rotor connection during route execution should fail the route."""
     rotor_logic = MagicMock()

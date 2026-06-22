@@ -416,6 +416,28 @@ async function loadRoutesFromServer() {
   }
 }
 
+async function syncRouteExecutionFromServer() {
+  try {
+    const execution = await rotor.getRouteExecution();
+    if (!routeManager || !execution) {
+      return;
+    }
+
+    if (execution.executing && execution.routeId) {
+      routeManager.setExecutionProgress(execution.routeId, {
+        type: 'route_started',
+        routeName: execution.routeName,
+        stepIndex: execution.currentStepIndex ?? 0,
+        totalSteps: execution.totalSteps ?? 0
+      });
+    } else if (routeManager.executingRouteId) {
+      routeManager.clearExecution();
+    }
+  } catch (err) {
+    console.warn('[main] Could not load route execution state', err);
+  }
+}
+
 // WebSocket setup for real-time synchronization
 async function setupWebSocket() {
   // Set session ID from rotor service
@@ -640,6 +662,7 @@ async function init() {
   setupSuspensionOverlay();
 
   await loadRoutesFromServer();
+  await syncRouteExecutionFromServer();
 
   if (refreshPortsBtn) {
     refreshPortsBtn.addEventListener('click', () => void refreshPorts());

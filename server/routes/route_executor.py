@@ -276,8 +276,11 @@ class RouteExecutor:
             log(f"[RouteExecutor] Failed to send position command: {e}", level="ERROR")
             raise
 
-        wait_azimuth = applied_target.get("azimuth") if applied_target else azimuth
-        wait_elevation = applied_target.get("elevation") if applied_target else elevation
+        wait_target = self.rotor_logic.raw_target_to_effective_status(
+            applied_target or {"azimuth": azimuth, "elevation": elevation}
+        )
+        wait_azimuth = wait_target.get("azimuth")
+        wait_elevation = wait_target.get("elevation")
         
         # Wait for arrival. Timeouts continue the route, but disconnects fail it.
         position_reached = self._wait_for_arrival(wait_azimuth, wait_elevation)
