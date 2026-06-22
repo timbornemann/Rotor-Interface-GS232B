@@ -6,3 +6,4 @@ node_modules/
 *.pdf
 web-settings.json
 temp/
+routes.json
