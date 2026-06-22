@@ -4,6 +4,8 @@ __pycache__/
 .pytest_cache/
 node_modules/
 .tmp/
+build/
+dist/
 *.pdf
 temp/
 data/*

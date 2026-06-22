@@ -109,6 +109,24 @@ Optional für JS-Tests:
 npm ci
 ```
 
+### Windows-Installer bauen
+
+Für eine Installation ohne Python auf dem Zielrechner kann ein Server-Installer gebaut werden. Der Build läuft unter Windows und benötigt Inno Setup 6 (`ISCC.exe`):
+
+```powershell
+.\scripts\build_installer.ps1
+```
+
+Das Skript erstellt eine lokale Build-Umgebung, wandelt `src/renderer/assets/logo.png` in ein Windows-Icon um, baut `RotorServer.exe` mit PyInstaller und erzeugt anschließend:
+
+```text
+dist\installer\Rotor-Interface-GS232B.exe
+```
+
+Der Installer installiert den Server für alle Benutzer nach `Program Files`, legt schreibbare Serverdaten unter `ProgramData\Rotor Interface GS232B Server\data` ab und erstellt Startmenü- sowie Desktop-Verknüpfungen auf die installierte Server-Startdatei.
+
+Auf GitHub wird der Installer nicht bei normalen Pushes gebaut. Der Workflow `.github/workflows/release-installer.yml` läuft erst, wenn ein Release veröffentlicht wird, baut den Installer auf `windows-latest` und hängt die erzeugte `.exe` automatisch an den Release an.
+
 ---
 
 ## 4. Starten

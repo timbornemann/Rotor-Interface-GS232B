@@ -1,0 +1,42 @@
+name: Release Installer
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    name: Build and attach Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: powershell
+        run: .\scripts\build_installer.ps1
+
+      - name: Attach installer to release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $installer = Get-ChildItem -Path "dist\installer" -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "No installer .exe found in dist\installer."
+          }
+          gh release upload $env:RELEASE_TAG $installer.FullName --clobber
