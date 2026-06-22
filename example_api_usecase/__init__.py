@@ -1,4 +1,4 @@
-"""Python client package for the Rotor Interface GS232B API."""
+"""Example package demonstrating API usage for the Rotor Interface GS232B."""
 
 from .rotor_client import (
     RotorApiClient,

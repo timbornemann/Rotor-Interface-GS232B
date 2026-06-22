@@ -14,7 +14,7 @@ from tkinter import messagebox, ttk
 from typing import Any, Callable, Optional
 
 try:
-    from rotor_api_client import RotorApiClient, RotorApiError
+    from example_api_usecase import RotorApiClient, RotorApiError
 except ImportError:
     from rotor_client import RotorApiClient, RotorApiError
 

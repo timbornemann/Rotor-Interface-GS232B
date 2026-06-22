@@ -3,7 +3,7 @@
 import time
 
 try:
-    from rotor_api_client import RotorApiClient, RotorApiError, RotorDisconnectedError
+    from example_api_usecase import RotorApiClient, RotorApiError, RotorDisconnectedError
 except ImportError:
     from rotor_client import RotorApiClient, RotorApiError, RotorDisconnectedError
 

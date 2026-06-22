@@ -1,12 +1,12 @@
 # Rotor API Python Client
 
-Plug-and-play Python-Client fuer die REST-API aus `API_Dokumentation.md`.
+Plug-and-play Python-Client fuer die REST-API aus `docs/API_Dokumentation.md`.
 Die Datei `rotor_client.py` nutzt fuer REST nur die Python-Standardbibliothek
 und kann deshalb direkt in andere Projekte kopiert werden.
 
 ## Test-GUI
 
-Mit `start_client_gui.bat` im Projektwurzelordner startet eine einfache
+Mit `scripts/start_client_gui.bat` startet eine einfache
 Tkinter-GUI zum Testen der Clientklasse.
 
 Die GUI verwendet keine eigenen API-Verbindungen. Sie erstellt nur ein
@@ -21,7 +21,7 @@ Die GUI verwendet keine eigenen API-Verbindungen. Sie erstellt nur ein
 ## Schnellstart
 
 ```python
-from rotor_api_client import RotorApiClient, RotorApiError
+from example_api_usecase import RotorApiClient, RotorApiError
 
 client = RotorApiClient(host="localhost", http_port=8081)
 
@@ -70,7 +70,7 @@ aber keine fortlaufenden Positionsdaten. Die Klasse kombiniert deshalb:
 
 ```python
 import time
-from rotor_api_client import RotorApiClient
+from example_api_usecase import RotorApiClient
 
 client = RotorApiClient(auto_update_interval=1.0)
 
@@ -120,7 +120,7 @@ spezialisierte Exceptions:
 - `SessionRequiredError` / `SessionSuspendedError`: Sessionproblem.
 
 ```python
-from rotor_api_client import RotorApiClient, RotorDisconnectedError, RotorApiError
+from example_api_usecase import RotorApiClient, RotorDisconnectedError, RotorApiError
 
 client = RotorApiClient()
 
@@ -142,7 +142,7 @@ pip install websockets
 
 ```python
 import asyncio
-from rotor_api_client import RotorApiClient
+from example_api_usecase import RotorApiClient
 
 async def main():
     client = RotorApiClient()

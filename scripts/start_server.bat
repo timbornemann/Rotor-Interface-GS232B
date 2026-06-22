@@ -1,4 +1,6 @@
 @echo off
+setlocal
+cd /d "%~dp0.."
 REM Rotor Interface GS232B - Server Starter
 REM Startet den Python-Server fuer die Rotor-Interface-Anwendung
 
@@ -20,7 +22,7 @@ if errorlevel 1 (
 REM Pruefe ob das server Verzeichnis existiert
 if not exist "server" (
     echo FEHLER: server/ Verzeichnis wurde nicht gefunden!
-    echo Bitte starten Sie die Datei aus dem Projektverzeichnis.
+    echo Bitte pruefen Sie, ob die Projektstruktur vollstaendig ist.
     echo.
     pause
     exit /b 1
