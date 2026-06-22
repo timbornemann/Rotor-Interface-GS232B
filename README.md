@@ -149,7 +149,14 @@ python -m server
 scripts\start_server.bat
 ```
 
-Das Skript:
+### Linux-Startskript
+
+```bash
+chmod +x scripts/start_server.sh   # einmalig
+./scripts/start_server.sh
+```
+
+Die Startskripte:
 
 - liest HTTP/WS-Ports aus `data/web-settings.json`
 - beendet alte `python -m server.main`-Prozesse
@@ -562,7 +569,7 @@ ws.onmessage = (evt) => {
 
 ### Portwechsel greift nicht
 
-- Nach Änderung von `serverHttpPort`/`serverWebSocketPort` Neustart ausführen (`/api/server/restart` oder `scripts\start_server.bat`)
+- Nach Änderung von `serverHttpPort`/`serverWebSocketPort` Neustart ausführen (`/api/server/restart` oder `scripts/start_server.sh` bzw. `scripts\start_server.bat`)
 
 ### Session-Probleme
 
